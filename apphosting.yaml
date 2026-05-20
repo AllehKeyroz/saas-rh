@@ -5,6 +5,9 @@ runConfig:
   cpu: 1
   memoryMiB: 512
 
+outputFiles:
+  - dist/**
+
 env:
   - variable: VITE_FIREBASE_API_KEY
     value: AIzaSyA7BUpI3iX_Gnra-Zkaa7t6WAmhrlZS3D0
