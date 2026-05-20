@@ -89,6 +89,31 @@ export default function Register() {
         }
       }
 
+      // Se não é funcionário com convite, cria as configurações padrão do tenant
+      if (!convite) {
+        const defaultFeatures = [
+          'comissoes_por_periodo', 'divisao_automatica_setor', 'exclusao_faltas_atestados',
+          'setores_configuráveis', 'percentuais_configuráveis', 'metas_comissao',
+          'integracao_vida_financeira', 'alertas_motivacionais', 'exibir_calculo_comissao_detalhado',
+          'relatorios_comissao', 'dashboard_comissao', 'vida_financeira',
+          'exibir_comissao_vida_financeira', 'renda_base_inicial', 'atualizacao_automatica_fechamento',
+          'receitas_extras_vida_financeira', 'receitas_extras_mini_dre', 'receitas_extras_graficos',
+          'modulo_mensagens', 'push_notifications', 'mensagens_motivacionais', 'comunicados_gerais',
+          'modulo_solicitacoes', 'solicitacoes_botoes_rapidos', 'push_solicitacoes',
+          'solicitacoes_ferias', 'solicitacoes_vale', 'solicitacoes_banco_horas',
+          'solicitacoes_atestado', 'solicitacoes_documentos', 'solicitacoes_outros',
+        ]
+        for (const chave of defaultFeatures) {
+          await client.entities.ConfiguracoesRH.create({
+            chave,
+            descricao: chave,
+            ativa: true,
+            tenant_id: tenantId,
+            data_ativacao: new Date().toISOString(),
+          })
+        }
+      }
+
       navigate('/', { replace: true })
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') setError('Este email já está cadastrado. Faça login.')
