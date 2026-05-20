@@ -1,0 +1,48 @@
+{
+  "name": "ConfiguracaoNotificacao",
+  "type": "object",
+  "properties": {
+    "evento": {
+      "type": "string",
+      "enum": [
+        "limite_vale_atingido",
+        "limite_vale_80_atingido",
+        "limite_vale_50_atingido",
+        "aniversario_funcionario",
+        "backup_falhou",
+        "backup_gerado",
+        "fechamento_processado"
+      ],
+      "description": "Evento que dispara a notifica\u00e7\u00e3o"
+    },
+    "destinatarios": {
+      "type": "string",
+      "description": "E-mails separados por v\u00edrgula (deixe vazio para enviar apenas ao funcion\u00e1rio)"
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se a notifica\u00e7\u00e3o est\u00e1 ativa"
+    },
+    "observacao": {
+      "type": "string",
+      "description": "Observa\u00e7\u00e3o opcional"
+    },
+    "condicoes_json": {
+      "type": "object",
+      "description": "Condi\u00e7\u00f5es adicionais em formato JSON para filtrar quando a notifica\u00e7\u00e3o deve ser enviada",
+      "additionalProperties": true
+    },
+    "mensagem_assunto": {
+      "type": "string",
+      "description": "Assunto personalizado do e-mail de notifica\u00e7\u00e3o (deixe vazio para usar o padr\u00e3o)"
+    },
+    "mensagem_corpo": {
+      "type": "string",
+      "description": "Corpo personalizado do e-mail. Vari\u00e1veis dispon\u00edveis: {nome}, {total_usado}, {limite}, {percentual}, {mes_referencia}"
+    }
+  },
+  "required": [
+    "evento"
+  ]
+}

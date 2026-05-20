@@ -1,0 +1,47 @@
+{
+  "name": "ApplicationError",
+  "type": "object",
+  "properties": {
+    "component": {
+      "type": "string",
+      "description": "Nome do componente onde o erro ocorreu"
+    },
+    "context": {
+      "type": "string",
+      "description": "Contexto ou mensagem do erro"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Mensagem de erro completa"
+    },
+    "stack_trace": {
+      "type": "string",
+      "description": "Stack trace do erro"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "default": "error",
+      "description": "N\u00edvel de severidade do erro"
+    },
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio afetado (opcional)"
+    },
+    "notificado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se o admin foi notificado sobre este erro"
+    }
+  },
+  "required": [
+    "component",
+    "context",
+    "error_message"
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "Funcionarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "email", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "FichaFinanceira",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" },
+        { "fieldPath": "data_lancamento", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "FichaFinanceira",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ComissaoPorFuncionario",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "FechamentoMensal",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "AssinaturaDigital",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" },
+        { "fieldPath": "data_envio", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "SolicitacoesFuncionario",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "MensagensRH",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "data_envio", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ConfiguracoesRH",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "chave", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "convites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "email", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,62 @@
+{
+  "name": "HistoricoAlteracaoComissao",
+  "type": "object",
+  "properties": {
+    "comissao_id": {
+      "type": "string",
+      "description": "ID do registro de ComissoesGorjetas alterado"
+    },
+    "mes_referencia": {
+      "type": "string",
+      "description": "M\u00eas de refer\u00eancia da comiss\u00e3o (MM/AAAA)"
+    },
+    "tipo_alteracao": {
+      "type": "string",
+      "enum": [
+        "valor_total",
+        "distribuicao_setores",
+        "observacoes",
+        "ausencias"
+      ],
+      "description": "Tipo de altera\u00e7\u00e3o realizada"
+    },
+    "campo_alterado": {
+      "type": "string",
+      "description": "Nome do campo que foi alterado (ex: valor_total_periodo, valor_salao)"
+    },
+    "valor_anterior": {
+      "type": "object",
+      "description": "Snapshot dos dados antes da altera\u00e7\u00e3o",
+      "additionalProperties": true
+    },
+    "valor_novo": {
+      "type": "object",
+      "description": "Snapshot dos dados ap\u00f3s a altera\u00e7\u00e3o",
+      "additionalProperties": true
+    },
+    "usuario_email": {
+      "type": "string",
+      "description": "E-mail do usu\u00e1rio que fez a altera\u00e7\u00e3o"
+    },
+    "usuario_nome": {
+      "type": "string",
+      "description": "Nome do usu\u00e1rio (cache)"
+    },
+    "motivo": {
+      "type": "string",
+      "description": "Motivo da altera\u00e7\u00e3o (opcional)"
+    },
+    "data_alteracao": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data e hora da altera\u00e7\u00e3o"
+    }
+  },
+  "required": [
+    "comissao_id",
+    "tipo_alteracao",
+    "campo_alterado",
+    "valor_anterior",
+    "valor_novo"
+  ]
+}

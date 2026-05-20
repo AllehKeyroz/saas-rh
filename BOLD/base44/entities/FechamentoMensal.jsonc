@@ -1,0 +1,47 @@
+{
+  "name": "FechamentoMensal",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "funcionario_nome": {
+      "type": "string",
+      "description": "Nome do funcion\u00e1rio (cache)"
+    },
+    "mes_referencia": {
+      "type": "string",
+      "description": "M\u00eas de refer\u00eancia no formato MM/AAAA"
+    },
+    "salario_base": {
+      "type": "number",
+      "description": "Sal\u00e1rio base usado no c\u00e1lculo"
+    },
+    "total_descontos": {
+      "type": "number",
+      "description": "Total de descontos (vales, adiantamentos, conv\u00eanios, consumos)"
+    },
+    "total_adicionais": {
+      "type": "number",
+      "description": "Total de adicionais e ajustes"
+    },
+    "salario_liquido": {
+      "type": "number",
+      "description": "Sal\u00e1rio l\u00edquido calculado"
+    },
+    "data_processamento": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data e hora do processamento"
+    },
+    "detalhes": {
+      "type": "object",
+      "description": "Detalhamento por tipo de lan\u00e7amento"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "mes_referencia"
+  ]
+}

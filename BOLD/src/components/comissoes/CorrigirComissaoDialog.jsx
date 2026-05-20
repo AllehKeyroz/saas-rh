@@ -1,0 +1,207 @@
+import React, { useState, useMemo } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { formatCurrency } from '@/lib/formatters';
+import { Loader2 } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+import { toast } from 'sonner';
+import { registrarAuditoria } from '@/lib/audit';
+
+export default function CorrigirComissaoDialog({ 
+  aberto, 
+  comissao, 
+  onClose, 
+  onRefresh 
+}) {
+  const [loading, setLoading] = useState(false);
+  const [valores, setValores] = useState({});
+  const [motivo, setMotivo] = useState('');
+
+  const totalCalculado = useMemo(() => {
+    if (!valores.valor_total_periodo) return comissao?.valor_total_periodo || 0;
+    return parseFloat(valores.valor_total_periodo) || comissao?.valor_total_periodo || 0;
+  }, [valores, comissao]);
+
+  const distribuicao = useMemo(() => {
+    const total = totalCalculado;
+    return {
+      valor_empresa: (total * 0.2),
+      valor_salao: (total * 0.4),
+      valor_cozinha: (total * 0.24),
+      valor_copa_playground_caixa: (total * 0.14),
+      valor_limpeza_rh: (total * 0.02),
+    };
+  }, [totalCalculado]);
+
+  if (!comissao) return null;
+
+  const handleChange = (field, value) => {
+    setValores(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSalvar = async () => {
+    setLoading(true);
+    try {
+      const user = await base44.auth.me();
+      
+      const dadosAntigos = {
+        valor_total_periodo: comissao.valor_total_periodo,
+        valor_empresa: comissao.valor_empresa,
+        valor_salao: comissao.valor_salao,
+        valor_cozinha: comissao.valor_cozinha,
+        valor_copa_playground_caixa: comissao.valor_copa_playground_caixa,
+        valor_limpeza_rh: comissao.valor_limpeza_rh,
+      };
+
+      const novoValorTotal = totalCalculado;
+      const dadosNovos = {
+        valor_total_periodo: novoValorTotal,
+        ...distribuicao,
+      };
+
+      // Atualizar comissão
+      await base44.entities.ComissoesGorjetas.update(comissao.id, {
+        valor_total_periodo: novoValorTotal,
+        valor_empresa: distribuicao.valor_empresa,
+        valor_salao: distribuicao.valor_salao,
+        valor_cozinha: distribuicao.valor_cozinha,
+        valor_copa_playground_caixa: distribuicao.valor_copa_playground_caixa,
+        valor_limpeza_rh: distribuicao.valor_limpeza_rh,
+      });
+
+      // Registrar no histórico de alterações
+      await base44.entities.HistoricoAlteracaoComissao.create({
+        comissao_id: comissao.id,
+        mes_referencia: comissao.mes_referencia,
+        tipo_alteracao: 'valor_total',
+        campo_alterado: 'valor_total_periodo',
+        valor_anterior: dadosAntigos,
+        valor_novo: dadosNovos,
+        usuario_email: user.email,
+        usuario_nome: user.full_name,
+        motivo: motivo || null,
+      });
+
+      // Recalcular ComissaoPorFuncionario
+      const cfPorComissao = await base44.entities.ComissaoPorFuncionario.filter({ comissao_id: comissao.id });
+      const diferenca = novoValorTotal - comissao.valor_total_periodo;
+      const proporcaoDiferenca = comissao.valor_total_periodo > 0 ? diferenca / comissao.valor_total_periodo : 0;
+
+      for (const cf of cfPorComissao) {
+        if (cf.apto) {
+          const novoValorIndividual = (cf.valor_individual_cheio || cf.valor_individual || 0) * (1 + proporcaoDiferenca);
+          const novoValorFinal = novoValorIndividual * (cf.proporcao || 1);
+          await base44.entities.ComissaoPorFuncionario.update(cf.id, {
+            valor_individual_cheio: novoValorIndividual,
+            valor_individual: novoValorFinal,
+            valor_individual_final: novoValorFinal,
+          });
+        }
+      }
+
+      // Registrar auditoria geral
+      await registrarAuditoria({
+        acao: 'editar',
+        modulo: 'comissao',
+        descricao: `Comissão corrigida: ${comissao.mes_referencia} — De ${formatCurrency(comissao.valor_total_periodo)} para ${formatCurrency(novoValorTotal)}`,
+        dados_anteriores: dadosAntigos,
+        dados_novos: dadosNovos,
+      });
+
+      toast.success('Comissão corrigida e histórico registrado!');
+      onClose();
+      onRefresh();
+    } catch (e) {
+      toast.error(`Erro ao corrigir: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={aberto} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Corrigir Comissão — {comissao.mes_referencia}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Comparação antes/depois */}
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+              <p className="text-xs font-semibold text-red-700 mb-2">Valor Atual</p>
+              <p className="text-lg font-bold text-red-700">
+                {formatCurrency(comissao.valor_total_periodo)}
+              </p>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+              <p className="text-xs font-semibold text-green-700 mb-2">Novo Valor</p>
+              <p className="text-lg font-bold text-green-700">
+                {formatCurrency(totalCalculado)}
+              </p>
+            </div>
+          </div>
+
+          {/* Input de valor */}
+          <div className="space-y-2">
+            <Label>Valor Total de Gorjetas</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder={String(comissao.valor_total_periodo)}
+              value={valores.valor_total_periodo || ''}
+              onChange={(e) => handleChange('valor_total_periodo', e.target.value)}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Distribuição automática */}
+          <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
+            <p className="font-semibold text-xs">Distribuição Automática:</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div><span className="text-muted-foreground">Empresa (20%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_empresa)}</span></div>
+              <div><span className="text-muted-foreground">Salão (40%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_salao)}</span></div>
+              <div><span className="text-muted-foreground">Cozinha (24%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_cozinha)}</span></div>
+              <div><span className="text-muted-foreground">Copa/PG/Cx (14%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_copa_playground_caixa)}</span></div>
+              <div><span className="text-muted-foreground">Limpeza/RH (2%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_limpeza_rh)}</span></div>
+            </div>
+          </div>
+
+          {/* Motivo */}
+          <div className="space-y-2">
+            <Label>Motivo da Correção</Label>
+            <Textarea
+              placeholder="Descreva o motivo da correção (ex: valor digitado incorretamente, gorjeta não registrada corretamente)"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              disabled={loading}
+              rows={3}
+            />
+          </div>
+
+          {/* Botões */}
+          <div className="flex gap-2 justify-end pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setValores({});
+                setMotivo('');
+                onClose?.();
+              }} 
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSalvar} disabled={loading || !valores.valor_total_periodo}>
+              {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Salvar Correção
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

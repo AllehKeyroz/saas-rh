@@ -1,0 +1,58 @@
+{
+  "name": "MetasObjetivos",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "nome": {
+      "type": "string",
+      "description": "Nome da meta (ex: Comprar moto)"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o opcional"
+    },
+    "valor_total": {
+      "type": "number",
+      "description": "Valor total necess\u00e1rio"
+    },
+    "valor_guardado": {
+      "type": "number",
+      "default": 0,
+      "description": "Valor j\u00e1 guardado"
+    },
+    "valor_mensal": {
+      "type": "number",
+      "description": "Quanto pretende guardar por m\u00eas"
+    },
+    "data_prevista": {
+      "type": "string",
+      "format": "date",
+      "description": "Data prevista para atingir"
+    },
+    "prioridade": {
+      "type": "string",
+      "enum": [
+        "alta",
+        "media",
+        "baixa"
+      ],
+      "default": "media"
+    },
+    "icone": {
+      "type": "string",
+      "description": "Emoji ou \u00edcone identificador"
+    },
+    "concluida": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "nome",
+    "valor_total"
+  ]
+}

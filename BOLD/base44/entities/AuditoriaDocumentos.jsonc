@@ -1,0 +1,94 @@
+{
+  "name": "AuditoriaDocumentos",
+  "type": "object",
+  "properties": {
+    "documento_id": {
+      "type": "string",
+      "description": "ID do documento ou assinatura relacionada"
+    },
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio envolvido"
+    },
+    "funcionario_nome": {
+      "type": "string",
+      "description": "Nome do funcion\u00e1rio (cache)"
+    },
+    "usuario_email": {
+      "type": "string",
+      "description": "E-mail do usu\u00e1rio que realizou a a\u00e7\u00e3o"
+    },
+    "usuario_nome": {
+      "type": "string",
+      "description": "Nome do usu\u00e1rio que realizou a a\u00e7\u00e3o"
+    },
+    "acao": {
+      "type": "string",
+      "description": "C\u00f3digo da a\u00e7\u00e3o realizada (ex: ENVIAR_ASSINATURA, CANCELAR, CALLBACK_ASSINATURA)"
+    },
+    "modulo": {
+      "type": "string",
+      "enum": [
+        "assinatura",
+        "modelo",
+        "finalidade",
+        "documento",
+        "sistema"
+      ],
+      "description": "M\u00f3dulo onde a a\u00e7\u00e3o ocorreu"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o leg\u00edvel da a\u00e7\u00e3o"
+    },
+    "dados_antes": {
+      "type": "object",
+      "description": "Estado anterior (snapshot JSON)",
+      "additionalProperties": true
+    },
+    "dados_depois": {
+      "type": "object",
+      "description": "Estado posterior (snapshot JSON)",
+      "additionalProperties": true
+    },
+    "ip": {
+      "type": "string",
+      "description": "Endere\u00e7o IP de origem"
+    },
+    "origem": {
+      "type": "string",
+      "enum": [
+        "sistema",
+        "govbr",
+        "api",
+        "rh",
+        "colaborador"
+      ],
+      "default": "sistema",
+      "description": "Origem da a\u00e7\u00e3o"
+    },
+    "nome_documento": {
+      "type": "string",
+      "description": "Nome do documento (cache para facilitar filtros)"
+    },
+    "govbr_payload": {
+      "type": "object",
+      "description": "Payload bruto recebido do GovBR (se aplic\u00e1vel)",
+      "additionalProperties": true
+    },
+    "hash_documento": {
+      "type": "string",
+      "description": "Hash de valida\u00e7\u00e3o do documento"
+    },
+    "certificado_url": {
+      "type": "string",
+      "description": "URL do certificado digital"
+    }
+  },
+  "required": [
+    "acao",
+    "modulo",
+    "descricao",
+    "origem"
+  ]
+}

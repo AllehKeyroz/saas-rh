@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function tenantId() {
+      return getUserData().tenant_id;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+
+    function isRH() {
+      return isAuthenticated() && (getUserData().role == 'admin' || getUserData().role == 'user');
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // ─── TENANTS ──────────────────────────────
+    match /tenants/{tenantId} {
+      allow read: if true;
+      allow create: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── USUÁRIOS ────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // ─── CONVITES ───────────────────────────────
+    match /convites/{docId} {
+      allow read: if true;
+      allow create: if isRH();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // ─── DADOS POR TENANT ─────────────────────
+    // Todas as coleções abaixo só permitem acesso se o tenant_id do documento
+    // for igual ao tenant_id do usuário logado
+
+    function isSameTenant() {
+      return isAuthenticated() && request.resource.data.tenant_id == tenantId();
+    }
+
+    function isSameTenantRead(docId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/$(docId)).data.tenant_id == tenantId();
+    }
+
+    match /Funcionarios/{docId}     { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /FichaFinanceira/{docId}  { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /FechamentoMensal/{docId} { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /ComissoesGorjetas/{docId}          { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /ComissaoPorFuncionario/{docId}     { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /SetoresComissao/{docId}            { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /MetaComissao/{docId}               { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /HistoricoAlteracaoComissao/{docId} { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /Setor/{docId}             { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /Funcao/{docId}            { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /TipoLancamento/{docId}    { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /ConfiguracoesRH/{docId}   { allow read: if isSameTenantRead(docId); allow write: if isAdmin() && isSameTenantRead(docId); }
+    match /ConfiguracaoNotificacao/{docId} { allow read: if isSameTenantRead(docId); allow write: if isAdmin() && isSameTenantRead(docId); }
+    match /ConfiguracaoAparencia/{docId}   { allow read: if isSameTenantRead(docId); allow write: if isAdmin() && isSameTenantRead(docId); }
+    match /BackupRegistro/{docId}    { allow read: if isAdmin() && isSameTenantRead(docId); allow write: if isAdmin() && isSameTenantRead(docId); }
+    match /LogAuditoria/{docId}        { allow read: if isAdmin() && isSameTenantRead(docId); allow create: if isAuthenticated(); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /AuditoriaDocumentos/{docId} { allow read: if isAdmin() && isSameTenantRead(docId); allow create: if isAuthenticated(); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /ApplicationError/{docId}    { allow read: if isAdmin(); allow create: if isAuthenticated(); }
+    match /LogNotificacao/{docId}      { allow read: if isAdmin(); allow create: if isAuthenticated(); }
+    match /AssinaturaDigital/{docId}    { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /ModeloDocumento/{docId}      { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /FinalidadeDocumento/{docId}  { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /ModeloAdvertencia/{docId}    { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /Advertencias/{docId}         { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /DocumentoFuncionario/{docId} { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /SolicitacoesFuncionario/{docId} { allow read: if isSameTenantRead(docId); allow create: if isAuthenticated(); allow update: if isRH() && isSameTenantRead(docId); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /MensagensRH/{docId}             { allow read: if isSameTenantRead(docId); allow create: if isRH() && isSameTenant(); allow delete: if isAdmin() && isSameTenantRead(docId); }
+    match /GastosPessoais/{docId}      { allow read, write: if isAuthenticated(); }
+    match /DividasPessoais/{docId}     { allow read, write: if isAuthenticated(); }
+    match /AssinaturasPessoais/{docId} { allow read, write: if isAuthenticated(); }
+    match /MetasObjetivos/{docId}      { allow read, write: if isAuthenticated(); }
+    match /MetaFinanceira/{docId}      { allow read, write: if isAuthenticated(); }
+  }
+}

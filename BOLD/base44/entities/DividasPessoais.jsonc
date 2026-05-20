@@ -1,0 +1,76 @@
+{
+  "name": "DividasPessoais",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "cartao_credito",
+        "emprestimo_pessoal",
+        "consignado",
+        "financiamento",
+        "cheque_especial",
+        "outro"
+      ],
+      "default": "outro",
+      "description": "Tipo da d\u00edvida"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o / nome da d\u00edvida"
+    },
+    "instituicao": {
+      "type": "string",
+      "description": "Banco ou institui\u00e7\u00e3o"
+    },
+    "valor_total": {
+      "type": "number",
+      "description": "Valor total da d\u00edvida"
+    },
+    "valor_parcela": {
+      "type": "number",
+      "description": "Valor de cada parcela"
+    },
+    "parcelas_total": {
+      "type": "number",
+      "description": "Total de parcelas"
+    },
+    "parcelas_pagas": {
+      "type": "number",
+      "default": 0,
+      "description": "Parcelas j\u00e1 pagas"
+    },
+    "taxa_juros_mensal": {
+      "type": "number",
+      "description": "Taxa de juros mensal em %"
+    },
+    "dia_vencimento": {
+      "type": "number",
+      "description": "Dia do m\u00eas em que vence"
+    },
+    "data_inicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de in\u00edcio da d\u00edvida"
+    },
+    "ativa": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se a d\u00edvida ainda est\u00e1 ativa"
+    },
+    "contrato_url": {
+      "type": "string",
+      "description": "URL do contrato"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "tipo",
+    "descricao",
+    "valor_parcela"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "name": "AssinaturasPessoais",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio dono da assinatura"
+    },
+    "nome": {
+      "type": "string",
+      "description": "Nome do servi\u00e7o (ex: Netflix, Spotify)"
+    },
+    "valor": {
+      "type": "number",
+      "description": "Valor mensal"
+    },
+    "dia_cobranca": {
+      "type": "number",
+      "description": "Dia do m\u00eas em que \u00e9 cobrado"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "streaming",
+        "musica",
+        "jogos",
+        "saude_beleza",
+        "educacao",
+        "produtividade",
+        "outro"
+      ],
+      "default": "outro"
+    },
+    "essencial": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se \u00e9 considerada essencial"
+    },
+    "ativa": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se est\u00e1 ativa"
+    },
+    "comprovante_url": {
+      "type": "string",
+      "description": "URL do comprovante"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "nome",
+    "valor"
+  ]
+}

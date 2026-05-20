@@ -1,0 +1,57 @@
+{
+  "name": "FichaFinanceira",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "funcionario_nome": {
+      "type": "string",
+      "description": "Nome do funcion\u00e1rio (cache)"
+    },
+    "tipo_lancamento": {
+      "type": "string",
+      "enum": [
+        "vale",
+        "vale_parcelado",
+        "adiantamento",
+        "convenio",
+        "consumo",
+        "adicional",
+        "ajuste",
+        "comissao",
+        "credito_consignado"
+      ],
+      "description": "Tipo do lan\u00e7amento financeiro"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o opcional do lan\u00e7amento"
+    },
+    "valor": {
+      "type": "number",
+      "description": "Valor do lan\u00e7amento"
+    },
+    "data_lancamento": {
+      "type": "string",
+      "format": "date",
+      "description": "Data do lan\u00e7amento"
+    },
+    "comprovante": {
+      "type": "string",
+      "description": "URL do comprovante anexado"
+    },
+    "consolidado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se j\u00e1 foi consolidado em fechamento mensal"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "tipo_lancamento",
+    "valor",
+    "data_lancamento"
+  ]
+}

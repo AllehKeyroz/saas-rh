@@ -1,0 +1,125 @@
+{
+  "name": "Funcionarios",
+  "type": "object",
+  "properties": {
+    "nome": {
+      "type": "string",
+      "description": "Nome completo do funcion\u00e1rio"
+    },
+    "foto": {
+      "type": "string",
+      "description": "URL da foto do funcion\u00e1rio"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "E-mail do funcion\u00e1rio para notifica\u00e7\u00f5es"
+    },
+    "telefone": {
+      "type": "string",
+      "description": "Telefone/celular do funcion\u00e1rio para SMS (ex: 11999998888)"
+    },
+    "funcao": {
+      "type": "string",
+      "description": "Fun\u00e7\u00e3o/cargo do funcion\u00e1rio"
+    },
+    "setor": {
+      "type": "string",
+      "description": "Setor de trabalho"
+    },
+    "data_admissao": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de admiss\u00e3o"
+    },
+    "data_demissao": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de demiss\u00e3o (preencher para inativar)"
+    },
+    "data_nascimento": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de nascimento do funcion\u00e1rio"
+    },
+    "salario_base": {
+      "type": "number",
+      "description": "Sal\u00e1rio base mensal"
+    },
+    "limite_vales": {
+      "type": "number",
+      "description": "Limite mensal de vales/adiantamentos"
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se o funcion\u00e1rio est\u00e1 ativo"
+    },
+    "apto_comissao": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se o funcion\u00e1rio est\u00e1 apto a receber comiss\u00e3o"
+    },
+    "data_inicio_comissao": {
+      "type": "string",
+      "format": "date",
+      "description": "Data programada para in\u00edcio do recebimento de comiss\u00e3o (per\u00edodo de experi\u00eancia)"
+    },
+    "user_email_portal": {
+      "type": "string",
+      "description": "E-mail do usu\u00e1rio do portal vinculado a este funcion\u00e1rio"
+    },
+    "faltas_no_periodo": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantidade de faltas no per\u00edodo atual (usado para c\u00e1lculo de comiss\u00f5es)"
+    },
+    "atestados_no_periodo": {
+      "type": "number",
+      "default": 0,
+      "description": "Quantidade de atestados no per\u00edodo atual (usado para c\u00e1lculo de comiss\u00f5es)"
+    },
+    "permissoes_portal": {
+      "type": "object",
+      "description": "Permiss\u00f5es de visualiza\u00e7\u00e3o no portal do funcion\u00e1rio",
+      "properties": {
+        "ver_funcao": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_setor": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_data_admissao": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_salario": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_limite_vales": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_extrato_vales": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_extrato_completo": {
+          "type": "boolean",
+          "default": false
+        },
+        "ver_comissoes": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "nome"
+  ]
+}

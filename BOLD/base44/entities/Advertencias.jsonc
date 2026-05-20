@@ -1,0 +1,38 @@
+{
+  "name": "Advertencias",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "funcionario_nome": {
+      "type": "string",
+      "description": "Nome do funcion\u00e1rio (cache)"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "advertencia",
+        "suspensao",
+        "ocorrencia"
+      ],
+      "default": "advertencia",
+      "description": "Tipo de advert\u00eancia"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o da advert\u00eancia"
+    },
+    "data_advertencia": {
+      "type": "string",
+      "format": "date",
+      "description": "Data da advert\u00eancia"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "tipo",
+    "descricao"
+  ]
+}

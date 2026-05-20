@@ -1,0 +1,86 @@
+import React from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { client } from '@/api/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { AlertCircle, Bell } from 'lucide-react';
+
+export default function LogsFinanceiros() {
+  const qc = useQueryClient();
+
+  const { data: persistedErrors = [] } = useQuery({
+    queryKey: ['application_errors'],
+    queryFn: () => client.entities.ApplicationError.list('-created_date', 100),
+  });
+
+  const handleNotifyAdmin = async (errorId) => {
+    try {
+      await client.entities.ApplicationError.update(errorId, { notificado: true });
+      qc.invalidateQueries({ queryKey: ['application_errors'] });
+    } catch (error) {
+      console.error('Erro ao notificar admin:', error);
+    }
+  };
+
+  if (persistedErrors.length === 0) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">Nenhum erro registrado</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Erros do Sistema</CardTitle>
+          <Badge variant="outline" className="text-sm">{persistedErrors.length} registro(s)</Badge>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {persistedErrors.map((error) => (
+              <div key={error.id} className={`border rounded-lg p-3 ${error.notificado ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className={`text-sm font-semibold ${error.notificado ? 'text-blue-700' : 'text-red-700'}`}>
+                        {error.component}
+                      </p>
+                      <Badge variant="outline" className={error.severity === 'critical' ? 'bg-destructive/10 text-destructive' : ''}>
+                        {error.severity}
+                      </Badge>
+                      {error.notificado && <Badge className="bg-blue-600">Notificado</Badge>}
+                    </div>
+                    <p className={`text-xs mt-1 ${error.notificado ? 'text-blue-600' : 'text-red-600'}`}>{error.context}</p>
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">{error.error_message}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{new Date(error.created_date).toLocaleString('pt-BR')}</p>
+                  </div>
+                  {!error.notificado && (
+                    <Button size="sm" variant="outline" onClick={() => handleNotifyAdmin(error.id)} className="shrink-0">
+                      <Bell className="w-3 h-3 mr-1" />Notificar
+                    </Button>
+                  )}
+                </div>
+                {error.stack_trace && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-muted-foreground cursor-pointer">Stack trace</summary>
+                    <pre className="mt-1 text-xs bg-white p-2 rounded border overflow-auto max-h-32">{error.stack_trace}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

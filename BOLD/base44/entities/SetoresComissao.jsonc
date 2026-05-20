@@ -1,0 +1,31 @@
+{
+  "name": "SetoresComissao",
+  "type": "object",
+  "properties": {
+    "nome_do_setor": {
+      "type": "string",
+      "description": "Nome do setor participante da comiss\u00e3o"
+    },
+    "percentual": {
+      "type": "number",
+      "description": "Percentual de participa\u00e7\u00e3o (ex: 40 para 40%)"
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se o setor est\u00e1 ativo"
+    },
+    "ordem_exibicao": {
+      "type": "number",
+      "description": "Ordem de exibi\u00e7\u00e3o (opcional)"
+    },
+    "palavras_chave": {
+      "type": "string",
+      "description": "Palavras-chave separadas por v\u00edrgula para mapear funcion\u00e1rios ao setor (ex: sal\u00e3o, gar\u00e7om, atendimento)"
+    }
+  },
+  "required": [
+    "nome_do_setor",
+    "percentual"
+  ]
+}

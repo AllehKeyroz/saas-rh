@@ -1,0 +1,91 @@
+{
+  "name": "AssinaturaDigital",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "funcionario_nome": {
+      "type": "string",
+      "description": "Nome do funcion\u00e1rio (cache)"
+    },
+    "nome_documento": {
+      "type": "string",
+      "description": "Nome do documento"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o opcional"
+    },
+    "documento_url": {
+      "type": "string",
+      "description": "URL do documento original (PDF)"
+    },
+    "documento_assinado_url": {
+      "type": "string",
+      "description": "URL do documento assinado"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "aguardando",
+        "assinado",
+        "recusado",
+        "expirado",
+        "cancelado"
+      ],
+      "default": "aguardando",
+      "description": "Status da assinatura"
+    },
+    "link_assinatura": {
+      "type": "string",
+      "description": "Link GovBR para assinatura"
+    },
+    "govbr_protocolo": {
+      "type": "string",
+      "description": "Protocolo/ID retornado pela API GovBR"
+    },
+    "hash_validacao": {
+      "type": "string",
+      "description": "Hash de valida\u00e7\u00e3o do documento assinado"
+    },
+    "certificado_url": {
+      "type": "string",
+      "description": "URL do certificado digital"
+    },
+    "enviado_por": {
+      "type": "string",
+      "description": "E-mail de quem enviou para assinatura"
+    },
+    "enviado_por_nome": {
+      "type": "string",
+      "description": "Nome de quem enviou"
+    },
+    "data_envio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data/hora do envio"
+    },
+    "data_assinatura": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data/hora da assinatura"
+    },
+    "data_expiracao": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data/hora de expira\u00e7\u00e3o do link"
+    },
+    "notificado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se o funcion\u00e1rio foi notificado"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "nome_documento",
+    "documento_url"
+  ]
+}

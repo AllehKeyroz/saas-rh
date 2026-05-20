@@ -1,0 +1,46 @@
+{
+  "name": "BackupRegistro",
+  "type": "object",
+  "properties": {
+    "nome_arquivo": {
+      "type": "string",
+      "description": "Nome do arquivo ZIP de backup"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL p\u00fablica para download do arquivo ZIP"
+    },
+    "data_geracao": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data e hora em que o backup foi gerado"
+    },
+    "expira_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data e hora em que o backup expira (60 dias ap\u00f3s gera\u00e7\u00e3o)"
+    },
+    "total_arquivos": {
+      "type": "number",
+      "description": "Quantidade de arquivos inclu\u00eddos no backup"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "gerando",
+        "concluido",
+        "erro"
+      ],
+      "default": "gerando",
+      "description": "Status do backup"
+    },
+    "erro_detalhes": {
+      "type": "string",
+      "description": "Detalhes do erro, se houver"
+    }
+  },
+  "required": [
+    "nome_arquivo",
+    "data_geracao"
+  ]
+}

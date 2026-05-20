@@ -1,0 +1,55 @@
+{
+  "name": "LogAuditoria",
+  "type": "object",
+  "properties": {
+    "usuario_email": {
+      "type": "string",
+      "description": "E-mail do usu\u00e1rio que realizou a a\u00e7\u00e3o"
+    },
+    "usuario_nome": {
+      "type": "string",
+      "description": "Nome do usu\u00e1rio que realizou a a\u00e7\u00e3o"
+    },
+    "acao": {
+      "type": "string",
+      "enum": [
+        "criar",
+        "editar",
+        "excluir"
+      ],
+      "description": "Tipo de a\u00e7\u00e3o realizada"
+    },
+    "modulo": {
+      "type": "string",
+      "enum": [
+        "funcionario",
+        "lancamento",
+        "comissao",
+        "backup"
+      ],
+      "description": "M\u00f3dulo onde a a\u00e7\u00e3o ocorreu"
+    },
+    "entidade_id": {
+      "type": "string",
+      "description": "ID do registro afetado"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o leg\u00edvel da altera\u00e7\u00e3o"
+    },
+    "dados_anteriores": {
+      "type": "object",
+      "description": "Snapshot dos dados antes da altera\u00e7\u00e3o"
+    },
+    "dados_novos": {
+      "type": "object",
+      "description": "Snapshot dos dados ap\u00f3s a altera\u00e7\u00e3o"
+    }
+  },
+  "required": [
+    "usuario_email",
+    "acao",
+    "modulo",
+    "descricao"
+  ]
+}

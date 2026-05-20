@@ -1,0 +1,89 @@
+{
+  "name": "MensagensRH",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "description": "T\u00edtulo da mensagem"
+    },
+    "mensagem": {
+      "type": "string",
+      "description": "Corpo da mensagem"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "motivacional",
+        "aviso",
+        "comunicado",
+        "meta",
+        "financeiro",
+        "geral"
+      ],
+      "default": "geral",
+      "description": "Tipo da mensagem"
+    },
+    "data_envio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data e hora do envio"
+    },
+    "enviado_por": {
+      "type": "string",
+      "description": "E-mail de quem enviou"
+    },
+    "publico_alvo": {
+      "type": "string",
+      "enum": [
+        "todos",
+        "setor",
+        "funcionario"
+      ],
+      "default": "todos",
+      "description": "P\u00fablico-alvo da mensagem"
+    },
+    "setor_alvo": {
+      "type": "string",
+      "description": "Setor espec\u00edfico (quando p\u00fablico-alvo = setor)"
+    },
+    "funcionario_id_alvo": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio espec\u00edfico (quando p\u00fablico-alvo = funcionario)"
+    },
+    "push_ativado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Se deve enviar push notification"
+    },
+    "lidas_por": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs dos funcion\u00e1rios que leram (legado - use leituras)"
+    },
+    "leituras": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "funcionario_id": {
+            "type": "string",
+            "description": "ID do funcion\u00e1rio"
+          },
+          "data_leitura": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Data e hora da leitura"
+          }
+        }
+      },
+      "description": "Hist\u00f3rico detalhado de leituras com data/hora"
+    }
+  },
+  "required": [
+    "titulo",
+    "mensagem",
+    "tipo"
+  ]
+}

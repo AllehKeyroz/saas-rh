@@ -1,0 +1,48 @@
+{
+  "name": "GastosPessoais",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio dono do lan\u00e7amento"
+    },
+    "categoria_tipo": {
+      "type": "string",
+      "enum": [
+        "gasto_fixo",
+        "gasto_variavel",
+        "investimento",
+        "receita_extra"
+      ],
+      "description": "Tipo de categoria do lan\u00e7amento"
+    },
+    "categoria_nome": {
+      "type": "string",
+      "description": "Nome da categoria (aluguel, mercado, poupan\u00e7a, bico, etc.)"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o opcional do lan\u00e7amento"
+    },
+    "valor": {
+      "type": "number",
+      "description": "Valor do lan\u00e7amento (deve ser positivo)"
+    },
+    "data_lancamento": {
+      "type": "string",
+      "format": "date",
+      "description": "Data do lan\u00e7amento"
+    },
+    "comprovante": {
+      "type": "string",
+      "description": "URL do comprovante anexado"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "categoria_tipo",
+    "categoria_nome",
+    "valor",
+    "data_lancamento"
+  ]
+}

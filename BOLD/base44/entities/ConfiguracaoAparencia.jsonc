@@ -1,0 +1,23 @@
+{
+  "name": "ConfiguracaoAparencia",
+  "type": "object",
+  "properties": {
+    "primary_color_hex": {
+      "type": "string",
+      "description": "Cor prim\u00e1ria em hexadecimal (ex: #3b82f6)"
+    },
+    "accent_color_hex": {
+      "type": "string",
+      "description": "Cor de destaque em hexadecimal (ex: #8b5cf6)"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "URL do logo da empresa"
+    },
+    "nome_empresa": {
+      "type": "string",
+      "description": "Nome da empresa exibido no sistema"
+    }
+  },
+  "required": []
+}

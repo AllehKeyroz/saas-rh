@@ -1,0 +1,54 @@
+{
+  "name": "ModeloDocumento",
+  "type": "object",
+  "properties": {
+    "nome": {
+      "type": "string",
+      "description": "Nome do modelo (ex: Contrato de Trabalho)"
+    },
+    "finalidade": {
+      "type": "string",
+      "description": "ID da finalidade vinculada"
+    },
+    "finalidade_nome": {
+      "type": "string",
+      "description": "Nome da finalidade (cache)"
+    },
+    "pasta_destino": {
+      "type": "string",
+      "description": "Nome da pasta onde o documento assinado ser\u00e1 salvo"
+    },
+    "exige_assinatura": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se o modelo exige assinatura digital GovBR"
+    },
+    "conteudo_html": {
+      "type": "string",
+      "description": "Conte\u00fado HTML do modelo com vari\u00e1veis din\u00e2micas"
+    },
+    "pdf_base_url": {
+      "type": "string",
+      "description": "URL do PDF base (caso seja upload)"
+    },
+    "variaveis": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Lista de vari\u00e1veis usadas neste modelo (ex: {{nome}}, {{cargo}})"
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se o modelo est\u00e1 ativo"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o opcional do modelo"
+    }
+  },
+  "required": [
+    "nome"
+  ]
+}

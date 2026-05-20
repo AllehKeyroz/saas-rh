@@ -1,0 +1,47 @@
+{
+  "name": "DocumentoFuncionario",
+  "type": "object",
+  "properties": {
+    "funcionario_id": {
+      "type": "string",
+      "description": "ID do funcion\u00e1rio"
+    },
+    "funcionario_nome": {
+      "type": "string",
+      "description": "Nome do funcion\u00e1rio (cache)"
+    },
+    "nome_arquivo": {
+      "type": "string",
+      "description": "Nome original do arquivo"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o ou observa\u00e7\u00e3o do documento"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "admissional",
+        "demissional",
+        "contrato",
+        "atestado",
+        "outros"
+      ],
+      "default": "outros",
+      "description": "Categoria do documento"
+    },
+    "file_uri": {
+      "type": "string",
+      "description": "URI privada do arquivo para download seguro"
+    },
+    "file_type": {
+      "type": "string",
+      "description": "Tipo do arquivo (image/pdf/etc)"
+    }
+  },
+  "required": [
+    "funcionario_id",
+    "nome_arquivo",
+    "file_uri"
+  ]
+}
