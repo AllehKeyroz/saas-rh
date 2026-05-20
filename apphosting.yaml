@@ -1,0 +1,48 @@
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: VITE_FIREBASE_API_KEY
+    value: AIzaSyA7BUpI3iX_Gnra-Zkaa7t6WAmhrlZS3D0
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_FIREBASE_AUTH_DOMAIN
+    value: rhdtalia.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_FIREBASE_PROJECT_ID
+    value: rhdtalia
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_FIREBASE_STORAGE_BUCKET
+    value: rhdtalia.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_FIREBASE_MESSAGING_SENDER_ID
+    value: "306797369949"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_FIREBASE_APP_ID
+    value: 1:306797369949:web:f55b95235e5c35b54f8bb4
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_FIREBASE_MEASUREMENT_ID
+    value: G-JFBMV1R7HM
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: VITE_LOGIN_URL
+    value: /login
+    availability:
+      - BUILD
+      - RUNTIME
