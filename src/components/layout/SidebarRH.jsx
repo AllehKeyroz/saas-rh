@@ -12,13 +12,13 @@ import { client } from '@/api/client';
 
 const menuStructure = [
   {
-    category: 'Dashboard',
+    category: 'Dashboard', icon: LayoutDashboard,
     items: [
       { path: '/', label: 'Dashboard RH', icon: LayoutDashboard }
     ]
   },
   {
-    category: 'Folha de Pagamento',
+    category: 'Folha de Pagamento', icon: Calculator,
     items: [
       { path: '/fechamento', label: 'Fechamento Mensal', icon: Calculator },
       { path: '/lancamentos', label: 'Lançamentos', icon: FileText },
@@ -26,56 +26,45 @@ const menuStructure = [
     ]
   },
   {
-    category: 'Funcionários',
+    category: 'Funcionários', icon: Users,
     items: [
       { path: '/funcionarios', label: 'Gerenciar', icon: Users },
       { path: '/espelho-portal', label: 'Espelho do Portal', icon: Eye }
     ]
   },
   {
-    category: 'Comissões',
+    category: 'Comissões', icon: TrendingUp,
     items: [
       { path: '/comissoes', label: 'Comissões' }
     ]
   },
   {
-    category: 'Solicitações',
+    category: 'Solicitações', icon: ClipboardList,
     items: [
-      { path: '/solicitacoes', label: 'Pendentes', icon: Clock, filters: 'status=pendente' },
-      { path: '/solicitacoes', label: 'Aprovadas', icon: ClipboardList, filters: 'status=aprovado' },
-      { path: '/solicitacoes', label: 'Recusadas', icon: AlertCircle, filters: 'status=recusado' },
-      { path: '/solicitacoes', label: 'Todas', icon: Calculator }
+      { path: '/solicitacoes', label: 'Solicitações' }
     ]
   },
   {
-    category: 'Comunicação',
+    category: 'Comunicação', icon: MessageSquare,
     items: [
-      { path: '/comunicacao', label: 'Enviar Mensagem', icon: MessageSquare, filters: 'tab=enviar' },
-      { path: '/comunicacao', label: 'Histórico', icon: FolderOpen, filters: 'tab=historico' },
-      { path: '/comunicacao', label: 'Relatório', icon: Bell, filters: 'tab=relatorio' }
+      { path: '/comunicacao', label: 'Comunicação' }
     ]
   },
   {
-    category: 'Centro de Controle',
+    category: 'Centro de Controle', icon: Sliders,
     items: [
-      { path: '/centro-controle-rh', label: 'Permissões', icon: Users, filters: 'tab=permissoes' },
-      { path: '/centro-controle-rh', label: 'Alertas Automáticos', icon: AlertCircle, filters: 'tab=alertas' },
-      { path: '/centro-controle-rh', label: 'Módulos', icon: Sliders, filters: 'tab=modulos' },
-      { path: '/centro-controle-rh', label: 'Vida Financeira', icon: DollarSign, filters: 'tab=vida-financeira' }
+      { path: '/centro-controle-rh', label: 'Centro de Controle' }
     ]
   },
   {
-    category: 'Assinaturas Digitais',
+    category: 'Assinaturas Digitais', icon: PenLine,
     items: [
-      { path: '/assinaturas-digitais', label: 'Enviar Documento', icon: PenLine },
-      { path: '/assinaturas-digitais', label: 'Acompanhar Status', icon: Clock, filters: 'tab=acompanhar' },
-      { path: '/assinaturas-digitais', label: 'Documentos Assinados', icon: FileText, filters: 'tab=assinados' },
-      { path: '/assinaturas-digitais', label: 'Histórico', icon: FolderOpen, filters: 'tab=historico' },
+      { path: '/assinaturas-digitais', label: 'Assinaturas' },
       { path: '/auditoria-documentos', label: 'Auditoria de Documentos', icon: ShieldCheck },
     ]
   },
   {
-    category: 'Administração',
+    category: 'Administração', icon: ShieldCheck,
     items: [
       { path: '/modelos-documentos', label: 'Modelos de Documentos', icon: LayoutTemplate },
       { path: '/auditoria', label: 'Auditoria', icon: FileText },
@@ -83,7 +72,7 @@ const menuStructure = [
     ]
   },
   {
-    category: 'Configurações',
+    category: 'Configurações', icon: Settings,
     items: [
       { path: '/configuracoes', label: 'Setores', icon: Building2 },
       { path: '/configuracoes', label: 'Funções', icon: Briefcase, filters: 'tab=funcoes' },
@@ -99,19 +88,20 @@ const menuStructure = [
   }
 ];
 
-const CategorySection = ({ category, items, collapsed, isActive, isOpen, onToggle }) => {
+const CategorySection = ({ category, icon: CatIcon, items, collapsed, isActive, isOpen, onToggle }) => {
   const open = isOpen;
   const setOpen = onToggle;
   const location = useLocation();
 
   const isCategoryActive = items.some(item => {
     if (item.path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(item.path);
+    return location.pathname === item.path || location.pathname.startsWith(item.path + '/');
   });
 
   // Categoria com item único: link direto, sem dropdown
   if (items.length === 1) {
-    const { path, label, icon: Icon, filters } = items[0];
+    const { path, label, icon: ItemIcon, filters } = items[0];
+    const Icon = ItemIcon || CatIcon;
     const fullPath = filters ? `${path}?${filters}` : path;
     return (
       <div className="mb-1">
@@ -149,8 +139,11 @@ const CategorySection = ({ category, items, collapsed, isActive, isOpen, onToggl
             : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
         )}
       >
-        <span className={collapsed ? "hidden" : "inline"}>{category}</span>
-        {!collapsed && <ChevronDown className={cn("w-4 h-4 transition-transform", open && "rotate-180")} />}
+        <div className="flex items-center gap-2 min-w-0">
+          {CatIcon && <CatIcon className="w-5 h-5 shrink-0" />}
+          <span className={cn(collapsed ? "hidden" : "inline truncate")}>{category}</span>
+        </div>
+        {!collapsed && <ChevronDown className={cn("w-4 h-4 shrink-0 transition-transform", open && "rotate-180")} />}
       </button>
 
       {open && !collapsed && (
@@ -214,6 +207,7 @@ export default function SidebarRH({ collapsed, onToggle, mobileOpen, onMobileClo
           <CategorySection
             key={section.category}
             category={section.category}
+            icon={section.icon}
             items={section.items}
             collapsed={collapsed}
             isOpen={openCategory === section.category}

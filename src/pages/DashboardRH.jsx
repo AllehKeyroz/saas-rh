@@ -53,7 +53,10 @@ export default function DashboardRH() {
     const feriasVencidas = funcionarios.filter(f => {
       const dataAdm = f.data_admissao ? new Date(f.data_admissao) : null;
       if (!dataAdm || f.data_demissao) return false;
-      return (now.getTime() - dataAdm.getTime()) / (1000 * 60 * 60 * 24 * 30.44) > 14;
+      const mesesDesdeAdmissao = (now.getTime() - dataAdm.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+      // CLT: 12 meses aquisitivo + 11 meses concessivo = 23 meses
+      // Se passou mais de 23 meses, o primeiro período já venceu
+      return mesesDesdeAdmissao > 23;
     }).length;
 
     const lancamentosMes = (lancamentos || []).filter(l => {

@@ -114,6 +114,7 @@ function ResponderModal({ solicitacao, onClose, onSaved, meUser }) {
             <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium">{TIPO_LABELS[solicitacao.tipo_solicitacao]}</span></p>
             {solicitacao.descricao && <p><span className="text-muted-foreground">Descrição:</span> {solicitacao.descricao}</p>}
             {solicitacao.valor_solicitado && <p><span className="text-muted-foreground">Valor:</span> R$ {solicitacao.valor_solicitado.toFixed(2)}</p>}
+            {solicitacao.horas_compensar && <p><span className="text-muted-foreground">Horas a compensar:</span> {solicitacao.horas_compensar}h</p>}
             {solicitacao.periodo_inicio && (
               <p><span className="text-muted-foreground">Período:</span> {format(new Date(solicitacao.periodo_inicio), 'dd/MM/yyyy')}
                 {solicitacao.periodo_fim ? ` → ${format(new Date(solicitacao.periodo_fim), 'dd/MM/yyyy')}` : ''}

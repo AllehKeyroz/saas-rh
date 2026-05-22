@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, User, Calendar, Clock, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
-import { differenceInDays, addDays, format, parseISO } from 'date-fns';
+import { differenceInDays, addDays, addMonths, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // CLT: funcionário tem direito a férias após 12 meses de trabalho.
@@ -22,12 +22,13 @@ function calcularSituacaoFerias(dataAdmissao) {
 
   // Período aquisitivo completado a cada 12 meses
   const periodoAquisitivo = Math.floor(mesesTrabalhados / 12);
-  if (periodoAquisitivo === 0) return null; // ainda no primeiro período aquisitivo
+  // Se não completou nenhum período aquisitivo OU a admissão é futura
+  if (periodoAquisitivo === 0 || diasTrabalhados < 0) return null;
 
-  // Início do período aquisitivo atual já completado
-  const inicioPeriodo = addDays(admissao, periodoAquisitivo * 365);
-  // Prazo limite CLT: até 11 meses após início do período concessivo (total ~23 meses de empresa)
-  const prazoLimite = addDays(inicioPeriodo, 335); // ~11 meses
+  // Data de fim do último período aquisitivo completo (admissão + periodoAquisitivo * 12 meses)
+  const fimUltimoPeriodo = addDays(admissao, periodoAquisitivo * 365);
+  // Prazo limite CLT: 11 meses após o fim do período aquisitivo
+  const prazoLimite = addMonths(fimUltimoPeriodo, 11);
   const diasParaVencer = differenceInDays(prazoLimite, hoje);
 
   return {
