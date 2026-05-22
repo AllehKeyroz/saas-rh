@@ -97,3 +97,24 @@ export function getCurrentTenantId() {
 export function getCurrentUser() {
   return currentUser
 }
+
+export async function refreshCurrentUser() {
+  const uid = currentUser?.uid || currentUser?.id
+  if (!uid) return
+  try {
+    const userDoc = await getDoc(doc(db, 'users', uid))
+    if (userDoc.exists()) {
+      const userData = userDoc.data()
+      currentUser = {
+        id: uid,
+        email: userData.email || currentUser?.email,
+        uid,
+        ...userData,
+      }
+      authInitialized = true
+      authStateListeners.forEach(cb => cb(currentUser))
+    }
+  } catch (e) {
+    console.error('Erro ao atualizar usuário:', e)
+  }
+}

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/firebase/config'
-import { createUserProfile } from '@/firebase/auth'
+import { createUserProfile, refreshCurrentUser } from '@/firebase/auth'
 import { client } from '@/api/client'
 import { useNavigate, Link } from 'react-router-dom'
 import { Users, Loader2, Eye, EyeOff, AlertCircle, MailCheck, Building2 } from 'lucide-react'
@@ -80,6 +80,9 @@ export default function Register() {
         created_date: new Date().toISOString(),
         ativo: true,
       })
+
+      // Atualiza o currentUser com o tenant_id (evita race condition do onAuthStateChanged)
+      await refreshCurrentUser()
 
       // Se for funcionário com convite, vincula
       if (convite) {

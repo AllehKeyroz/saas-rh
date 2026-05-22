@@ -23,8 +23,11 @@ function wrapEntity(entityName) {
     get: (id) => base.get(id),
     create: async (data) => {
       if (skipTenant) return base.create(data)
+      // Se o dado já tem tenant_id explícito, respeita; senão usa do contexto
+      if (data.tenant_id) return base.create(data)
       const tid = auth.getCurrentTenantId()
-      return base.create({ ...data, tenant_id: tid || '' })
+      if (!tid) throw new Error('Usuário sem tenant vinculado')
+      return base.create({ ...data, tenant_id: tid })
     },
     update: (id, data) => base.update(id, data),
     delete: (id) => base.delete(id),
@@ -37,7 +40,8 @@ function wrapEntity(entityName) {
     bulkCreate: async (dataArray) => {
       if (skipTenant) return base.bulkCreate(dataArray)
       const tid = auth.getCurrentTenantId()
-      return base.bulkCreate(dataArray.map(d => ({ ...d, tenant_id: tid || '' })))
+      if (!tid) throw new Error('Usuário sem tenant vinculado')
+      return base.bulkCreate(dataArray.map(d => ({ ...d, tenant_id: d.tenant_id || tid })))
     },
     subscribe: (callback) => base.subscribe(callback),
   }

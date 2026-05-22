@@ -21,31 +21,21 @@ const menuStructure = [
     category: 'Folha de Pagamento',
     items: [
       { path: '/fechamento', label: 'Fechamento Mensal', icon: Calculator },
-      { path: '/lancamentos', label: 'Todos os Lançamentos', icon: FileText },
-      { path: '/lancamentos', label: 'Consignados', icon: TrendingUp, filters: 'tipo=consignado' },
-      { path: '/lancamentos', label: 'Convênios', icon: ClipboardList, filters: 'tipo=convenio' },
-      { path: '/lancamentos', label: 'Consumo', icon: DollarSign, filters: 'tipo=consumo' },
-      { path: '/lancamentos', label: 'Vales Parcelados', icon: Clock, filters: 'tipo=vale_parcelado' },
+      { path: '/lancamentos', label: 'Lançamentos', icon: FileText },
       { path: '/logs-financeiros', label: 'Logs de Erro', icon: FileText }
     ]
   },
   {
     category: 'Funcionários',
     items: [
-      { path: '/funcionarios', label: 'Cadastro', icon: Users },
-      { path: '/funcionarios', label: 'Documentos', icon: FileText, filters: 'tab=documentos' },
-      { path: '/advertencias', label: 'Advertências', icon: AlertCircle },
-      { path: '/funcionarios', label: 'Férias e Banco de Horas', icon: Calendar, filters: 'tab=ferias' },
+      { path: '/funcionarios', label: 'Gerenciar', icon: Users },
       { path: '/espelho-portal', label: 'Espelho do Portal', icon: Eye }
     ]
   },
   {
     category: 'Comissões',
     items: [
-      { path: '/comissoes', label: 'Lançar', icon: Calendar, filters: 'tab=lancar' },
-      { path: '/comissoes', label: 'Setores', icon: Settings, filters: 'tab=setores' },
-      { path: '/comissoes', label: 'Histórico', icon: FolderOpen, filters: 'tab=historico' },
-      { path: '/comissoes', label: 'Relatório', icon: TrendingUp, filters: 'tab=relatorio' }
+      { path: '/comissoes', label: 'Comissões' }
     ]
   },
   {
@@ -109,8 +99,9 @@ const menuStructure = [
   }
 ];
 
-const CategorySection = ({ category, items, collapsed, isActive }) => {
-  const [open, setOpen] = useState(!collapsed && isActive);
+const CategorySection = ({ category, items, collapsed, isActive, isOpen, onToggle }) => {
+  const open = isOpen;
+  const setOpen = onToggle;
   const location = useLocation();
 
   const isCategoryActive = items.some(item => {
@@ -118,15 +109,44 @@ const CategorySection = ({ category, items, collapsed, isActive }) => {
     return location.pathname.startsWith(item.path);
   });
 
+  // Categoria com item único: link direto, sem dropdown
+  if (items.length === 1) {
+    const { path, label, icon: Icon, filters } = items[0];
+    const fullPath = filters ? `${path}?${filters}` : path;
+    return (
+      <div className="mb-1">
+        <Link
+          to={fullPath}
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+            isCategoryActive
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+        >
+          {Icon && <Icon className="w-5 h-5 shrink-0" />}
+          {!collapsed && <span>{label}</span>}
+        </Link>
+      </div>
+    );
+  }
+
+  const categoriaAtiva = isCategoryActive;
+  const temSubItemAtivo = open && items.some(({ path, filters }) => {
+    const fullPath = filters ? `${path}?${filters}` : path;
+    const currentFull = location.pathname + location.search;
+    return filters ? currentFull === fullPath : location.pathname === path && !location.search;
+  });
+
   return (
     <div className="mb-1">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => onToggle()}
         className={cn(
           "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all",
-          isCategoryActive
+          categoriaAtiva || temSubItemAtivo
             ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
         )}
       >
         <span className={collapsed ? "hidden" : "inline"}>{category}</span>
@@ -134,7 +154,7 @@ const CategorySection = ({ category, items, collapsed, isActive }) => {
       </button>
 
       {open && !collapsed && (
-        <div className="pl-2 mt-1 space-y-0.5">
+        <div className="pl-3 mt-1 space-y-0.5">
           {items.map(({ path, label, icon: Icon, filters }) => {
             const fullPath = filters ? `${path}?${filters}` : path;
             const currentFull = location.pathname + location.search;
@@ -146,13 +166,13 @@ const CategorySection = ({ category, items, collapsed, isActive }) => {
                 key={label}
                 to={fullPath}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+                  "flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
                   isItemActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
                 )}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                {Icon && <Icon className="w-4 h-4 shrink-0" />}
                 <span className="truncate">{label}</span>
               </Link>
             );
@@ -165,6 +185,7 @@ const CategorySection = ({ category, items, collapsed, isActive }) => {
 
 export default function SidebarRH({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const location = useLocation();
+  const [openCategory, setOpenCategory] = useState(null);
 
   const NavContent = () => {
     const navigate = useNavigate();
@@ -195,6 +216,8 @@ export default function SidebarRH({ collapsed, onToggle, mobileOpen, onMobileClo
             category={section.category}
             items={section.items}
             collapsed={collapsed}
+            isOpen={openCategory === section.category}
+            onToggle={() => setOpenCategory(openCategory === section.category ? null : section.category)}
             isActive={section.items.some(item => {
               if (item.path === '/') return location.pathname === '/';
               return location.pathname.startsWith(item.path);
@@ -243,15 +266,18 @@ export default function SidebarRH({ collapsed, onToggle, mobileOpen, onMobileClo
         )}
       >
         <NavContent />
-
-        {/* Collapse button - Desktop only */}
-        <button
-          onClick={onToggle}
-          className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 rounded-full bg-primary text-primary-foreground items-center justify-center shadow-lg hover:scale-110 transition-transform"
-        >
-          <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", !collapsed && "rotate-180")} />
-        </button>
       </aside>
+
+      {/* Collapse button - Desktop only (fora do sidebar p/ evitar overflow clipping) */}
+      <button
+        onClick={onToggle}
+        className={cn(
+          "hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 w-7 h-7 rounded-full bg-primary text-primary-foreground items-center justify-center shadow-lg hover:scale-110 transition-all duration-300"
+        )}
+        style={{ left: collapsed ? '54px' : '242px' }}
+      >
+        <ChevronRight className={cn("w-4 h-4 transition-transform", !collapsed && "rotate-180")} />
+      </button>
 
       {/* Spacer - Desktop only */}
       <div className={cn("hidden lg:block shrink-0 transition-all duration-300", collapsed ? "w-[68px]" : "w-64")} />

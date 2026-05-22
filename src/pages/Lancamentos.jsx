@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,19 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, User, ChevronRight, Upload } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Search, User, ChevronRight, Upload, TrendingUp, FileText, Wallet, DollarSign, Clock, List } from 'lucide-react';
 import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import LancamentoForm from '@/components/lancamentos/LancamentoForm';
 import DetalhesFuncionarioModal from '@/components/lancamentos/DetalhesFuncionarioModal';
 import ImportarLancamentos from '@/components/importacao/ImportarLancamentos';
 
-const TIPO_FILTRO_CONFIG = {
-  consignado:    { tipo: 'credito_consignado', label: 'Consignados',     desc: 'Funcionários com crédito consignado' },
-  convenio:      { tipo: 'convenio',           label: 'Convênios',       desc: 'Funcionários com convênio ativo' },
-  consumo:       { tipo: 'consumo',            label: 'Consumo',         desc: 'Funcionários com consumo registrado' },
-  vale_parcelado:{ tipo: 'vale_parcelado',     label: 'Vales Parcelados',desc: 'Funcionários com vales parcelados' },
-};
+const TIPOS_NAVBAR = [
+  { key: 'todos',     label: 'Todos',         icon: List },
+  { key: 'consignado', label: 'Consignados',   icon: TrendingUp, tipo: 'credito_consignado' },
+  { key: 'convenio',   label: 'Convênios',     icon: Wallet,     tipo: 'convenio' },
+  { key: 'consumo',    label: 'Consumo',       icon: DollarSign, tipo: 'consumo' },
+  { key: 'vale_parcelado', label: 'Vales Parcelados', icon: Clock, tipo: 'vale_parcelado' },
+];
 
 export default function Lancamentos() {
   const [formOpen, setFormOpen] = useState(false);
@@ -27,11 +28,10 @@ export default function Lancamentos() {
   const [search, setSearch] = useState('');
   const [mesFiltro, setMesFiltro] = useState(getMesReferenciaAtual());
   const [funcSelecionado, setFuncSelecionado] = useState(null);
+  const [filtroAtivo, setFiltroAtivo] = useState('todos');
   const queryClient = useQueryClient();
 
-  const location = useLocation();
-  const tipoParam = new URLSearchParams(location.search).get('tipo');
-  const filtroConfig = TIPO_FILTRO_CONFIG[tipoParam] || null;
+  const filtroConfig = TIPOS_NAVBAR.find(t => t.key === filtroAtivo && t.key !== 'todos') || null;
 
   const { data: lancamentos = [], isLoading } = useQuery({
     queryKey: ['lancamentos'],
@@ -85,10 +85,10 @@ export default function Lancamentos() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {filtroConfig ? filtroConfig.label : 'Lançamentos Financeiros'}
+            Lançamentos Financeiros
           </h1>
           <p className="text-muted-foreground mt-1">
-            {filtroConfig ? filtroConfig.desc : 'Resumo mensal por funcionário'}
+            Resumo mensal por funcionário
           </p>
         </div>
         <div className="flex gap-2">
@@ -101,18 +101,31 @@ export default function Lancamentos() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar funcionário..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      {/* Navbar de tipos */}
+      <Tabs value={filtroAtivo} onValueChange={setFiltroAtivo}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <TabsList className="overflow-x-auto">
+            {TIPOS_NAVBAR.map(t => (
+              <TabsTrigger key={t.key} value={t.key} className="gap-1.5">
+                <t.icon className="w-3.5 h-3.5" />
+                <span>{t.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <div className="flex gap-2 ml-auto">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Buscar funcionário..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+            </div>
+            <Select value={mesFiltro} onValueChange={setMesFiltro}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {getMesesOptions().map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <Select value={mesFiltro} onValueChange={setMesFiltro}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {getMesesOptions().map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
+      </Tabs>
 
       {isLoading ? (
         <div className="space-y-3">
