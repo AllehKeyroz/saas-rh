@@ -82,7 +82,7 @@ const menuStructure = [
       { path: '/configuracoes', label: 'Modelos de Advertência', icon: FileWarning, filters: 'tab=modelos-advertencia' },
       { path: '/configuracoes', label: 'Modelos de Documentos', icon: LayoutTemplate, filters: 'tab=modelos-documentos' },
       { path: '/configuracoes', label: 'Assinatura GovBR', icon: PenLine, filters: 'tab=govbr' },
-      { path: '/configuracoes', label: 'Limite de Vales (40%)', icon: Wallet, filters: 'tab=limite-vales' },
+      { path: '/configuracoes', label: `Limite de Vales (40%)`, icon: Wallet, filters: 'tab=limite-vales' },
       { path: '/configuracoes', label: 'Backups', icon: HardDrive, filters: 'tab=backups' },
     ]
   }

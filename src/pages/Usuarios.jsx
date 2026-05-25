@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/firebase/config';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut as authSignOut } from 'firebase/auth';
+import { auth, db } from '@/firebase/config';
+import { doc, setDoc } from 'firebase/firestore';
 import { client } from '@/api/client';
-import { createUserProfile, getCurrentTenantId } from '@/firebase/auth';
+import { getCurrentTenantId } from '@/firebase/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +36,6 @@ export default function Usuarios() {
   const [form, setForm] = useState({ email: '', password: '', fullName: '', role: 'user' });
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [funcEmailMatch, setFuncEmailMatch] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: usuarios = [], isLoading } = useQuery({
@@ -56,16 +57,8 @@ export default function Usuarios() {
   const handleSaveRole = async () => {
     setSaving(true);
     try {
-      const updateData = { role: newRole };
-      if (newRole === 'funcionario') {
-        const funcionarios = await client.entities.Funcionarios.filter({ email: editingUser.email });
-        if (funcionarios && funcionarios.length > 0) {
-          await client.entities.Funcionarios.update(funcionarios[0].id, { user_email_portal: editingUser.email });
-        }
-      }
-      await client.entities.users.update(editingUser.id, updateData);
+      await client.entities.users.update(editingUser.id, { role: newRole });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
       toast.success('Permissão atualizada com sucesso!');
       setEditingUser(null);
     } catch (err) {
@@ -79,47 +72,51 @@ export default function Usuarios() {
     if (!form.email || !form.password) { toast.error('Preencha email e senha'); return; }
     if (form.password.length < 6) { toast.error('A senha deve ter no mínimo 6 caracteres'); return; }
     setSaving(true);
+    const adminTenantId = getCurrentTenantId();
+    let tempApp = null;
     try {
-      // Verifica se o email pertence a um funcionário
-      const funcEncontrados = await client.entities.Funcionarios.filter({ email: form.email });
-      const temFuncionario = funcEncontrados && funcEncontrados.length > 0;
-
-      // Se tem funcionário e role NÃO é funcionario, avisa sobre risco de segurança
-      if (temFuncionario && form.role !== 'funcionario') {
-        const confirmou = confirm(
-          `⚠️ ATENÇÃO: O email ${form.email} pertence ao funcionário ${funcEncontrados[0].nome}.\n\n` +
-          `Se você criar esta conta como "${form.role}", esse funcionário terá ACESSO PRIVILEGIADO ao sistema.\n\n` +
-          `Recomendado: usar role "funcionario" para este email.\n\n` +
-          `Deseja continuar mesmo assim com role "${form.role}"?`
-        );
-        if (!confirmou) { setSaving(false); return; }
+      if (!adminTenantId) {
+        toast.error('Sessão sem tenant. Tente recarregar a página.');
+        setSaving(false);
+        return;
       }
 
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+      // Cria um app temporário para não afetar a sessão do admin
+      tempApp = initializeApp(auth.app.options, 'tempUserCreation');
+      const tempAuth = getAuth(tempApp);
+
+      const cred = await createUserWithEmailAndPassword(tempAuth, form.email, form.password);
       const uid = cred.user.uid;
 
-      await createUserProfile(uid, {
+      // Escreve no Firestore usando a sessão do admin (não foi trocada)
+      await setDoc(doc(db, 'users', uid), {
         full_name: form.fullName || form.email,
         email: form.email,
-        role: temFuncionario ? 'funcionario' : form.role,
+        role: form.role,
+        tenant_id: adminTenantId,
         created_date: new Date().toISOString(),
         ativo: true,
       });
 
-      // Sempre vincula se for funcionário, independente da role
-      if (temFuncionario) {
-        await client.entities.Funcionarios.update(funcEncontrados[0].id, { user_email_portal: form.email });
-      }
+      await authSignOut(tempAuth);
 
       toast.success(`Usuário criado com sucesso!`);
       setShowCriar(false);
       setForm({ email: '', password: '', fullName: '', role: 'user' });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
     } catch (err) {
-      if (err.code === 'auth/email-already-in-use') toast.error('Este email já está em uso');
-      else toast.error(err?.message || 'Erro ao criar usuário');
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      console.error('Erro ao criar usuário:', code, msg);
+      if (code === 'auth/email-already-in-use') toast.error('Este email já está em uso');
+      else if (code === 'auth/invalid-email') toast.error('Email inválido. Verifique o formato.');
+      else if (code === 'auth/weak-password') toast.error('Senha muito fraca. Mínimo 6 caracteres.');
+      else if (code === 'auth/network-request-failed') toast.error('Erro de rede. Verifique sua conexão.');
+      else toast.error(msg || 'Erro ao criar usuário');
     } finally {
+      if (tempApp) {
+        try { await tempApp.delete(); } catch {}
+      }
       setSaving(false);
     }
   };
@@ -249,7 +246,7 @@ export default function Usuarios() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper">
-                {Object.entries(ROLE_CONFIG).filter(([r]) => r !== 'inativo').map(([r, cfg]) => (
+                {Object.entries(ROLE_CONFIG).filter(([r]) => ['admin', 'user'].includes(r)).map(([r, cfg]) => (
                   <SelectItem key={r} value={r}>
                     <span>{cfg.label}</span>
                   </SelectItem>
@@ -282,22 +279,7 @@ export default function Usuarios() {
             </div>
             <div>
               <Label>E-mail *</Label>
-              <Input type="email" placeholder="colaborador@empresa.com" value={form.email} onChange={async (e) => {
-                const email = e.target.value;
-                setForm(p => ({ ...p, email }));
-                if (email) {
-                  try {
-                    const res = await client.entities.Funcionarios.filter({ email });
-                    setFuncEmailMatch(res?.length > 0 ? res[0].nome : null);
-                  } catch { setFuncEmailMatch(null); }
-                } else { setFuncEmailMatch(null); }
-              }} />
-              {funcEmailMatch && (
-                <div className="flex items-start gap-1.5 mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                  <UserCheck className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  <span>Email pertence ao funcionário <strong>{funcEmailMatch}</strong>. A role será ajustada para "funcionário" automaticamente.</span>
-                </div>
-              )}
+              <Input type="email" placeholder="colaborador@empresa.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
             </div>
             <div>
               <Label>Senha *</Label>
@@ -310,13 +292,13 @@ export default function Usuarios() {
             </div>
             <div>
               <Label>Permissão *</Label>
-              <Select value={funcEmailMatch ? 'funcionario' : form.role} onValueChange={v => { if (!funcEmailMatch) setForm(p => ({ ...p, role: v })); }}>
+              <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v }))}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
-                  {Object.entries(ROLE_CONFIG).filter(([r]) => !['inativo', 'consulta'].includes(r)).map(([r, cfg]) => (
-                    <SelectItem key={r} value={r} disabled={!!funcEmailMatch && r !== 'funcionario'}>
+                  {Object.entries(ROLE_CONFIG).filter(([r]) => ['admin', 'user'].includes(r)).map(([r, cfg]) => (
+                    <SelectItem key={r} value={r}>
                       <div className="flex flex-col">
                         <span>{cfg.label}</span>
                         <span className="text-xs text-muted-foreground">{cfg.description}</span>
@@ -325,7 +307,6 @@ export default function Usuarios() {
                   ))}
                 </SelectContent>
               </Select>
-              {funcEmailMatch && <p className="text-xs text-amber-600 mt-1">Travado como "Funcionário" porque o email pertence a um funcionário cadastrado.</p>}
             </div>
           </div>
           <DialogFooter>

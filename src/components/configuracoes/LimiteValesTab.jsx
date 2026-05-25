@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Save, Wallet, Info, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
+const LIMITE_PERCENTUAL = 40;
 const CHAVE = 'limite_vale_tipos';
 
 const TIPOS_DISPONIVEIS = [
@@ -79,8 +80,8 @@ export default function LimiteValesTab() {
       <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
         <Info className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
         <div className="text-sm text-blue-700">
-          <p className="font-semibold mb-0.5">Regra dos 40% do salário</p>
-          <p>Selecione quais tipos de desconto devem ser somados para verificar se o funcionário atingiu o limite de <strong>40%</strong> do salário base. Essa configuração afeta o alerta no portal do funcionário e a validação ao lançar novos descontos.</p>
+              <p className="font-semibold mb-0.5">Regra dos {LIMITE_PERCENTUAL}% do salário</p>
+          <p>Selecione quais tipos de desconto devem ser somados para verificar se o funcionário atingiu o limite de <strong>{LIMITE_PERCENTUAL}%</strong> do salário base. Essa configuração afeta o alerta no portal do funcionário e a validação ao lançar novos descontos.</p>
         </div>
       </div>
 

@@ -33,6 +33,7 @@ export const TIPO_COLORS = {
   credito_consignado: 'bg-purple-100 text-purple-700',
 };
 
+export const LIMITE_PERCENTUAL = 40; // % do salário + comissão usado como limite de vales/adiantamentos
 export const TIPOS_DESCONTO = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 export const TIPOS_ADICIONAL = ['adicional', 'ajuste', 'comissao'];
 

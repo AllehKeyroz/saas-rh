@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { client } from '@/api/client';
 import { registrarAuditoria } from '@/lib/audit';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, Loader2 } from 'lucide-react';
+import { Upload, Loader2, Calculator, Info } from 'lucide-react';
+import { formatCurrency, LIMITE_PERCENTUAL } from '@/lib/formatters';
 import { toast } from 'sonner';
 import { getCurrentTenantId } from '@/firebase/auth';
 
@@ -52,6 +53,77 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
   });
 
   const comissaoAtivaByData = form.data_inicio_comissao && form.data_inicio_comissao <= hojeStr;
+  const [limiteEditado, setLimiteEditado] = useState(false);
+
+  // Busca último fechamento do funcionário (para cálculo do limite 40%)
+  const { data: fechamentos = [] } = useQuery({
+    queryKey: ['fechamentos_limite', funcionario?.id],
+    queryFn: () => client.entities.FechamentoMensal.filter({ funcionario_id: funcionario.id }),
+    enabled: isEdit,
+  });
+
+  const ultimoFechamento = useMemo(() => {
+    if (!fechamentos.length) return null;
+    return [...fechamentos].sort((a, b) => (b.mes_referencia || '').localeCompare(a.mes_referencia || ''))[0];
+  }, [fechamentos]);
+
+  // Busca comissão do último mês fechado
+  const { data: comissoesUltimo = [] } = useQuery({
+    queryKey: ['comissoes_limite', funcionario?.id, ultimoFechamento?.mes_referencia],
+    queryFn: () => client.entities.ComissaoPorFuncionario.filter({
+      funcionario_id: funcionario.id,
+      mes_referencia: ultimoFechamento.mes_referencia,
+    }),
+    enabled: isEdit && !!ultimoFechamento?.mes_referencia,
+  });
+
+  const comissaoUltimoMes = useMemo(() => {
+    return comissoesUltimo
+      .filter(c => c.apto)
+      .reduce((s, c) => s + (c.valor_individual_final ?? c.valor_individual ?? 0), 0);
+  }, [comissoesUltimo]);
+
+  // Busca lançamentos do mês atual para mostrar uso do limite
+  const hoje = new Date();
+  const mesAtual = `${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+  const { data: lancamentosUso = [] } = useQuery({
+    queryKey: ['lancamentos_uso_limite', funcionario?.id, mesAtual],
+    queryFn: () => client.entities.FichaFinanceira.filter({ funcionario_id: funcionario.id }),
+    enabled: isEdit,
+  });
+
+  const totalUsadoMes = useMemo(() => {
+    const agora = new Date();
+    const mes = agora.getMonth();
+    const ano = agora.getFullYear();
+    return lancamentosUso
+      .filter(l => l.data_lancamento)
+      .filter(l => {
+        const d = new Date(l.data_lancamento);
+        return d.getMonth() === mes && d.getFullYear() === ano;
+      })
+      .filter(l => ['vale', 'adiantamento'].includes(l.tipo_lancamento))
+      .reduce((s, l) => s + (l.valor || 0), 0);
+  }, [lancamentosUso]);
+
+  // Cálculo do limite
+  const salarioBaseCalc = Number(form.salario_base) || 0;
+  const baseCalculoLimite = salarioBaseCalc + comissaoUltimoMes;
+  const limiteCalculado = baseCalculoLimite * (LIMITE_PERCENTUAL / 100);
+
+  // Auto-preenche o limite sempre (a menos que o RH tenha editado manualmente)
+  useEffect(() => {
+    if (!isEdit) return;
+    if (limiteEditado) return;
+    if (!limiteCalculado || limiteCalculado <= 0) return;
+    setForm(prev => ({ ...prev, limite_vales: limiteCalculado.toFixed(2) }));
+  }, [limiteCalculado, isEdit]);
+
+  const percentualUso = (() => {
+    const lim = Number(form.limite_vales) || 0;
+    if (!lim) return null;
+    return Math.min((totalUsadoMes / lim) * 100, 100);
+  })();
 
   const validar = (dados) => {
     const erros = {}
@@ -243,14 +315,73 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Salário Base *</Label>
-              <Input type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => handleChange('salario_base', e.target.value)} placeholder="0,00" required />
+              <Input type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => { setLimiteEditado(false); handleChange('salario_base', e.target.value); }} placeholder="0,00" required />
               {errors.salario_base && <p className="text-xs text-destructive mt-1">{errors.salario_base}</p>}
             </div>
             <div>
-              <Label>Limite de Vales</Label>
-              <Input type="number" step="0.01" min="0" value={form.limite_vales || ''} onChange={e => handleChange('limite_vales', e.target.value)} placeholder="Sem limite" />
+              <Label>Limite de Vales ({LIMITE_PERCENTUAL}%)</Label>
+              <Input type="number" step="0.01" min="0" value={form.limite_vales || ''} onChange={e => { setLimiteEditado(true); handleChange('limite_vales', e.target.value); }} placeholder="Sem limite" />
             </div>
           </div>
+
+          {isEdit && Number(form.limite_vales) > 0 && (
+            <div className="border rounded-lg p-3 space-y-2 bg-blue-50 border-blue-200">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-blue-700 mb-1">
+                <Calculator className="w-3.5 h-3.5" />
+                Cálculo do Limite de Vales ({LIMITE_PERCENTUAL}%)
+              </div>
+              <div className="text-xs text-blue-600 space-y-1">
+                <p>
+                  Salário base: <strong>{formatCurrency(salarioBaseCalc)}</strong>
+                  {ultimoFechamento && (
+                    <> + Comissão ({ultimoFechamento.mes_referencia}): <strong>{formatCurrency(comissaoUltimoMes)}</strong></>
+                  )}
+                  {!ultimoFechamento && isEdit && (
+                    <> + Comissão: <strong>R$ 0,00</strong> <span className="text-blue-400">(sem fechamento anterior)</span></>
+                  )}
+                </p>
+                <p>
+                  Base de cálculo: <strong>{formatCurrency(baseCalculoLimite)}</strong>
+                  {' × '}{LIMITE_PERCENTUAL}% = <strong className="text-blue-800">{formatCurrency(limiteCalculado)}</strong>
+                </p>
+              </div>
+              {percentualUso !== null && (
+                <div className="pt-1.5 border-t border-blue-200">
+                  <div className="flex items-center justify-between text-xs text-blue-600 mb-1">
+                    <span>Usado neste mês:</span>
+                    <span>
+                      <strong>{formatCurrency(totalUsadoMes)}</strong> de {formatCurrency(Number(form.limite_vales) || 0)}
+                      {' — '}
+                      <span className={percentualUso >= 100 ? 'text-red-600 font-semibold' : percentualUso >= 80 ? 'text-amber-600 font-semibold' : ''}>
+                        {percentualUso.toFixed(0)}%
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-blue-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        percentualUso >= 100 ? 'bg-red-500' : percentualUso >= 80 ? 'bg-amber-500' : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${Math.min(percentualUso, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isEdit && (!form.limite_vales || Number(form.limite_vales) === 0) && baseCalculoLimite > 0 && (
+            <div className="border rounded-lg p-3 bg-blue-50 border-blue-200">
+              <div className="flex items-start gap-2 text-xs text-blue-700">
+                <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Limite de {LIMITE_PERCENTUAL}% calculado automaticamente: <strong>{formatCurrency(limiteCalculado)}</strong>
+                  {ultimoFechamento && <> (salário + comissão de {ultimoFechamento.mes_referencia})</>}
+                  . Preencha o campo ao lado para definir ou deixe em branco para sem limite.
+                </span>
+              </div>
+            </div>
+          )}
 
           {!form.data_demissao && (
             <div className="flex items-center gap-3">

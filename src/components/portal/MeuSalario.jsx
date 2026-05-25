@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, TrendingUp, TrendingDown, Info, AlertTriangle, LineChart } from 'lucide-react';
-import { formatCurrency, getMesReferenciaAtual, getMesesOptions } from '@/lib/formatters';
+import { formatCurrency, getMesReferenciaAtual, getMesesOptions, LIMITE_PERCENTUAL } from '@/lib/formatters';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import ResumoSalarioCard from '@/components/vidafinanceira/ResumoSalarioCard';
 import { LineChart as RechartLineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -129,7 +129,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
             <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
               <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
               <p className="text-xs text-blue-700">
-                O limite de <strong>40%</strong> do salário para descontos é <strong>{formatCurrency(limite40)}</strong>.
+                O limite de <strong>{LIMITE_PERCENTUAL}%</strong> do salário para descontos é <strong>{formatCurrency(limite40)}</strong>.
               </p>
             </div>
             {percentualDesconto !== null && (

@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Wallet, Info, Eye, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/formatters';
+import { formatCurrency, formatDate, LIMITE_PERCENTUAL } from '@/lib/formatters';
 
 const TIPO_LABELS = {
   vale: 'Vale',
@@ -89,7 +89,7 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
       <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
         <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
         <p className="text-xs text-blue-700">
-          O limite de <strong>40%</strong> inclui: vale, adiantamento, convênio, consumo e crédito consignado.
+          O limite de <strong>{LIMITE_PERCENTUAL}%</strong> inclui: vale, adiantamento, convênio, consumo e crédito consignado.
         </p>
       </div>
 
