@@ -1,10 +1,15 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/firebase/config'
 import { createUserProfile, refreshCurrentUser } from '@/firebase/auth'
 import { client } from '@/api/client'
 import { useNavigate, Link } from 'react-router-dom'
-import { Users, Loader2, Eye, EyeOff, AlertCircle, MailCheck, Building2 } from 'lucide-react'
+import { Users, Loader2, Eye, EyeOff, AlertCircle, Building2, CheckCircle } from 'lucide-react'
+
+function getInitials(name) {
+  if (!name) return '??'
+  return name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
+}
 
 export default function Register() {
   const navigate = useNavigate()
@@ -14,18 +19,28 @@ export default function Register() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [convite, setConvite] = useState(null)
+  const [tenantNome, setTenantNome] = useState('')
   const [checkingConvite, setCheckingConvite] = useState(false)
   const timerRef = useRef(null)
 
   const checkConvite = (email) => {
-    if (!email || !email.includes('@')) { setConvite(null); return }
+    if (!email || !email.includes('@')) { setConvite(null); setTenantNome(''); return }
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
       setCheckingConvite(true)
       try {
         const res = await client.entities.convites.filter({ email, status: 'pendente' })
-        setConvite(res && res.length > 0 ? res[0] : null)
-      } catch { setConvite(null) }
+        const c = res && res.length > 0 ? res[0] : null
+        setConvite(c)
+        if (c?.tenant_id) {
+          try {
+            const t = await client.entities.tenants.get(c.tenant_id)
+            setTenantNome(t?.nome || '')
+          } catch { setTenantNome('') }
+        } else {
+          setTenantNome('')
+        }
+      } catch { setConvite(null); setTenantNome('') }
       setCheckingConvite(false)
     }, 500)
   }
@@ -38,7 +53,6 @@ export default function Register() {
     e.preventDefault()
     setError('')
 
-    // Se tem convite, não precisa de companyName
     if (!convite && !form.companyName.trim()) { setError('Informe o nome da empresa'); return }
     if (!form.fullName.trim()) { setError('Informe seu nome completo'); return }
     if (!form.email.trim()) { setError('Informe seu email'); return }
@@ -47,10 +61,8 @@ export default function Register() {
 
     setLoading(true)
     try {
-      // Define o tenant_id
       let tenantId
       if (convite) {
-        // Funcionário com convite: usa o tenant do convite
         tenantId = convite.tenant_id
         if (!tenantId) {
           setError('Convite inválido. Contate o RH.')
@@ -58,7 +70,6 @@ export default function Register() {
           return
         }
       } else {
-        // Novo cadastro: cria um tenant
         tenantId = generateTenantId()
         await client.entities.tenants.create({
           id: tenantId,
@@ -81,18 +92,23 @@ export default function Register() {
         ativo: true,
       })
 
-      // Atualiza o currentUser com o tenant_id (evita race condition do onAuthStateChanged)
       await refreshCurrentUser()
+    } catch (err) {
+      if (err.code === 'auth/email-already-in-use') setError('Este email já está cadastrado. Faça login.')
+      else if (err.code === 'auth/invalid-email') setError('Email inválido')
+      else if (err.code === 'auth/weak-password') setError('Senha muito fraca')
+      else setError(err.message || 'Erro ao criar conta')
+      setLoading(false)
+      return
+    }
 
-      // Se for funcionário com convite, vincula
+    try {
       if (convite) {
         await client.entities.convites.update(convite.id, { status: 'aceito' })
         if (convite.funcionario_id) {
           await client.entities.Funcionarios.update(convite.funcionario_id, { user_email_portal: form.email })
         }
       }
-
-      // Se não é funcionário com convite, cria as configurações padrão do tenant
       if (!convite) {
         const defaultFeatures = [
           'comissoes_por_periodo', 'divisao_automatica_setor', 'exclusao_faltas_atestados',
@@ -116,30 +132,42 @@ export default function Register() {
           })
         }
       }
-
-      navigate('/', { replace: true })
     } catch (err) {
-      if (err.code === 'auth/email-already-in-use') setError('Este email já está cadastrado. Faça login.')
-      else if (err.code === 'auth/invalid-email') setError('Email inválido')
-      else if (err.code === 'auth/weak-password') setError('Senha muito fraca')
-      else setError(err.message || 'Erro ao criar conta')
-    } finally {
-      setLoading(false)
+      console.error('Erro no pós-registro (não crítico):', err?.code, err?.message)
     }
+
+    setLoading(false)
+    navigate('/', { replace: true })
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
+
+          {/* ─── Header ─── */}
           <div className="text-center space-y-2">
-            <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center">
-              {convite ? <MailCheck className="w-7 h-7 text-primary-foreground" /> : <Building2 className="w-7 h-7 text-primary-foreground" />}
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900">{convite ? 'Criar Conta' : 'Criar Nova Empresa'}</h1>
-            <p className="text-sm text-slate-500">
-              {convite ? 'Você foi convidado! Cadastre-se no Portal do Funcionário.' : 'Cadastre sua empresa no RH System'}
-            </p>
+            {convite ? (
+              <>
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <span className="text-xl font-bold text-primary">{getInitials(tenantNome)}</span>
+                </div>
+                <h1 className="text-xl font-bold text-slate-900">
+                  Você foi convidado
+                </h1>
+                <p className="text-sm text-slate-500">
+                  para entrar na <strong className="text-slate-700">{tenantNome || 'empresa'}</strong>
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center">
+                  <Building2 className="w-7 h-7 text-primary-foreground" />
+                </div>
+                <h1 className="text-2xl font-bold text-slate-900">Criar Nova Empresa</h1>
+                <p className="text-sm text-slate-500">Cadastre sua empresa no RH System</p>
+              </>
+            )}
           </div>
 
           <form onSubmit={handleRegister} className="space-y-4">
@@ -150,6 +178,7 @@ export default function Register() {
               </div>
             )}
 
+            {/* ─── Nome da Empresa (só para admin) ─── */}
             {!convite && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Nome da Empresa *</label>
@@ -158,33 +187,29 @@ export default function Register() {
               </div>
             )}
 
-            {convite && (
-              <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
-                <MailCheck className="w-3.5 h-3.5 shrink-0" />
-                Convite encontrado! Seu acesso será limitado ao Portal do Funcionário.
-              </div>
-            )}
-
+            {/* ─── Nome Completo ─── */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Nome Completo</label>
               <input type="text" value={form.fullName} onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))}
                 placeholder="Seu nome" className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
             </div>
 
+            {/* ─── Email ─── */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Email</label>
               <input type="email" value={form.email}
+                readOnly={!!convite}
                 onChange={e => { setForm(p => ({ ...p, email: e.target.value })); checkConvite(e.target.value) }}
-                placeholder="seu@email.com" className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
-              {checkingConvite && <p className="text-xs text-muted-foreground mt-1">Verificando convite...</p>}
-              {convite && !checkingConvite && (
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
-                  <MailCheck className="w-3.5 h-3.5 shrink-0" />
-                  Convite encontrado! Seu cadastro será como funcionário.
-                </div>
-              )}
+                placeholder="seu@email.com"
+                className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all ${
+                  convite
+                    ? 'bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed'
+                    : 'border-slate-300'
+                }`} />
+              {checkingConvite && <p className="text-xs text-slate-400 mt-1">Verificando convite...</p>}
             </div>
 
+            {/* ─── Senha ─── */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Senha</label>
               <div className="relative">
@@ -196,6 +221,7 @@ export default function Register() {
               </div>
             </div>
 
+            {/* ─── Confirmar Senha ─── */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Confirmar Senha</label>
               <div className="relative">
@@ -207,6 +233,7 @@ export default function Register() {
               </div>
             </div>
 
+            {/* ─── Botão ─── */}
             <button type="submit" disabled={loading}
               className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -218,6 +245,7 @@ export default function Register() {
             Já tem conta? <Link to="/login" className="text-primary font-medium hover:underline">Fazer login</Link>
           </div>
           <p className="text-xs text-center text-slate-400">Sistema de Gestão de RH</p>
+
         </div>
       </div>
     </div>

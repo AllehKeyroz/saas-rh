@@ -51,7 +51,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenant_id;
     }
 
-    match /Funcionarios/{docId}     { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
+    match /Funcionarios/{docId}     { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH() || (isAuthenticated() && resource.data.email == request.auth.token.email); allow delete: if isAdmin(); }
     match /FichaFinanceira/{docId}  { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /FechamentoMensal/{docId} { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ComissoesGorjetas/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
