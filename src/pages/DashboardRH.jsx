@@ -44,19 +44,39 @@ export default function DashboardRH() {
     queryFn: () => client.entities.FechamentoMensal.list('-created_date', 2000),
   });
 
+  const { data: todasFerias = [] } = useQuery({
+    queryKey: ['ferias_dashboard'],
+    queryFn: () => client.entities.Ferias.list(),
+  });
+
   const stats = React.useMemo(() => {
     if (!funcionarios) return {};
     const now = new Date();
     const mesAtual = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
     const ativas = funcionarios.filter(f => f.ativo !== false && !f.data_demissao).length;
     const pendentes = solicitacoes?.filter(s => s.status === 'pendente').length || 0;
+
+    // Férias vencidas considerando períodos já gozados
     const feriasVencidas = funcionarios.filter(f => {
       const dataAdm = f.data_admissao ? new Date(f.data_admissao) : null;
       if (!dataAdm || f.data_demissao) return false;
       const mesesDesdeAdmissao = (now.getTime() - dataAdm.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-      // CLT: 12 meses aquisitivo + 11 meses concessivo = 23 meses
-      // Se passou mais de 23 meses, o primeiro período já venceu
-      return mesesDesdeAdmissao > 23;
+      const totalPeriodos = Math.floor(mesesDesdeAdmissao / 12);
+      if (totalPeriodos === 0) return false;
+      // Períodos já consumidos
+      const consumidos = new Set(
+        todasFerias.filter(fc => fc.funcionario_id === f.id).map(fc => fc.periodo_aquisitivo)
+      );
+      // Verifica se há algum período não consumido cujo prazo CLT já venceu
+      for (let p = 1; p <= totalPeriodos; p++) {
+        if (!consumidos.has(p)) {
+          const fimPeriodo = new Date(dataAdm.getTime() + p * 365 * 24 * 60 * 60 * 1000);
+          const prazoLimite = new Date(fimPeriodo);
+          prazoLimite.setMonth(prazoLimite.getMonth() + 11);
+          if (now > prazoLimite) return true;
+        }
+      }
+      return false;
     }).length;
 
     const lancamentosMes = (lancamentos || []).filter(l => {
@@ -83,7 +103,7 @@ export default function DashboardRH() {
       .reduce((s, c) => s + (c.valor_total_periodo || 0), 0);
 
     return { funcionariosAtivos: ativas, solicitacoesPendentes: pendentes, feriasVencidas, docsVencendo, valesMes, consignadosAtivos: funcionariosConsignados, custoFolha, comissaoTotal };
-  }, [funcionarios, solicitacoes, lancamentos, assinaturas, comissoes, fechamentos]);
+  }, [funcionarios, solicitacoes, lancamentos, assinaturas, comissoes, fechamentos, todasFerias]);
 
   const alerts = React.useMemo(() => {
     const result = [];

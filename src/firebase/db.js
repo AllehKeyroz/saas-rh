@@ -134,7 +134,7 @@ const ENTITY_NAMES = [
   'LogAuditoria', 'AuditoriaDocumentos', 'ApplicationError',
   'LogNotificacao', 'AssinaturaDigital', 'ModeloDocumento',
   'FinalidadeDocumento', 'ModeloAdvertencia', 'Advertencias',
-  'DocumentoFuncionario', 'SolicitacoesFuncionario', 'MensagensRH',
+  'DocumentoFuncionario', 'Ferias', 'SolicitacoesFuncionario', 'MensagensRH',
   'GastosPessoais', 'DividasPessoais', 'AssinaturasPessoais',
   'MetasObjetivos', 'MetaFinanceira', 'users', 'convites',
 ]

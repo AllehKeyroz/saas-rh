@@ -1,48 +1,88 @@
-import { useState, useRef, useEffect } from 'react'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { useState, useRef } from 'react'
+import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from 'firebase/auth'
 import { auth } from '@/firebase/config'
 import { createUserProfile, refreshCurrentUser } from '@/firebase/auth'
 import { client } from '@/api/client'
 import { useNavigate, Link } from 'react-router-dom'
-import { Users, Loader2, Eye, EyeOff, AlertCircle, Building2, CheckCircle } from 'lucide-react'
-
-function getInitials(name) {
-  if (!name) return '??'
-  return name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
-}
+import { Users, Loader2, Eye, EyeOff, AlertCircle, Building2, ArrowRight, Mail, MailCheck } from 'lucide-react'
 
 export default function Register() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ companyName: '', fullName: '', email: '', password: '', confirmPassword: '' })
+  const [step, setStep] = useState('email') // email | form
+  const [email, setEmail] = useState('')
+  const [convite, setConvite] = useState(null)
+  const [tenantNome, setTenantNome] = useState('')
+  const [checkingEmail, setCheckingEmail] = useState(false)
+  const [form, setForm] = useState({ fullName: '', companyName: '', password: '', confirmPassword: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [convite, setConvite] = useState(null)
-  const [tenantNome, setTenantNome] = useState('')
-  const [checkingConvite, setCheckingConvite] = useState(false)
   const timerRef = useRef(null)
 
-  const checkConvite = (email) => {
-    if (!email || !email.includes('@')) { setConvite(null); setTenantNome(''); return }
+  const checkConvite = (value) => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(async () => {
-      setCheckingConvite(true)
-      try {
-        const res = await client.entities.convites.filter({ email, status: 'pendente' })
-        const c = res && res.length > 0 ? res[0] : null
-        setConvite(c)
-        if (c?.tenant_id) {
-          try {
-            const t = await client.entities.tenants.get(c.tenant_id)
-            setTenantNome(t?.nome || '')
-          } catch { setTenantNome('') }
-        } else {
-          setTenantNome('')
-        }
-      } catch { setConvite(null); setTenantNome('') }
-      setCheckingConvite(false)
-    }, 500)
+    return new Promise((resolve) => {
+      timerRef.current = setTimeout(async () => {
+        if (!value || !value.includes('@')) { resolve(null); return }
+        setCheckingEmail(true)
+        try {
+          const res = await client.entities.convites.filter({ email: value, status: 'pendente' })
+          const c = res && res.length > 0 ? res[0] : null
+          setConvite(c)
+          if (c?.tenant_id) {
+            try {
+              const res = await client.entities.tenants.filter({ id: c.tenant_id })
+              setTenantNome(res?.[0]?.nome || '')
+            } catch { setTenantNome('') }
+          } else {
+            setTenantNome('')
+          }
+          resolve(c)
+        } catch { setConvite(null); setTenantNome(''); resolve(null) }
+        setCheckingEmail(false)
+      }, 400)
+    })
+  }
+
+  const handleContinue = async () => {
+    if (!email || !email.includes('@')) { setError('Informe um email válido'); return }
+    setError('')
+    setCheckingEmail(true)
+
+    // 1. Verifica se já existe conta Firebase Auth com este email
+    let authExists = false
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, email)
+      authExists = methods.length > 0
+    } catch {}
+    if (authExists) {
+      setCheckingEmail(false)
+      setError('Este email já possui cadastro.')
+      return
+    }
+
+    // 2. Verifica se o convite já foi usado
+    try {
+      const usados = await client.entities.convites.filter({ email, status: 'aceito' })
+      if (usados.length > 0) {
+        setCheckingEmail(false)
+        setError('Este convite já foi utilizado.')
+        return
+      }
+    } catch {}
+
+    // 3. Busca convite pendente
+    const c = await checkConvite(email)
+    setCheckingEmail(false)
+    setStep('form')
+  }
+
+  const handleEmailKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleContinue()
+    }
   }
 
   const generateTenantId = () => {
@@ -55,7 +95,6 @@ export default function Register() {
 
     if (!convite && !form.companyName.trim()) { setError('Informe o nome da empresa'); return }
     if (!form.fullName.trim()) { setError('Informe seu nome completo'); return }
-    if (!form.email.trim()) { setError('Informe seu email'); return }
     if (form.password.length < 6) { setError('A senha deve ter no mínimo 6 caracteres'); return }
     if (form.password !== form.confirmPassword) { setError('As senhas não conferem'); return }
 
@@ -74,18 +113,18 @@ export default function Register() {
         await client.entities.tenants.create({
           id: tenantId,
           nome: form.companyName.trim(),
-          email: form.email,
+          email,
           created_date: new Date().toISOString(),
           ativo: true,
         })
       }
 
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password)
+      const cred = await createUserWithEmailAndPassword(auth, email, form.password)
       const uid = cred.user.uid
 
       await createUserProfile(uid, {
         full_name: form.fullName,
-        email: form.email,
+        email,
         role: convite ? 'funcionario' : 'admin',
         tenant_id: tenantId,
         created_date: new Date().toISOString(),
@@ -106,7 +145,7 @@ export default function Register() {
       if (convite) {
         await client.entities.convites.update(convite.id, { status: 'aceito' })
         if (convite.funcionario_id) {
-          await client.entities.Funcionarios.update(convite.funcionario_id, { user_email_portal: form.email })
+          await client.entities.Funcionarios.update(convite.funcionario_id, { user_email_portal: email })
         }
       }
       if (!convite) {
@@ -140,21 +179,78 @@ export default function Register() {
     navigate('/', { replace: true })
   }
 
+  const voltar = () => {
+    setStep('email')
+    setError('')
+  }
+
+  if (step === 'email') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center">
+                <Users className="w-7 h-7 text-primary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">Criar Conta</h1>
+              <p className="text-sm text-slate-500">Digite seu email para começar</p>
+            </div>
+
+            {error && (
+              <div className="space-y-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+                {(error.includes('cadastro') || error.includes('utilizado')) && (
+                  <Link to="/login" className="flex items-center gap-1.5 text-red-800 font-medium hover:underline ml-6">
+                    Ir para o login →
+                  </Link>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Email</label>
+              <input type="email" value={email}
+                onChange={e => { setEmail(e.target.value); setError('') }}
+                onKeyDown={handleEmailKeyDown}
+                placeholder="seu@email.com"
+                autoFocus
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
+            </div>
+
+            {!error && (
+              <button onClick={handleContinue} disabled={checkingEmail || !email}
+                className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                {checkingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                {checkingEmail ? 'Verificando...' : 'Continuar'}
+              </button>
+            )}
+
+            <div className="text-center text-sm text-slate-500">
+              Já tem conta? <Link to="/login" className="text-primary font-medium hover:underline">Fazer login</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
 
-          {/* ─── Header ─── */}
+          {/* Header */}
           <div className="text-center space-y-2">
             {convite ? (
               <>
-                <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <span className="text-xl font-bold text-primary">{getInitials(tenantNome)}</span>
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center">
+                  <MailCheck className="w-7 h-7 text-primary-foreground" />
                 </div>
-                <h1 className="text-xl font-bold text-slate-900">
-                  Você foi convidado
-                </h1>
+                <h1 className="text-xl font-bold text-slate-900">Você foi convidado</h1>
                 <p className="text-sm text-slate-500">
                   para entrar na <strong className="text-slate-700">{tenantNome || 'empresa'}</strong>
                 </p>
@@ -178,38 +274,34 @@ export default function Register() {
               </div>
             )}
 
-            {/* ─── Nome da Empresa (só para admin) ─── */}
+            {/* Email (read-only) */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Email</label>
+              <div className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-500 cursor-not-allowed">
+                <Mail className="w-4 h-4 shrink-0 text-slate-400" />
+                <span className="flex-1 truncate">{email}</span>
+              </div>
+            </div>
+
+            {/* Nome da Empresa (só se NÃO for convite) */}
             {!convite && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Nome da Empresa *</label>
                 <input type="text" value={form.companyName} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))}
-                  placeholder="Minha Empresa Ltda" className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
+                  placeholder="Minha Empresa Ltda" autoFocus
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
               </div>
             )}
 
-            {/* ─── Nome Completo ─── */}
+            {/* Nome Completo */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Nome Completo</label>
               <input type="text" value={form.fullName} onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))}
-                placeholder="Seu nome" className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
+                placeholder="Seu nome" autoFocus={!!convite}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all" />
             </div>
 
-            {/* ─── Email ─── */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Email</label>
-              <input type="email" value={form.email}
-                readOnly={!!convite}
-                onChange={e => { setForm(p => ({ ...p, email: e.target.value })); checkConvite(e.target.value) }}
-                placeholder="seu@email.com"
-                className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all ${
-                  convite
-                    ? 'bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed'
-                    : 'border-slate-300'
-                }`} />
-              {checkingConvite && <p className="text-xs text-slate-400 mt-1">Verificando convite...</p>}
-            </div>
-
-            {/* ─── Senha ─── */}
+            {/* Senha */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Senha</label>
               <div className="relative">
@@ -221,7 +313,7 @@ export default function Register() {
               </div>
             </div>
 
-            {/* ─── Confirmar Senha ─── */}
+            {/* Confirmar Senha */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Confirmar Senha</label>
               <div className="relative">
@@ -233,19 +325,23 @@ export default function Register() {
               </div>
             </div>
 
-            {/* ─── Botão ─── */}
-            <button type="submit" disabled={loading}
-              className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? 'Criando...' : convite ? 'Criar Conta' : 'Criar Empresa'}
-            </button>
+            {/* Botões */}
+            <div className="flex gap-3">
+              <button type="button" onClick={voltar}
+                className="px-4 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium text-sm hover:bg-slate-50 transition-colors">
+                Voltar
+              </button>
+              <button type="submit" disabled={loading}
+                className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? 'Criando...' : convite ? 'Criar Conta' : 'Criar Empresa'}
+              </button>
+            </div>
           </form>
 
           <div className="text-center text-sm text-slate-500">
             Já tem conta? <Link to="/login" className="text-primary font-medium hover:underline">Fazer login</Link>
           </div>
-          <p className="text-xs text-center text-slate-400">Sistema de Gestão de RH</p>
-
         </div>
       </div>
     </div>
