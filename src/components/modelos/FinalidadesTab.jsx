@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { client } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Pencil, Trash2, Loader2, Tag, PenLine, FolderOpen, Power } from 'lucide-react';
 import FinalidadeForm from './FinalidadeForm';
 import { registrarAuditoria, ACOES } from '@/lib/auditoriaDocumentos';
@@ -9,12 +10,15 @@ import { registrarAuditoria, ACOES } from '@/lib/auditoriaDocumentos';
 export default function FinalidadesTab({ finalidades, loading, onRefresh }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const handleDelete = async (id, nome) => {
-    if (!confirm(`Excluir a finalidade "${nome}"?`)) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const { id, nome } = deleteTarget;
     await client.entities.FinalidadeDocumento.delete(id);
     await registrarAuditoria({ acao: ACOES.FINALIDADE_EXCLUIDA, modulo: 'finalidade', descricao: `Finalidade "${nome}" excluída.`, origem: 'rh', dados_antes: { id, nome } });
     onRefresh();
+    setDeleteTarget(null);
   };
 
   const handleToggle = async (f) => {
@@ -77,7 +81,7 @@ export default function FinalidadesTab({ finalidades, loading, onRefresh }) {
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setEditando(f); setFormOpen(true); }}>
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(f.id, f.nome)}>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget({ id: f.id, nome: f.nome })}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
@@ -85,6 +89,21 @@ export default function FinalidadesTab({ finalidades, loading, onRefresh }) {
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir finalidade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? `Excluir a finalidade "${deleteTarget.nome}"? Esta ação não pode ser desfeita.` : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <FinalidadeForm
         open={formOpen}

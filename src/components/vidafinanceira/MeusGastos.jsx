@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Eye, TrendingUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, Eye, TrendingUp, RotateCcw } from 'lucide-react';
 import { formatCurrency, formatDate, getMesReferenciaAtual, getMesesOptions } from '@/lib/formatters';
 import { TIPO_LABELS, TIPO_COLORS, filtrarGastosPorMes } from '@/lib/vidaFinanceira';
 import GastoForm from '@/components/vidafinanceira/GastoForm';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFinancialDataLogger } from '@/hooks/useFinancialDataLogger';
+
+function mesToDate(mesRef) {
+  const [m, a] = mesRef.split('/');
+  return new Date(parseInt(a), parseInt(m) - 1, 1);
+}
+
+function dateToMes(d) {
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
 
 export default function MeusGastos({ funcionarioId }) {
   const { toast } = useToast();
@@ -24,6 +34,7 @@ export default function MeusGastos({ funcionarioId }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editGasto, setEditGasto] = useState(null);
   const [comprovanteUrl, setComprovanteUrl] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: gastos = [], isLoading, error: gastosError } = useQuery({
     queryKey: ['gastos_pessoais', funcionarioId],
@@ -37,7 +48,32 @@ export default function MeusGastos({ funcionarioId }) {
 
   if (isLoading) return null;
 
-  const gastosMes = filtrarGastosPorMes(gastos, mesSelecionado);
+  // Filtra gastos do mês selecionado
+  const gastosMesOriginais = filtrarGastosPorMes(gastos, mesSelecionado);
+
+  // Projeta gastos recorrentes de meses anteriores para este mês
+  const gastosRecorrentesProjetados = useMemo(() => {
+    const mesData = mesToDate(mesSelecionado);
+    const categoriasNoMes = new Set(gastosMesOriginais.map(g => `${g.categoria_tipo}::${g.categoria_nome}`));
+    const projetados = [];
+
+    for (const g of gastos) {
+      if (!g.recorrente) continue;
+      const dataGasto = new Date(g.data_lancamento + 'T12:00:00');
+      // Se o gasto foi criado antes ou durante este mês
+      if (dataGasto <= mesData) {
+        const chave = `${g.categoria_tipo}::${g.categoria_nome}`;
+        // Se não existe entrada igual neste mês, projeta
+        if (!categoriasNoMes.has(chave)) {
+          projetados.push({ ...g, id: g.id + '_projetado', projetado: true });
+          categoriasNoMes.add(chave);
+        }
+      }
+    }
+    return projetados;
+  }, [gastos, mesSelecionado, gastosMesOriginais]);
+
+  const gastosMes = [...gastosMesOriginais, ...gastosRecorrentesProjetados];
   const gastosFiltrados = filtroTipo === 'todos' ? gastosMes : gastosMes.filter(g => g.categoria_tipo === filtroTipo);
 
   const totaisPorTipo = ['gasto_fixo', 'gasto_variavel', 'investimento', 'receita_extra'].reduce((acc, tipo) => {
@@ -45,18 +81,18 @@ export default function MeusGastos({ funcionarioId }) {
     return acc;
   }, {});
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir este lançamento?')) return;
-    await client.entities.GastosPessoais.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.GastosPessoais.delete(deleteTarget);
     qc.invalidateQueries({ queryKey: ['gastos_pessoais'] });
     toast({ title: 'Lançamento excluído' });
+    setDeleteTarget(null);
   };
 
   const onSaved = () => qc.invalidateQueries({ queryKey: ['gastos_pessoais'] });
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
       <div className="flex flex-wrap gap-2 items-center">
         <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -79,7 +115,6 @@ export default function MeusGastos({ funcionarioId }) {
         </Button>
       </div>
 
-      {/* Totais por tipo */}
       <div className="grid grid-cols-3 gap-2">
         {Object.entries(TIPO_LABELS).map(([tipo, label]) => {
           const c = TIPO_COLORS[tipo];
@@ -92,7 +127,6 @@ export default function MeusGastos({ funcionarioId }) {
         })}
       </div>
 
-      {/* Lista de gastos */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Lançamentos — {mesSelecionado}</CardTitle>
@@ -104,12 +138,14 @@ export default function MeusGastos({ funcionarioId }) {
             <div className="space-y-1">
               {gastosFiltrados.slice().sort((a, b) => b.data_lancamento?.localeCompare(a.data_lancamento)).map(g => {
                 const c = TIPO_COLORS[g.categoria_tipo];
+                const isProjetado = g.projetado;
                 return (
-                  <div key={g.id} className="flex items-center gap-2 py-2 border-b last:border-b-0">
+                  <div key={g.id} className={`flex items-center gap-2 py-2 border-b last:border-b-0 ${isProjetado ? 'opacity-70' : ''}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm truncate">{g.categoria_nome}</span>
                         <Badge className={`${c.bg} ${c.text} border-0 text-xs`}>{TIPO_LABELS[g.categoria_tipo]}</Badge>
+                        {isProjetado && <Badge variant="outline" className="text-xs border-blue-300 text-blue-600 flex items-center gap-1"><RotateCcw className="w-2.5 h-2.5" />Recorrente</Badge>}
                       </div>
                       {g.descricao && <p className="text-xs text-muted-foreground">{g.descricao}</p>}
                       <p className="text-xs text-muted-foreground">{formatDate(g.data_lancamento)}</p>
@@ -121,12 +157,16 @@ export default function MeusGastos({ funcionarioId }) {
                           <Eye className="w-3 h-3" />
                         </Button>
                       )}
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(g.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                      {!isProjetado && (
+                        <>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(g.id)}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -156,6 +196,19 @@ export default function MeusGastos({ funcionarioId }) {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Pencil, Plus, Trash2, Loader2, Building2, Tags, HardDrive, Bell, Palette, Power, FileWarning, Briefcase, PenLine, LayoutTemplate } from 'lucide-react';
 import BackupsTab from '@/components/configuracoes/BackupsTab';
 import NotificacoesTab from '@/components/configuracoes/NotificacoesTab';
@@ -199,6 +200,7 @@ export default function Configuracoes() {
   const [setorForm, setSetorForm] = useState(null);
   const [tipoForm, setTipoForm] = useState(null);
   const [funcaoForm, setFuncaoForm] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: setores = [], isLoading: loadingSetores } = useQuery({
     queryKey: ['setores'],
@@ -215,27 +217,25 @@ export default function Configuracoes() {
     queryFn: () => client.entities.Funcao.list(),
   });
 
-  const handleDeleteFuncao = async (id) => {
-    if (!confirm('Excluir esta função?')) return;
-    await client.entities.Funcao.delete(id);
-    queryClient.invalidateQueries({ queryKey: ['funcoes'] });
-  };
-
-  const handleDeleteSetor = async (id) => {
-    if (!confirm('Excluir este setor? Esta ação não pode ser desfeita.')) return;
-    await client.entities.Setor.delete(id);
-    queryClient.invalidateQueries({ queryKey: ['setores'] });
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const { id, type } = deleteTarget;
+    if (type === 'funcao') {
+      await client.entities.Funcao.delete(id);
+      queryClient.invalidateQueries({ queryKey: ['funcoes'] });
+    } else if (type === 'setor') {
+      await client.entities.Setor.delete(id);
+      queryClient.invalidateQueries({ queryKey: ['setores'] });
+    } else if (type === 'tipo') {
+      await client.entities.TipoLancamento.delete(id);
+      queryClient.invalidateQueries({ queryKey: ['tiposLancamento'] });
+    }
+    setDeleteTarget(null);
   };
 
   const handleToggleSetor = async (setor) => {
     await client.entities.Setor.update(setor.id, { ativo: !setor.ativo });
     queryClient.invalidateQueries({ queryKey: ['setores'] });
-  };
-
-  const handleDeleteTipo = async (id) => {
-    if (!confirm('Excluir este tipo de lançamento?')) return;
-    await client.entities.TipoLancamento.delete(id);
-    queryClient.invalidateQueries({ queryKey: ['tiposLancamento'] });
   };
 
   return (
@@ -283,7 +283,7 @@ export default function Configuracoes() {
                     <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setSetorForm(s)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteSetor(s.id)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget({ id: s.id, type: 'setor' })}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -325,7 +325,7 @@ export default function Configuracoes() {
                     <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setFuncaoForm(f)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteFuncao(f.id)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget({ id: f.id, type: 'funcao' })}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -370,7 +370,7 @@ export default function Configuracoes() {
                     <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setTipoForm(t)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteTipo(t.id)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget({ id: t.id, type: 'tipo' })}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -388,6 +388,23 @@ export default function Configuracoes() {
       {activeTab === 'modelos-documentos' && <ModelosDocumentosTab />}
       {activeTab === 'govbr' && <AssinaturaGovBRTab />}
       {activeTab === 'limite-vales' && <LimiteValesTab />}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget?.type === 'funcao' ? 'Excluir função?' :
+               deleteTarget?.type === 'setor' ? 'Excluir setor?' :
+               'Excluir tipo de lançamento?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modais */}
       {setorForm !== null && (

@@ -450,7 +450,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                 handleConfirmar();
               } catch (e) {
                 console.error('[LancarComissao] Erro ao confirmar:', e);
-                alert('Erro ao confirmar comissões. Tente novamente.');
+                toast.error('Erro ao confirmar comissões. Tente novamente.');
               }
             }} 
             disabled={salvando} 

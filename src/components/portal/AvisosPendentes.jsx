@@ -104,8 +104,8 @@ export default function AvisosPendentes({ funcionario, mensagensRH, onRefresh })
       </div>
 
       {/* Modal de leitura */}
-      <Dialog open={!!messagemSelecionada}>
-        <DialogContent>
+      <Dialog open={!!messagemSelecionada} onOpenChange={open => { if (!open) setMensagemSelecionada(null); }}>
+        <DialogContent className="max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {messagemSelecionada && TIPO_COLORS[messagemSelecionada.tipo]?.icon}
@@ -114,7 +114,7 @@ export default function AvisosPendentes({ funcionario, mensagensRH, onRefresh })
           </DialogHeader>
           {messagemSelecionada && (
             <div className="space-y-4">
-              <div className="bg-muted/50 rounded-lg p-4 text-sm whitespace-pre-wrap text-foreground">
+              <div className="bg-muted/50 rounded-lg p-4 text-sm whitespace-pre-wrap break-words text-foreground leading-relaxed max-h-[55vh] overflow-y-auto">
                 {messagemSelecionada.mensagem}
               </div>
               <div className="text-xs text-muted-foreground space-y-1">

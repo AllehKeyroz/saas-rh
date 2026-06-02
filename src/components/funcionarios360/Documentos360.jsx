@@ -7,12 +7,22 @@ import { Upload, ExternalLink, Trash2, Loader2, ShieldCheck } from 'lucide-react
 import { formatDate } from '@/lib/formatters';
 import { client } from '@/api/client';
 import { toast } from 'sonner';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import AuditoriaDocumentoDrawer from '@/components/auditoria/AuditoriaDocumentoDrawer';
 import { registrarAuditoria, ACOES } from '@/lib/auditoriaDocumentos';
 
 export default function Documentos360({ funcionario, documentos, onRefresh }) {
   const [uploading, setUploading] = useState(false);
   const [auditoriaDoc, setAuditoriaDoc] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.DocumentoFuncionario.delete(deleteTarget);
+    toast.success('Documento excluído.');
+    if (onRefresh) onRefresh();
+    setDeleteTarget(null);
+  };
 
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -111,12 +121,7 @@ export default function Documentos360({ funcionario, documentos, onRefresh }) {
                         <Button
                           size="icon" variant="ghost" className="h-8 w-8 text-destructive"
                           title="Excluir documento"
-                          onClick={async () => {
-                            if (!confirm(`Excluir "${doc.nome_arquivo}"?`)) return;
-                            await client.entities.DocumentoFuncionario.delete(doc.id);
-                            toast.success('Documento excluído.');
-                            if (onRefresh) onRefresh();
-                          }}
+                          onClick={() => setDeleteTarget(doc.id)}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
@@ -135,6 +140,19 @@ export default function Documentos360({ funcionario, documentos, onRefresh }) {
           </CardContent>
         </Card>
       )}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AuditoriaDocumentoDrawer
         open={!!auditoriaDoc}
         onClose={() => setAuditoriaDoc(null)}

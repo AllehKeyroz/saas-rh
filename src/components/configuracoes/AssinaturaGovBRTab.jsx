@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/use-toast';
 import { Shield, CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy } from 'lucide-react';
 
 export default function AssinaturaGovBRTab() {
+  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: configs = [] } = useQuery({
@@ -51,7 +53,7 @@ export default function AssinaturaGovBRTab() {
     }
     queryClient.invalidateQueries({ queryKey: ['config-govbr'] });
     setSaving(false);
-    alert('Configurações salvas com sucesso!');
+    toast({ title: 'Configurações salvas com sucesso!' });
   };
 
   const handleTestar = async () => {
@@ -66,7 +68,7 @@ export default function AssinaturaGovBRTab() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    alert('Copiado!');
+    toast({ title: 'Copiado!' });
   };
 
   return (

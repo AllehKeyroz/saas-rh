@@ -10,6 +10,7 @@ import { formatCurrency, formatDate, getMesReferenciaAtual, getMesesOptions } fr
 import { TIPO_LABELS, TIPO_COLORS, filtrarGastosPorMes } from '@/lib/vidaFinanceira';
 import GastoForm from '@/components/vidafinanceira/GastoForm';
 import { useToast } from '@/components/ui/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function MeusGastos({ funcionarioId }) {
@@ -22,6 +23,7 @@ export default function MeusGastos({ funcionarioId }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editGasto, setEditGasto] = useState(null);
   const [comprovanteUrl, setComprovanteUrl] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: gastos = [] } = useQuery({
     queryKey: ['gastos_pessoais', funcionarioId],
@@ -37,11 +39,12 @@ export default function MeusGastos({ funcionarioId }) {
     return acc;
   }, {});
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir este lançamento?')) return;
-    await client.entities.GastosPessoais.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.GastosPessoais.delete(deleteTarget);
     qc.invalidateQueries({ queryKey: ['gastos_pessoais'] });
     toast({ title: 'Lançamento excluído' });
+    setDeleteTarget(null);
   };
 
   const onSaved = () => qc.invalidateQueries({ queryKey: ['gastos_pessoais'] });
@@ -116,7 +119,7 @@ export default function MeusGastos({ funcionarioId }) {
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
                         <Pencil className="w-3 h-3" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(g.id)}>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(g.id)}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
@@ -127,6 +130,19 @@ export default function MeusGastos({ funcionarioId }) {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este lançamento?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <GastoForm
         open={formOpen}

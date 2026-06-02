@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/formatters';
 import { SETOR_LABELS, formatPeriodo } from '@/lib/comissoes';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AlertTriangle, RefreshCw, Trash2, Users, Loader2, Edit2 } from 'lucide-react';
 import { client } from '@/api/client';
 import { toast } from 'sonner';
@@ -14,6 +15,7 @@ import CorrigirComissaoDialog from './CorrigirComissaoDialog';
 export default function DetalhesComissao({ comissao, comissoesFuncionarios, funcionarios, onClose, onRefresh }) {
   const [loading, setLoading] = useState(false);
   const [corrigindoAberto, setCorrigindoAberto] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   if (!comissao) return null;
 
@@ -31,7 +33,7 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
   });
 
   const handleExcluir = async () => {
-    if (!confirm('Excluir esta comissão e todos os registros associados?')) return;
+    if (!deleteTarget) return;
     setLoading(true);
     try {
       for (const r of registros) await client.entities.ComissaoPorFuncionario.delete(r.id);
@@ -48,6 +50,7 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
       toast.error(`Erro ao excluir: ${e.message}`);
       } finally {
       setLoading(false);
+      setDeleteTarget(null);
       }
       };
 
@@ -168,13 +171,26 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
            <Button variant="outline" onClick={handleRecalcular} disabled={loading}>
              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}Recalcular
            </Button>
-           <Button variant="destructive" onClick={handleExcluir} disabled={loading}>
+           <Button variant="destructive" onClick={() => setDeleteTarget(true)} disabled={loading}>
              <Trash2 className="w-4 h-4 mr-2" />Excluir Comissão
            </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir comissão?</AlertDialogTitle>
+          <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleExcluir}>Excluir</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <CorrigirComissaoDialog
       aberto={corrigindoAberto}

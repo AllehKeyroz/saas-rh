@@ -4,12 +4,13 @@ import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Tv, Music, Gamepad2, Heart, BookOpen, Zap, MoreHorizontal, AlertTriangle, TrendingDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Tv, Music, Gamepad2, Heart, BookOpen, Zap, MoreHorizontal, AlertTriangle, TrendingDown, Eye, EyeOff } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -80,12 +81,22 @@ function AssinaturaForm({ open, onClose, onSaved, funcionarioId, assinatura }) {
   );
 }
 
+function ProgressBar({ value, max, color = 'bg-primary' }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
 export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [showInativos, setShowInativos] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: assinaturas = [] } = useQuery({
     queryKey: ['assinaturas_pessoais', funcionarioId],
@@ -99,22 +110,21 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
   const totalMensal = ativas.reduce((s, a) => s + (a.valor || 0), 0);
   const pctSalario = salarioBase > 0 ? ((totalMensal / salarioBase) * 100).toFixed(1) : null;
 
-  // Detectar duplicatas por categoria
   const porCategoria = ativas.reduce((acc, a) => { acc[a.categoria] = (acc[a.categoria] || []).concat(a); return acc; }, {});
   const duplicatas = Object.entries(porCategoria).filter(([, arr]) => arr.length > 1);
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir assinatura?')) return;
-    await client.entities.AssinaturasPessoais.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.AssinaturasPessoais.delete(deleteTarget);
     qc.invalidateQueries({ queryKey: ['assinaturas_pessoais'] });
     toast({ title: 'Assinatura removida' });
+    setDeleteTarget(null);
   };
 
   const onSaved = () => qc.invalidateQueries({ queryKey: ['assinaturas_pessoais'] });
 
   return (
     <div className="space-y-4">
-      {/* Resumo */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
           <p className="text-xs text-purple-600 font-medium">Total Mensal</p>
@@ -128,7 +138,6 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
         </div>
       </div>
 
-      {/* Alerta de duplicatas */}
       {duplicatas.length > 0 && (
         <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
           <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
@@ -141,7 +150,6 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
         </div>
       )}
 
-      {/* Alerta alto percentual */}
       {pctSalario > 15 && (
         <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
           <TrendingDown className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
@@ -149,7 +157,6 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
         </div>
       )}
 
-      {/* Header lista */}
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
           <button onClick={() => setShowInativos(false)} className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${!showInativos ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Ativas ({ativas.length})</button>
@@ -160,7 +167,6 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
         </Button>
       </div>
 
-      {/* Lista */}
       {lista.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nenhuma assinatura {showInativos ? 'inativa' : 'ativa'}. {!showInativos && <button className="text-primary underline ml-1" onClick={() => { setEditItem(null); setFormOpen(true); }}>Adicionar</button>}</CardContent></Card>
       ) : (
@@ -189,7 +195,7 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditItem(a); setFormOpen(true); }}><Pencil className="w-3 h-3" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(a.id)}><Trash2 className="w-3 h-3" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(a.id)}><Trash2 className="w-3 h-3" /></Button>
                     </div>
                   </div>
                 </CardContent>
@@ -206,6 +212,19 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
         funcionarioId={funcionarioId}
         assinatura={editItem}
       />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir assinatura?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

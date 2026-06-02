@@ -50,7 +50,7 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
       )}
 
       {/* Cards de resumo */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-card border rounded-xl p-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Limite</p>
           <p className="font-bold text-sm">{limite ? formatCurrency(limite) : '—'}</p>
@@ -119,8 +119,8 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
                     </div>
                     <div className="flex items-center gap-2">
                       {l.comprovante && (
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onVerComprovante(l)}>
-                          <Eye className="w-3.5 h-3.5" />
+                        <Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => onVerComprovante(l)}>
+                          <Eye className="w-4 h-4" />
                         </Button>
                       )}
                       <span className="text-sm font-bold text-destructive">- {formatCurrency(l.valor)}</span>

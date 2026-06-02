@@ -10,7 +10,7 @@ function DRERow({ label, value, percentual = null, indent = false, isTotal = fal
   const isClickable = onClick && itens && itens.length > 0;
   return (
     <div 
-      className={`flex items-center justify-between py-1.5 ${isTotal || isCategoryTotal ? 'border-t mt-1 pt-2.5' : ''} ${indent ? 'pl-4' : ''} ${isClickable ? 'cursor-pointer hover:bg-muted/50 rounded px-2 -mx-2' : ''}`}
+      className={`flex items-center justify-between py-1.5 ${isTotal || isCategoryTotal ? 'border-t mt-1 pt-2.5' : ''} ${indent ? 'pl-2 sm:pl-4' : ''} ${isClickable ? 'cursor-pointer hover:bg-muted/50 rounded px-2 -mx-2' : ''}`}
       onClick={isClickable ? onClick : undefined}
     >
       <div className="flex flex-col">
@@ -34,6 +34,11 @@ export default function MiniDRE({
   gastoVariavel,
   investimento,
   lancamentosMes,
+  gastosFixosLista = [],
+  gastosVariaveisLista = [],
+  investimentosLista = [],
+  assinaturasLista = [],
+  dividasLista = [],
 }) {
   const [dialogAberto, setDialogAberto] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
@@ -53,21 +58,36 @@ export default function MiniDRE({
     .filter(l => l.tipo_lancamento === 'credito_consignado')
     .reduce((s, l) => s + (l.valor || 0), 0);
   
-  // Investimentos: aportes, poupança, investimentos lançados
-  const investimentosLista = lancamentosMes
+  // Investimentos: do GastosPessoais (recorrentes + do mês) + RH
+  const investimentosRH = lancamentosMes
     .filter(l => l.tipo_lancamento === 'investimento')
-    .map(l => ({ nome: l.descricao || 'Investimento', valor: l.valor || 0 }));
-  const totalInvestimentos = investimentosLista.reduce((s, i) => s + i.valor, 0) + investimento;
+    .map(l => ({ nome: l.descricao || 'Investimento (RH)', valor: l.valor || 0 }));
+  const todosInvestimentos = [
+    ...investimentosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 })),
+    ...investimentosRH,
+  ];
+  const totalInvestimentos = todosInvestimentos.reduce((s, i) => s + i.valor, 0);
 
-  // Gastos Variáveis: alimentação, transporte, lazer, compras, farmácia, etc.
-  const gastosVariaveisLista = lancamentosMes
+  // Gastos Variáveis: do GastosPessoais (recorrentes + do mês) + RH
+  const gastosVariaveisRH = lancamentosMes
     .filter(l => ['gasto_variavel'].includes(l.categoria_tipo) || ['alimentacao', 'transporte', 'lazer', 'compras', 'farmacia'].includes(l.categoria_nome?.toLowerCase()))
-    .map(l => ({ nome: l.descricao || l.categoria_nome || 'Gasto Variável', valor: l.valor || 0 }));
-  const totalGastosVariaveis = gastosVariaveisLista.reduce((s, g) => s + g.valor, 0) + gastoVariavel;
+    .map(l => ({ nome: l.descricao || l.categoria_nome || 'Gasto Variável (RH)', valor: l.valor || 0 }));
+  const todosGastosVariaveis = [
+    ...gastosVariaveisLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 })),
+    ...gastosVariaveisRH,
+  ];
+  const totalGastosVariaveis = todosGastosVariaveis.reduce((s, g) => s + g.valor, 0);
 
-  // Total despesas = fixos + investimentos + variáveis + consignado
-  const totalGastosFixos = gastoFixo + consignado;
-  const totalDespesas = totalGastosFixos + totalInvestimentos + totalGastosVariaveis;
+  // Itens individuais das despesas fixas
+  const itensFixos = [
+    ...gastosFixosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0, tipo: 'gasto' })),
+    ...assinaturasLista.map(a => ({ nome: a.nome, valor: a.valor || 0, tipo: 'assinatura' })),
+    ...dividasLista.map(d => ({ nome: d.descricao || 'Dívida', valor: d.valor_parcela || 0, tipo: 'divida' })),
+    ...(consignado > 0 ? [{ nome: 'Consignado (RH)', valor: consignado, tipo: 'consignado' }] : []),
+  ];
+
+  const totalDespesasFixas = itensFixos.reduce((s, i) => s + i.valor, 0);
+  const totalDespesas = totalDespesasFixas + totalInvestimentos + totalGastosVariaveis;
   
   const resultado = totalEntradas - totalDespesas;
 
@@ -130,12 +150,9 @@ export default function MiniDRE({
       ].filter(Boolean);
       addSection('ENTRADAS (RECEITAS)', [...entradas, ['Total Entradas', formatCurrency(totalEntradas), null]]);
 
-      // Gastos Fixos
-      const gastosFixos = [
-        consignado > 0 ? ['Consignado', formatCurrency(consignado), calcularPercentual(consignado, totalDespesas)] : null,
-        gastoFixo > 0 ? ['Outros Gastos Fixos', formatCurrency(gastoFixo), calcularPercentual(gastoFixo, totalDespesas)] : null,
-      ].filter(Boolean);
-      addSection('GASTOS FIXOS', [...gastosFixos, ['Total Gastos Fixos', formatCurrency(totalGastosFixos), calcularPercentual(totalGastosFixos, totalDespesas)]]);
+      // Despesas Fixas (itens individuais)
+      const despesasFixas = itensFixos.map(i => [i.nome, formatCurrency(i.valor), calcularPercentual(i.valor, totalDespesas)]);
+      addSection('DESPESAS FIXAS', [...despesasFixas, ['Total Despesas Fixas', formatCurrency(totalDespesasFixas), calcularPercentual(totalDespesasFixas, totalDespesas)]]);
 
       // Investimentos
       const investimentos = investimentosLista.map(inv => [inv.nome, formatCurrency(inv.valor), calcularPercentual(inv.valor, totalDespesas)]);
@@ -184,10 +201,9 @@ export default function MiniDRE({
         adicionais > 0 ? ['Outras Receitas', adicionais, calcularPercentual(adicionais, totalEntradas) + '%'] : null,
         ['Total Entradas', totalEntradas],
         [],
-        ['GASTOS FIXOS'],
-        consignado > 0 ? ['Consignado', consignado, calcularPercentual(consignado, totalDespesas) + '%'] : null,
-        gastoFixo > 0 ? ['Outros Gastos Fixos', gastoFixo, calcularPercentual(gastoFixo, totalDespesas) + '%'] : null,
-        ['Total Gastos Fixos', totalGastosFixos, calcularPercentual(totalGastosFixos, totalDespesas) + '%'],
+        ['DESPESAS FIXAS'],
+        ...itensFixos.map(i => [i.nome, i.valor, calcularPercentual(i.valor, totalDespesas) + '%']),
+        ['Total Despesas Fixas', totalDespesasFixas, calcularPercentual(totalDespesasFixas, totalDespesas) + '%'],
         [],
         ['INVESTIMENTOS'],
         ...investimentosLista.map(inv => [inv.nome, inv.valor, calcularPercentual(inv.valor, totalDespesas) + '%']),
@@ -214,30 +230,30 @@ export default function MiniDRE({
 
   return (
     <Card className="border-2 border-primary/10">
-      <CardHeader className="pb-2 flex items-center justify-between">
+      <CardHeader className="pb-2 flex flex-wrap gap-2 items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           Mini DRE — {mesSelecionado}
         </CardTitle>
         <div className="flex gap-2">
           <Button
-            size="sm"
+            size="default"
             variant="outline"
             onClick={exportarPDF}
             disabled={exportando}
             className="gap-1"
           >
-            {exportando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+            {exportando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             PDF
           </Button>
           <Button
-            size="sm"
+            size="default"
             variant="outline"
             onClick={exportarExcel}
             disabled={exportando}
             className="gap-1"
           >
-            {exportando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+            {exportando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Excel
           </Button>
         </div>
@@ -292,30 +308,36 @@ export default function MiniDRE({
 
         <div className="h-3" />
 
-        {/* B) GASTOS FIXOS */}
+        {/* B) DESPESAS FIXAS */}
         <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-1">
-          <TrendingDown className="w-3 h-3" /> Gastos Fixos
+          <TrendingDown className="w-3 h-3" /> Despesas Fixas
         </p>
-        {consignado > 0 && (
-          <DRERow 
-            label="Consignado" 
-            value={formatCurrency(consignado)} 
-            percentual={calcularPercentual(consignado, totalDespesas)}
-            indent 
-            colorClass="text-red-600" 
-          />
+        {itensFixos.length === 0 ? (
+          <p className="text-xs text-muted-foreground pl-4 py-1.5">Nenhuma despesa fixa</p>
+        ) : (
+          itensFixos.map((item, idx) => (
+            <DRERow 
+              key={idx}
+              label={item.nome}
+              value={formatCurrency(item.valor)}
+              percentual={calcularPercentual(item.valor, totalDespesas)}
+              indent
+              colorClass={
+                item.tipo === 'assinatura' ? 'text-purple-600' :
+                item.tipo === 'divida' ? 'text-rose-600' :
+                'text-red-600'
+              }
+            />
+          ))
         )}
         <DRERow 
-          label="Total Gastos Fixos" 
-          value={formatCurrency(totalGastosFixos)} 
-          percentual={calcularPercentual(totalGastosFixos, totalDespesas)}
+          label="Total Despesas Fixas" 
+          value={formatCurrency(totalDespesasFixas)} 
+          percentual={calcularPercentual(totalDespesasFixas, totalDespesas)}
           isCategoryTotal
-          colorClass="text-red-600" 
-          onClick={() => abrirDetalhe('Gastos Fixos', [
-            ...(consignado > 0 ? [{ nome: 'Consignado', valor: consignado }] : []),
-            ...(gastoFixo > 0 ? [{ nome: 'Outros Gastos Fixos', valor: gastoFixo }] : [])
-          ])}
-          itens={[]}
+          colorClass="text-red-600"
+          onClick={() => abrirDetalhe('Despesas Fixas', itensFixos)}
+          itens={itensFixos}
         />
 
         <div className="h-3" />
@@ -324,28 +346,30 @@ export default function MiniDRE({
         <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1 flex items-center gap-1">
           <TrendingUp className="w-3 h-3" /> Investimentos
         </p>
-        {investimentosLista.length > 0 && investimentosLista.map((inv, idx) => (
-          <DRERow 
-            key={idx}
-            label={inv.nome} 
-            value={formatCurrency(inv.valor)} 
-            percentual={calcularPercentual(inv.valor, totalDespesas)}
-            indent 
-            colorClass="text-blue-600" 
-          />
-        ))}
-        {totalInvestimentos > 0 ? (
+        {todosInvestimentos.length === 0 ? (
+          <p className="text-xs text-muted-foreground pl-4 py-1.5">Nenhum investimento</p>
+        ) : (
+          todosInvestimentos.map((inv, idx) => (
+            <DRERow 
+              key={idx}
+              label={inv.nome}
+              value={formatCurrency(inv.valor)}
+              percentual={calcularPercentual(inv.valor, totalDespesas)}
+              indent
+              colorClass="text-blue-600"
+            />
+          ))
+        )}
+        {totalInvestimentos > 0 && (
           <DRERow 
             label="Total Investimentos" 
             value={formatCurrency(totalInvestimentos)} 
             percentual={calcularPercentual(totalInvestimentos, totalDespesas)}
             isCategoryTotal
-            colorClass="text-blue-600" 
-            onClick={() => investimentosLista.length > 0 && abrirDetalhe('Investimentos', investimentosLista)}
-            itens={investimentosLista}
+            colorClass="text-blue-600"
+            onClick={() => todosInvestimentos.length > 0 && abrirDetalhe('Investimentos', todosInvestimentos)}
+            itens={todosInvestimentos}
           />
-        ) : (
-          <p className="text-xs text-muted-foreground pl-4 py-1.5">Nenhum investimento</p>
         )}
 
         <div className="h-3" />
@@ -354,28 +378,30 @@ export default function MiniDRE({
         <p className="text-xs font-bold text-orange-700 uppercase tracking-wider mb-1 flex items-center gap-1">
           <TrendingDown className="w-3 h-3" /> Gastos Variáveis
         </p>
-        {gastosVariaveisLista.length > 0 && gastosVariaveisLista.map((gasto, idx) => (
-          <DRERow 
-            key={idx}
-            label={gasto.nome} 
-            value={formatCurrency(gasto.valor)} 
-            percentual={calcularPercentual(gasto.valor, totalDespesas)}
-            indent 
-            colorClass="text-orange-600" 
-          />
-        ))}
-        {totalGastosVariaveis > 0 ? (
+        {todosGastosVariaveis.length === 0 ? (
+          <p className="text-xs text-muted-foreground pl-4 py-1.5">Nenhum gasto variável</p>
+        ) : (
+          todosGastosVariaveis.map((gasto, idx) => (
+            <DRERow 
+              key={idx}
+              label={gasto.nome}
+              value={formatCurrency(gasto.valor)}
+              percentual={calcularPercentual(gasto.valor, totalDespesas)}
+              indent
+              colorClass="text-orange-600"
+            />
+          ))
+        )}
+        {totalGastosVariaveis > 0 && (
           <DRERow 
             label="Total Gastos Variáveis" 
             value={formatCurrency(totalGastosVariaveis)} 
             percentual={calcularPercentual(totalGastosVariaveis, totalDespesas)}
             isCategoryTotal
-            colorClass="text-orange-600" 
-            onClick={() => gastosVariaveisLista.length > 0 && abrirDetalhe('Gastos Variáveis', gastosVariaveisLista)}
-            itens={gastosVariaveisLista}
+            colorClass="text-orange-600"
+            onClick={() => todosGastosVariaveis.length > 0 && abrirDetalhe('Gastos Variáveis', todosGastosVariaveis)}
+            itens={todosGastosVariaveis}
           />
-        ) : (
-          <p className="text-xs text-muted-foreground pl-4 py-1.5">Nenhum gasto variável</p>
         )}
 
         <div className="h-3" />

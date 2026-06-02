@@ -3,6 +3,7 @@ import { client } from '@/api/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Download, Loader2, HardDrive, RefreshCw, Trash2, AlertCircle, CheckCircle2, Clock, History, User, FileText, Database, Users } from 'lucide-react';
 import { format, differenceInDays, addDays } from 'date-fns';
 import JSZip from 'jszip';
@@ -148,6 +149,7 @@ async function executarBackup(tipo, queryClient, setGerandoTipo) {
 export default function BackupsTab() {
   const queryClient = useQueryClient();
   const [gerandoTipo, setGerandoTipo] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: backups = [], isLoading } = useQuery({
     queryKey: ['backups'],
@@ -159,10 +161,11 @@ export default function BackupsTab() {
     queryFn: () => client.entities.LogAuditoria.filter({ modulo: 'backup' }, '-created_date', 20),
   });
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir este registro de backup?')) return;
-    await client.entities.BackupRegistro.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.BackupRegistro.delete(deleteTarget);
     queryClient.invalidateQueries({ queryKey: ['backups'] });
+    setDeleteTarget(null);
   };
 
   return (
@@ -262,7 +265,7 @@ export default function BackupsTab() {
                         </a>
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDelete(b.id)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(b.id)}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -294,6 +297,19 @@ export default function BackupsTab() {
           </div>
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir registro de backup?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

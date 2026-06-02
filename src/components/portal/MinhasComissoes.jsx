@@ -81,7 +81,7 @@ function ModalDetalheCalculo({ periodo, open, onClose }) {
             </div>
             <div className="px-3 py-3 space-y-3">
               {/* Cards de dias */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center text-xs">
                 <div className="bg-slate-50 border rounded-lg py-2.5">
                   <p className="text-muted-foreground mb-0.5">Dias do Mês</p>
                   <p className="text-xl font-bold text-slate-700">{diasTotais}</p>
@@ -318,16 +318,16 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor }) {
                               </div>
                             </div>
                             {/* Linha resumo */}
-                            <div className="flex divide-x divide-amber-200 border-t border-amber-200">
-                              <div className="flex-1 px-3 py-1.5 text-center">
+                            <div className="grid grid-cols-3 divide-x divide-amber-200 border-t border-amber-200">
+                              <div className="px-3 py-1.5 text-center">
                                 <p className="text-amber-600">Integral</p>
                                 <p className="font-bold text-amber-800 line-through">{formatCurrency(p.valor_individual_cheio)}</p>
                               </div>
-                              <div className="flex-1 px-3 py-1.5 text-center">
+                              <div className="px-3 py-1.5 text-center">
                                 <p className="text-red-500">Desconto</p>
                                 <p className="font-bold text-red-700">− {formatCurrency(p.valor_individual_cheio - (p.valor_individual_final ?? p.valor_individual))}</p>
                               </div>
-                              <div className="flex-1 px-3 py-1.5 text-center bg-amber-100">
+                              <div className="px-3 py-1.5 text-center bg-amber-100">
                                 <p className="text-amber-700">A receber</p>
                                 <p className="font-bold text-amber-900">{formatCurrency(p.valor_individual_final ?? p.valor_individual)}</p>
                               </div>
@@ -340,7 +340,7 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor }) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="mt-1.5 h-7 text-xs text-muted-foreground hover:text-primary px-0 gap-1"
+                            className="mt-1.5 h-9 text-xs text-muted-foreground hover:text-primary px-2 gap-1"
                             onClick={() => setModalPeriodo(p)}
                           >
                             <Calculator className="w-3 h-3" />

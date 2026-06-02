@@ -74,7 +74,7 @@ export default function AvisosCloudMobile({ funcionario, mensagensRH, onRefresh 
           <button
             key={m.id}
             onClick={() => handleAbrirMensagem(m)}
-            className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all hover:shadow-sm ${TIPO_COLORS[m.tipo] || TIPO_COLORS.geral}`}
+            className={`text-xs px-3 py-2 rounded-full font-medium transition-all hover:shadow-sm ${TIPO_COLORS[m.tipo] || TIPO_COLORS.geral}`}
           >
             <Cloud className="w-2.5 h-2.5 inline mr-1" />
             {m.titulo.length > 15 ? m.titulo.substring(0, 15) + '...' : m.titulo}

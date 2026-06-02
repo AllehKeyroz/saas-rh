@@ -80,7 +80,7 @@ export default function AssinaturasPortal({ funcionario }) {
                 <div className="flex gap-2 flex-wrap">
                   {doc.link_assinatura && (
                     <a href={doc.link_assinatura} target="_blank" rel="noopener noreferrer">
-                      <Button className="gap-2 bg-blue-700 hover:bg-blue-800 text-white h-9 text-sm">
+                      <Button className="gap-2 bg-blue-700 hover:bg-blue-800 text-white h-10 text-sm">
                         <PenLine className="w-4 h-4" />
                         Assinar com GovBR
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -89,7 +89,7 @@ export default function AssinaturasPortal({ funcionario }) {
                   )}
                   {doc.documento_url && (
                     <a href={doc.documento_url} target="_blank" rel="noopener noreferrer">
-                      <Button variant="outline" className="gap-2 h-9 text-sm">
+                      <Button variant="outline" className="gap-2 h-10 text-sm">
                         <FileText className="w-4 h-4" />
                         Ver Documento
                       </Button>
@@ -125,8 +125,8 @@ export default function AssinaturasPortal({ funcionario }) {
                   <StatusBadge status={doc.status} />
                   {doc.documento_assinado_url && (
                     <a href={doc.documento_assinado_url} target="_blank" rel="noopener noreferrer">
-                      <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">
-                        <Download className="w-3.5 h-3.5" />Baixar
+                      <Button size="default" variant="outline" className="gap-1.5 h-9 text-xs">
+                        <Download className="w-4 h-4" />Baixar
                       </Button>
                     </a>
                   )}

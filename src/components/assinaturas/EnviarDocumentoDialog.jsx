@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { registrarAuditoria, ACOES } from '@/lib/auditoriaDocumentos';
 import html2canvas from 'html2canvas';
+import { toast } from 'sonner';
 
 function preencherVariaveis(template, funcionario) {
   if (!template || !funcionario) return template || '';
@@ -75,12 +76,12 @@ export default function EnviarDocumentoDialog({ open, onClose, funcionarios, onS
     const file = e.target.files[0];
     if (!file) return;
     if (file.type !== 'application/pdf') {
-      alert('Selecione um arquivo PDF.');
+      toast.error('Selecione um arquivo PDF.');
       e.target.value = '';
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      alert('Arquivo muito grande (máximo 10MB).');
+      toast.error('Arquivo muito grande (máximo 10MB).');
       e.target.value = '';
       return;
     }
@@ -91,15 +92,15 @@ export default function EnviarDocumentoDialog({ open, onClose, funcionarios, onS
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.funcionario_id) {
-      alert('Selecione um funcionário.');
+      toast.error('Selecione um funcionário.');
       return;
     }
     if (!arquivo && !modeloSelecionado?.pdf_base_url && !modeloSelecionado?.conteudo_html) {
-      alert('Selecione um modelo com conteúdo ou faça upload de um PDF.');
+      toast.error('Selecione um modelo com conteúdo ou faça upload de um PDF.');
       return;
     }
     if (!form.nome_documento || !form.nome_documento.trim()) {
-      alert('Informe o nome do documento.');
+      toast.error('Informe o nome do documento.');
       return;
     }
 
@@ -224,7 +225,7 @@ export default function EnviarDocumentoDialog({ open, onClose, funcionarios, onS
     } catch (e) {
     setSending(false);
     console.error('[EnviarDocumento] Erro:', e);
-    alert(`Erro ao enviar documento: ${e.message}`);
+    toast.error(`Erro ao enviar documento: ${e.message}`);
     }
     };
 

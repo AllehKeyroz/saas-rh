@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Upload, FileText, X, Plus, Code } from 'lucide-react';
+import { toast } from 'sonner';
 
 const VARIAVEIS_DISPONIVEIS = [
   { chave: '{{nome}}', descricao: 'Nome do funcionário' },
@@ -67,7 +68,7 @@ export default function ModeloForm({ open, onClose, modelo, finalidades, onSaved
   const handlePdfFile = (e) => {
     const file = e.target.files[0];
     if (file && file.type === 'application/pdf') setPdfFile(file);
-    else alert('Selecione um arquivo PDF.');
+    else toast.error('Selecione um arquivo PDF.');
   };
 
   const toggleVariavel = (chave) => {

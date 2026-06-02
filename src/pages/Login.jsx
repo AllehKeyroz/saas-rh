@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/firebase/config'
+import { onAuthChange } from '@/firebase/auth'
 import { useNavigate, Link } from 'react-router-dom'
 import { Users, Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react'
 
@@ -12,6 +13,18 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Navega somente após o auth estar totalmente estabelecido
+  useEffect(() => {
+    const unsub = onAuthChange((user) => {
+      if (user) {
+        const params = new URLSearchParams(window.location.search)
+        const redirect = params.get('redirect') || '/'
+        navigate(redirect, { replace: true })
+      }
+    })
+    return unsub
+  }, [navigate])
+
   const handleLogin = async (e) => {
     e.preventDefault()
     if (!email || !password) { setError('Preencha email e senha'); return }
@@ -19,9 +32,7 @@ export default function Login() {
     setError('')
     try {
       await signInWithEmailAndPassword(auth, email, password)
-      const params = new URLSearchParams(window.location.search)
-      const redirect = params.get('redirect') || '/'
-      navigate(redirect, { replace: true })
+      // Navegação ocorre pelo useEffect acima (onAuthChange), não aqui
     } catch (err) {
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
         setError('Email ou senha inválidos')

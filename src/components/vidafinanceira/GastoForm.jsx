@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { client } from '@/api/client';
 import { CATEGORIAS_PADRAO, TIPO_LABELS } from '@/lib/vidaFinanceira';
 import { useToast } from '@/components/ui/use-toast';
@@ -20,6 +21,7 @@ export default function GastoForm({ open, onClose, onSaved, funcionarioId, gasto
   const [descricao, setDescricao] = useState(gasto?.descricao || '');
   const [dataLancamento, setDataLancamento] = useState(gasto?.data_lancamento || new Date().toISOString().split('T')[0]);
   const [comprovante, setComprovante] = useState(gasto?.comprovante || '');
+  const [recorrente, setRecorrente] = useState(gasto?.recorrente || false);
 
   // Reset state when gasto changes (e.g. opening for new entry or editing)
   useEffect(() => {
@@ -30,6 +32,7 @@ export default function GastoForm({ open, onClose, onSaved, funcionarioId, gasto
     setDescricao(gasto?.descricao || '');
     setDataLancamento(gasto?.data_lancamento || new Date().toISOString().split('T')[0]);
     setComprovante(gasto?.comprovante || '');
+    setRecorrente(gasto?.recorrente || false);
   }, [gasto, open]);
 
   const categoriasDisponiveis = categoriaTipo ? CATEGORIAS_PADRAO[categoriaTipo] || [] : [];
@@ -63,6 +66,7 @@ export default function GastoForm({ open, onClose, onSaved, funcionarioId, gasto
       valor: v,
       data_lancamento: dataLancamento,
       comprovante,
+      recorrente: categoriaTipo === 'gasto_fixo' ? recorrente : false,
     };
     if (isEdit) {
       await client.entities.GastosPessoais.update(gasto.id, payload);
@@ -133,6 +137,13 @@ export default function GastoForm({ open, onClose, onSaved, funcionarioId, gasto
             <Label>Descrição</Label>
             <Input placeholder="Observação opcional" value={descricao} onChange={e => setDescricao(e.target.value)} />
           </div>
+
+          {categoriaTipo === 'gasto_fixo' && (
+            <div className="flex items-center gap-3 pt-1">
+              <Switch checked={recorrente} onCheckedChange={setRecorrente} />
+              <Label>Gasto recorrente (aparece automaticamente nos próximos meses)</Label>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label>Comprovante</Label>

@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Pencil, Trash2, Loader2, FileWarning } from 'lucide-react';
 
 const TIPO_LABELS = {
@@ -91,16 +92,18 @@ function ModeloForm({ open, onClose, modelo, onSaved }) {
 export default function ModelosAdvertenciaTab() {
   const queryClient = useQueryClient();
   const [modeloForm, setModeloForm] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: modelos = [], isLoading } = useQuery({
     queryKey: ['modelosAdvertencia'],
     queryFn: () => client.entities.ModeloAdvertencia.list(),
   });
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir este modelo?')) return;
-    await client.entities.ModeloAdvertencia.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.ModeloAdvertencia.delete(deleteTarget);
     queryClient.invalidateQueries({ queryKey: ['modelosAdvertencia'] });
+    setDeleteTarget(null);
   };
 
   return (
@@ -141,7 +144,7 @@ export default function ModelosAdvertenciaTab() {
                     <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setModeloForm(m)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(m.id)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(m.id)}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -151,6 +154,19 @@ export default function ModelosAdvertenciaTab() {
           })}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este modelo?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {modeloForm !== null && (
         <ModeloForm

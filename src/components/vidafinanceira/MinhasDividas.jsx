@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Pencil, Trash2, CreditCard, Building2, TrendingUp, Calendar, CheckCircle2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { useToast } from '@/components/ui/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const TIPOS = {
   cartao_credito: { label: 'Cartão de Crédito', color: 'bg-blue-100 text-blue-700' },
@@ -36,7 +37,19 @@ function DividaForm({ open, onClose, onSaved, funcionarioId, divida }) {
   const handleSave = async () => {
     if (!form.descricao || !form.valor_parcela) { toast({ title: 'Preencha descrição e valor da parcela', variant: 'destructive' }); return; }
     setSaving(true);
-    const data = { ...form, funcionario_id: funcionarioId, valor_total: n(form.valor_total), valor_parcela: n(form.valor_parcela), parcelas_total: ni(form.parcelas_total), parcelas_pagas: ni(form.parcelas_pagas), taxa_juros_mensal: n(form.taxa_juros_mensal), dia_vencimento: ni(form.dia_vencimento) };
+    const parcelasTotal = ni(form.parcelas_total);
+    const parcelasPagas = ni(form.parcelas_pagas);
+    const data = {
+      ...form,
+      funcionario_id: funcionarioId,
+      valor_total: n(form.valor_total),
+      valor_parcela: n(form.valor_parcela),
+      parcelas_total: parcelasTotal,
+      parcelas_pagas: parcelasPagas,
+      taxa_juros_mensal: n(form.taxa_juros_mensal),
+      dia_vencimento: ni(form.dia_vencimento),
+      ativa: parcelasTotal > parcelasPagas,
+    };
     if (divida?.id) {
       await client.entities.DividasPessoais.update(divida.id, data);
     } else {
@@ -98,6 +111,7 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
   const qc = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: dividas = [] } = useQuery({
     queryKey: ['dividas_pessoais', funcionarioId],
@@ -113,24 +127,33 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
   }, 0);
   const pctSalario = salarioBase > 0 ? ((totalParcelas / salarioBase) * 100).toFixed(1) : null;
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir dívida?')) return;
-    await client.entities.DividasPessoais.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.DividasPessoais.delete(deleteTarget);
     qc.invalidateQueries({ queryKey: ['dividas_pessoais'] });
     toast({ title: 'Dívida removida' });
+    setDeleteTarget(null);
   };
 
-  const handleQuitar = async (divida) => {
-    await client.entities.DividasPessoais.update(divida.id, { ativa: false, parcelas_pagas: divida.parcelas_total });
+  const handlePagarParcela = async (divida) => {
+    const pagas = (divida.parcelas_pagas || 0) + 1;
+    const total = divida.parcelas_total || 0;
+    const data = pagas >= total
+      ? { parcelas_pagas: pagas, ativa: false }
+      : { parcelas_pagas: pagas };
+    await client.entities.DividasPessoais.update(divida.id, data);
     qc.invalidateQueries({ queryKey: ['dividas_pessoais'] });
-    toast({ title: '🎉 Dívida quitada!' });
+    toast({ title: pagas >= total ? '🎉 Dívida quitada!' : `✅ Parcela ${pagas}/${total} paga` });
   };
 
   const onSaved = () => qc.invalidateQueries({ queryKey: ['dividas_pessoais'] });
 
+  const [mostrarQuitadas, setMostrarQuitadas] = useState(false);
+  const quitadas = dividas.filter(d => !d.ativa);
+  const exibidas = mostrarQuitadas ? quitadas : ativas;
+
   return (
     <div className="space-y-4">
-      {/* Resumo */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-xs text-red-600 font-medium">Total Devedor</p>
@@ -151,20 +174,26 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">Suas Dívidas</p>
+        <div className="flex gap-2">
+          <button onClick={() => setMostrarQuitadas(false)} className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${!mostrarQuitadas ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Ativas ({ativas.length})</button>
+          <button onClick={() => setMostrarQuitadas(true)} className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${mostrarQuitadas ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Quitadas ({quitadas.length})</button>
+        </div>
         <Button size="sm" onClick={() => { setEditItem(null); setFormOpen(true); }}>
           <Plus className="w-4 h-4 mr-1" />Adicionar
         </Button>
       </div>
 
-      {ativas.length === 0 ? (
-        <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nenhuma dívida ativa. <button className="text-primary underline" onClick={() => { setEditItem(null); setFormOpen(true); }}>Cadastrar</button></CardContent></Card>
+      {exibidas.length === 0 ? (
+        <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
+          {mostrarQuitadas ? 'Nenhuma dívida quitada ainda.' : 'Nenhuma dívida ativa.'}
+          {!mostrarQuitadas && <button className="text-primary underline ml-1" onClick={() => { setEditItem(null); setFormOpen(true); }}>Cadastrar</button>}
+        </CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {ativas.map(d => {
+          {exibidas.map(d => {
             const tipo = TIPOS[d.tipo] || TIPOS.outro;
             const restantes = (d.parcelas_total || 0) - (d.parcelas_pagas || 0);
-            const totalRestante = d.valor_parcela * Math.max(restantes, 0);
+            const totalRestante = (d.valor_parcela || 0) * Math.max(restantes, 0);
             return (
               <Card key={d.id}>
                 <CardContent className="p-4 space-y-3">
@@ -173,6 +202,7 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
                       <p className="font-semibold text-sm">{d.descricao}</p>
                       {d.instituicao && <p className="text-xs text-muted-foreground">{d.instituicao}</p>}
                       <Badge className={`${tipo.color} border-0 text-xs mt-1`}>{tipo.label}</Badge>
+                      {!d.ativa && <Badge className="text-xs bg-green-100 text-green-700 border-0 ml-1">Quitada</Badge>}
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-bold text-sm text-red-700">{formatCurrency(d.valor_parcela)}/mês</p>
@@ -184,9 +214,9 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>{d.parcelas_pagas || 0}/{d.parcelas_total} parcelas pagas</span>
-                        <span>Restam {formatCurrency(totalRestante)}</span>
+                        <span>{mostrarQuitadas ? 'Concluída' : `Restam ${formatCurrency(totalRestante)}`}</span>
                       </div>
-                      <ProgressBar value={d.parcelas_pagas || 0} max={d.parcelas_total} color="bg-orange-500" />
+                      <ProgressBar value={d.parcelas_pagas || 0} max={d.parcelas_total} color={!d.ativa ? 'bg-green-500' : 'bg-orange-500'} />
                     </div>
                   )}
 
@@ -197,11 +227,14 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
                   )}
 
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handleQuitar(d)}>
-                      <CheckCircle2 className="w-3 h-3 mr-1" />Quitar
-                    </Button>
+                    {d.ativa && (
+                      <Button size="sm" variant="outline" className="flex-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handlePagarParcela(d)}>
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        {d.parcelas_total > 0 ? `Pagar Parcela (${d.parcelas_pagas || 0}/${d.parcelas_total})` : 'Quitar'}
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" onClick={() => { setEditItem(d); setFormOpen(true); }}><Pencil className="w-3 h-3" /></Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(d.id)}><Trash2 className="w-3 h-3" /></Button>
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget(d.id)}><Trash2 className="w-3 h-3" /></Button>
                   </div>
                 </CardContent>
               </Card>
@@ -209,6 +242,19 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
           })}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir dívida?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <DividaForm
         open={formOpen}

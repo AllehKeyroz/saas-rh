@@ -26,7 +26,7 @@ const TIPO_GRUPOS = {
 export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecionado, onVerComprovante, receitasExtras = [] }) {
   const perm = funcionario?.permissoes_portal || {};
 
-  if (!perm.ver_extrato_completo) {
+  if (perm.ver_extrato_completo === false) {
     return (
       <Card>
         <CardContent className="pt-6 flex flex-col items-center gap-3 py-10 text-center">
@@ -52,7 +52,7 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
   return (
     <div className="space-y-5">
       {/* Resumo */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-card border rounded-xl p-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Créditos</p>
           <p className="font-bold text-sm text-green-600">+ {formatCurrency(totalCreditos)}</p>
@@ -113,8 +113,8 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
                   </div>
                   <div className="flex items-center gap-2">
                     {l.comprovante && (
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onVerComprovante(l)}>
-                        <Eye className="w-3.5 h-3.5" />
+                      <Button size="icon" variant="ghost" className="h-10 w-10" onClick={() => onVerComprovante(l)}>
+                        <Eye className="w-4 h-4" />
                       </Button>
                     )}
                     <span className={`text-sm font-bold ${isDebito ? 'text-destructive' : 'text-green-600'}`}>

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Pencil, Trash2, Target, Trophy, PlusCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { useToast } from '@/components/ui/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const PRIORIDADE_COLORS = {
   alta: 'bg-red-100 text-red-700',
@@ -118,6 +119,7 @@ export default function MetasObjetivosPage({ funcionarioId }) {
   const qc = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: metas = [] } = useQuery({
     queryKey: ['metas_objetivos', funcionarioId],
@@ -131,10 +133,11 @@ export default function MetasObjetivosPage({ funcionarioId }) {
   });
   const concluidas = metas.filter(m => m.concluida);
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir meta?')) return;
-    await client.entities.MetasObjetivos.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.MetasObjetivos.delete(deleteTarget);
     qc.invalidateQueries({ queryKey: ['metas_objetivos'] });
+    setDeleteTarget(null);
   };
 
   const handleAddAporte = async (meta) => {
@@ -215,7 +218,7 @@ export default function MetasObjetivosPage({ funcionarioId }) {
                       <PlusCircle className="w-3 h-3 mr-1" />Registrar Aporte
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => { setEditItem(m); setFormOpen(true); }}><Pencil className="w-3 h-3" /></Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(m.id)}><Trash2 className="w-3 h-3" /></Button>
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget(m.id)}><Trash2 className="w-3 h-3" /></Button>
                   </div>
                 </CardContent>
               </Card>
@@ -232,11 +235,24 @@ export default function MetasObjetivosPage({ funcionarioId }) {
               <span className="text-xl">{m.icone || '🏆'}</span>
               <div className="flex-1"><p className="font-semibold text-sm text-green-800">{m.nome}</p></div>
               <span className="font-bold text-green-700 text-sm">{formatCurrency(m.valor_total)}</span>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(m.id)}><Trash2 className="w-3 h-3" /></Button>
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(m.id)}><Trash2 className="w-3 h-3" /></Button>
             </div>
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir meta?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <MetaForm
         open={formOpen}

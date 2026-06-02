@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Loader2, Send, MessageSquare, Bell, Trash2, Eye, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { registrarAuditoria } from '@/lib/audit';
@@ -42,6 +43,7 @@ export default function Comunicacao() {
   const [saving, setSaving] = useState(false);
   const [mensagemSelecionada, setMensagemSelecionada] = useState(null);
   const [filtroBusca, setFiltroBusca] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: mensagens = [], isLoading } = useQuery({
     queryKey: ['mensagens_rh'],
@@ -91,11 +93,12 @@ export default function Comunicacao() {
       }
       };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir esta mensagem?')) return;
-    await client.entities.MensagensRH.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.MensagensRH.delete(deleteTarget);
     queryClient.invalidateQueries({ queryKey: ['mensagens_rh'] });
     toast.success('Mensagem excluída.');
+    setDeleteTarget(null);
   };
 
   return (
@@ -234,7 +237,7 @@ export default function Comunicacao() {
                            <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-primary" onClick={() => setMensagemSelecionada(m)}>
                              <Eye className="w-3.5 h-3.5" />
                            </Button>
-                           <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(m.id)}>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(m.id)}>
                              <Trash2 className="w-3.5 h-3.5" />
                            </Button>
                          </div>
@@ -271,6 +274,7 @@ export default function Comunicacao() {
             <div className="space-y-3">
               {(() => {
                 const lidas = mensagemSelecionada.lidas_por || [];
+                const leituras = mensagemSelecionada.leituras || [];
                 const todasDisp = funcionarios.filter(f => {
                   if (mensagemSelecionada.publico_alvo === 'todos') return f.ativo !== false;
                   if (mensagemSelecionada.publico_alvo === 'setor') return f.setor === mensagemSelecionada.setor_alvo && f.ativo !== false;
@@ -278,6 +282,7 @@ export default function Comunicacao() {
                   return false;
                 });
                 const naoLidas = todasDisp.filter(f => !lidas.includes(f.id));
+                const getLeitura = (funcId) => leituras.find(l => l.funcionario_id === funcId);
 
                 return (
                   <>
@@ -285,11 +290,19 @@ export default function Comunicacao() {
                       <div className="space-y-2">
                         <h4 className="font-medium text-sm text-green-700">✅ Lido ({lidas.length})</h4>
                         <div className="space-y-1">
-                          {todasDisp.filter(f => lidas.includes(f.id)).map(f => (
-                            <div key={f.id} className="text-xs py-1 px-2 bg-green-50 rounded border border-green-200 text-green-900">
-                              {f.nome}
-                            </div>
-                          ))}
+                          {todasDisp.filter(f => lidas.includes(f.id)).map(f => {
+                            const leitura = getLeitura(f.id);
+                            return (
+                              <div key={f.id} className="text-xs py-1 px-2 bg-green-50 rounded border border-green-200 text-green-900">
+                                {f.nome}
+                                {leitura?.data_leitura && (
+                                  <span className="block text-green-600 font-normal">
+                                    {new Date(leitura.data_leitura).toLocaleString('pt-BR')}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -312,6 +325,19 @@ export default function Comunicacao() {
           )}
         </DialogContent>
         </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir esta mensagem?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
         </div>
         );
         }

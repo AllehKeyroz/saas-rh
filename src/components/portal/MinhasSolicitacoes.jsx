@@ -277,7 +277,7 @@ export default function MinhasSolicitacoes({ funcionario }) {
       {true && (
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Nova Solicitação</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {botoesVisiveis.map(([tipo, cfg]) => {
               const Icon = cfg.icon;
               return (

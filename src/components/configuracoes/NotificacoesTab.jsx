@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, Pencil, Loader2, Bell, BellOff, Filter } from 'lucide-react';
 
 const EVENTOS = {
@@ -190,16 +191,18 @@ function NotificacaoForm({ open, onClose, notificacao, onSaved }) {
 export default function NotificacoesTab() {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: notificacoes = [], isLoading } = useQuery({
     queryKey: ['notificacoes'],
     queryFn: () => client.entities.ConfiguracaoNotificacao.list(),
   });
 
-  const handleDelete = async (id) => {
-    if (!confirm('Excluir esta configuração de notificação?')) return;
-    await client.entities.ConfiguracaoNotificacao.delete(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await client.entities.ConfiguracaoNotificacao.delete(deleteTarget);
     queryClient.invalidateQueries({ queryKey: ['notificacoes'] });
+    setDeleteTarget(null);
   };
 
   const handleToggle = async (notif) => {
@@ -252,7 +255,7 @@ export default function NotificacoesTab() {
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setFormOpen(n)}>
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(n.id)}>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(n.id)}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
@@ -269,6 +272,19 @@ export default function NotificacoesTab() {
           onSaved={() => queryClient.invalidateQueries({ queryKey: ['notificacoes'] })}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir configuração de notificação?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

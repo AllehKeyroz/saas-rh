@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/components/ui/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Send, Clock, CheckCircle2, FileText, History, XCircle, Download, RotateCcw, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import AuditoriaDocumentoDrawer from '@/components/auditoria/AuditoriaDocumentoDrawer';
 import EnviarDocumentoDialog from '@/components/assinaturas/EnviarDocumentoDialog';
@@ -67,7 +69,7 @@ function AssinaturaRow({ doc, onReenviar, onCancelar, onVerAuditoria }) {
               <Button size="sm" variant="ghost" className="h-8 px-2 text-xs gap-1 text-blue-700" onClick={() => onReenviar(doc)}>
                 <RotateCcw className="w-3.5 h-3.5" />Reenviar
               </Button>
-              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs gap-1 text-destructive" onClick={() => onCancelar(doc)}>
+              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs gap-1 text-destructive" onClick={() => setDeleteTarget(doc)}>
                 <XCircle className="w-3.5 h-3.5" />Cancelar
               </Button>
             </>
@@ -96,10 +98,12 @@ function StatsCard({ icon: Icon, label, value, color }) {
 }
 
 export default function AssinaturasDigitais() {
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [enviarOpen, setEnviarOpen] = useState(false);
   const [tab, setTab] = useState('painel');
   const [auditoriaDoc, setAuditoriaDoc] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: assinaturas = [], isLoading } = useQuery({
     queryKey: ['assinaturas'],
@@ -115,8 +119,9 @@ export default function AssinaturasDigitais() {
   const assinados  = assinaturas.filter(a => a.status === 'assinado');
   const outros     = assinaturas.filter(a => !['aguardando','assinado'].includes(a.status));
 
-  const handleCancelar = async (doc) => {
-    if (!confirm(`Cancelar a solicitação de assinatura de "${doc.nome_documento}"?`)) return;
+  const handleCancelar = async () => {
+    if (!deleteTarget) return;
+    const doc = deleteTarget;
     await client.entities.AssinaturaDigital.update(doc.id, { status: 'cancelado' });
     await registrarAuditoria({
       acao: ACOES.CANCELAR_ASSINATURA, modulo: 'assinatura', origem: 'rh',
@@ -125,6 +130,7 @@ export default function AssinaturasDigitais() {
       nome_documento: doc.nome_documento, dados_antes: { status: doc.status }, dados_depois: { status: 'cancelado' },
     });
     queryClient.invalidateQueries({ queryKey: ['assinaturas'] });
+    setDeleteTarget(null);
   };
 
   const handleReenviar = async (doc) => {
@@ -136,7 +142,7 @@ export default function AssinaturasDigitais() {
       nome_documento: doc.nome_documento,
     });
     queryClient.invalidateQueries({ queryKey: ['assinaturas'] });
-    alert('Notificação reenviada para ' + doc.funcionario_nome);
+    toast({ title: 'Notificação reenviada para ' + doc.funcionario_nome });
   };
 
   const handleEnviadoComSucesso = () => {
@@ -232,6 +238,22 @@ export default function AssinaturasDigitais() {
         funcionarios={funcionarios}
         onSucesso={handleEnviadoComSucesso}
       />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar solicitação de assinatura?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? `Cancelar a solicitação de assinatura de "${deleteTarget.nome_documento}"?` : ''}
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelar}>Confirmar Cancelamento</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

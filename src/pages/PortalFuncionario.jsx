@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { useSearchParams } from 'react-router-dom';
 import { User, LogOut, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,7 +25,7 @@ import MinhasSolicitacoes from '@/components/portal/MinhasSolicitacoes';
 import AvisosPendentes from '@/components/portal/AvisosPendentes';
 import AvisosCloudMobile from '@/components/portal/AvisosCloudMobile';
 import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
-import VidaFinanceiraPessoal from '@/components/portal/VidaFinanceiraPessoal';
+
 
 const TIPOS_LIMITE = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 
@@ -44,7 +45,8 @@ const ABA_LABELS = {
 
 export default function PortalFuncionario() {
   const [meUser, setMeUser] = useState(null);
-  const [aba, setAba] = useState('visao-geral');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [aba, setAba] = useState(searchParams.get('tab') || 'visao-geral');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [comprovante, setComprovante] = useState(null);
   const mesAtual = getMesReferenciaAtual();
@@ -58,6 +60,17 @@ export default function PortalFuncionario() {
   useEffect(() => {
     client.auth.me().then(setMeUser);
   }, []);
+
+  // Sincroniza aba com a URL
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (aba === 'visao-geral') {
+      params.delete('tab');
+    } else {
+      params.set('tab', aba);
+    }
+    setSearchParams(params, { replace: true });
+  }, [aba]);
 
   const { data: funcionarios = [], isLoading: loadingFunc } = useQuery({
     queryKey: ['funcionarios'],
@@ -224,11 +237,11 @@ export default function PortalFuncionario() {
       {/* Main content */}
        <main className="flex-1 min-w-0 flex flex-col">
          {/* Topbar */}
-         <div className="bg-card border-b px-6 py-4 flex items-center justify-between md:sticky top-0 z-10">
-           <div className="flex-1 md:flex-none flex flex-col gap-2">
-             <div className="flex items-center gap-3 ml-10 md:ml-0">
-               <h1 className="font-bold text-lg">{ABA_LABELS[aba] || 'Portal'}</h1>
-             </div>
+          <div className="bg-card border-b px-4 md:px-6 py-4 flex items-center justify-between md:sticky top-0 z-10">
+            <div className="flex-1 md:flex-none flex flex-col gap-2">
+              <div className="flex items-center justify-center gap-3 ml-10 md:ml-0">
+                <h1 className="font-bold text-lg text-center">{ABA_LABELS[aba] || 'Portal'}</h1>
+              </div>
              {aba === 'visao-geral' && (
                <AvisosCloudMobile 
                  funcionario={funcionario} 
@@ -241,11 +254,11 @@ export default function PortalFuncionario() {
           {ABAS_COM_MES.includes(aba) && (
             <div className="flex items-center gap-2">
               <button onClick={() => navegarMes(-1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === 0}
-                className="w-7 h-7 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors">
+                className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-                <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectTrigger className="w-28 h-10 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -255,7 +268,7 @@ export default function PortalFuncionario() {
                 </SelectContent>
               </Select>
               <button onClick={() => navegarMes(1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === mesesDisponiveis.length - 1}
-                className="w-7 h-7 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors">
+                className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -263,7 +276,7 @@ export default function PortalFuncionario() {
         </div>
 
         {/* Page content */}
-         <div className="flex-1 p-4 md:p-6 max-w-2xl w-full mx-auto pb-12 space-y-6">
+          <div className="flex-1 p-4 md:p-6 w-full pb-12 space-y-6">
            {aba === 'visao-geral' && (
              <>
                <AvisosPendentes 
@@ -309,17 +322,13 @@ export default function PortalFuncionario() {
             />
           )}
           {aba === 'vida-financeira' && (
-            <div className="space-y-6">
-              <PortalVidaFinanceira
-                funcionario={funcionario}
-                lancamentosFunc={lancamentosFunc}
-                comissoesFuncionarios={comissoesFuncionarios}
-                mesSelecionado={mesSelecionado}
-                setMesSelecionado={setMesSelecionado}
-              />
-              {/* Módulos pessoais avançados */}
-              <VidaFinanceiraPessoal funcionario={funcionario} />
-            </div>
+            <PortalVidaFinanceira
+              funcionario={funcionario}
+              lancamentosFunc={lancamentosFunc}
+              comissoesFuncionarios={comissoesFuncionarios}
+              mesSelecionado={mesSelecionado}
+              setMesSelecionado={setMesSelecionado}
+            />
           )}
           {aba === 'comissoes' && (
             <MinhasComissoes
@@ -364,15 +373,11 @@ export default function PortalFuncionario() {
                 <div><span className="text-muted-foreground">Data:</span> <span className="font-medium">{formatDate(comprovante.data_lancamento)}</span></div>
               </div>
               {comprovante.comprovante && (
-                <div className="rounded-lg border overflow-hidden bg-white flex items-center justify-center min-h-96">
+                <div className="rounded-lg border overflow-hidden bg-white flex items-center justify-center min-h-[200px] sm:min-h-96">
                   {comprovante.comprovante.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
-                    <img src={comprovante.comprovante} alt="Comprovante" className="max-w-full max-h-96 object-contain" />
-                  ) : comprovante.comprovante.match(/\.pdf$/i) ? (
-                    <iframe src={comprovante.comprovante} className="w-full h-96" />
+                    <img src={comprovante.comprovante} alt="Comprovante" className="max-w-full max-h-[50vh] sm:max-h-96 object-contain" />
                   ) : (
-                    <a href={comprovante.comprovante} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline">
-                      <FileText className="w-5 h-5" />Ver documento
-                    </a>
+                    <iframe src={comprovante.comprovante} className="w-full h-[50vh] sm:h-96" />
                   )}
                 </div>
               )}

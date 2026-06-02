@@ -46,7 +46,7 @@ export default function AlertaLimiteVale({ totalValesMes, limite, onVerDetalhes 
       </div>
       <button
         onClick={() => setDispensado(true)}
-        className={`${config.textColor} opacity-60 hover:opacity-100 transition-opacity shrink-0`}
+        className={`${config.textColor} opacity-60 hover:opacity-100 transition-opacity shrink-0 p-2`}
         aria-label="Dispensar"
       >
         <X className="w-4 h-4" />
