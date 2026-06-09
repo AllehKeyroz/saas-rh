@@ -78,7 +78,7 @@ export default function VisaoGeral({ funcionario, totalValesMes, mesSelecionado,
             <QuickCard
               icon={DollarSign}
               title="Meu Salário"
-              subtitle={perm.ver_salario ? formatCurrency(funcionario?.salario_base) : '••••••'}
+              subtitle={perm.ver_salario ? formatCurrency((funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)) : '••••••'}
               color="bg-green-100 text-green-600"
               onClick={() => setAba('meu-salario')}
             />

@@ -4,9 +4,10 @@ import { client } from '@/api/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getMesesOptions, getMesReferenciaAtual } from '@/lib/formatters';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Settings } from 'lucide-react';
 import LancarComissao from '@/components/comissoes/LancarComissao';
 import RelatorioComissoes from '@/components/comissoes/RelatorioComissoes';
 import HistoricoComissoes from '@/components/comissoes/HistoricoComissoes';
@@ -47,7 +48,11 @@ export default function Comissoes() {
     queryClient.invalidateQueries({ queryKey: ['comissoes_funcionarios'] });
   };
 
-  const onSaved = () => { refresh(); setTab('historico'); };
+  const onSaved = async () => {
+    await queryClient.refetchQueries({ queryKey: ['comissoes_gorjetas'] });
+    await queryClient.refetchQueries({ queryKey: ['comissoes_funcionarios'] });
+    setTab('historico');
+  };
 
   const comissoesMesAtual = comissoes.filter(c => c.mes_referencia === getMesReferenciaAtual() && c.status === 'confirmado');
   const tabsComSeletor = ['relatorio', 'historico', 'metas'];
@@ -101,6 +106,13 @@ export default function Comissoes() {
             <TabsTrigger value="metas">Metas</TabsTrigger>
             <TabsTrigger value="setores">Setores</TabsTrigger>
           </TabsList>
+          <div className="flex items-center gap-2">
+            {tab === 'lancar' && isAtiva('setores_configuráveis') && (
+              <Button variant="outline" size="sm" onClick={() => setTab('setores')}>
+                <Settings className="w-3.5 h-3.5 mr-1" />Configurar Setores
+              </Button>
+            )}
+          </div>
           {tabsComSeletor.includes(tab) && (
             <Select value={mesRef} onValueChange={setMesRef}>
               <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -139,10 +151,7 @@ export default function Comissoes() {
         </TabsContent>
 
         <TabsContent value="setores" className="mt-6">
-          {isAtiva('setores_configuráveis')
-            ? <ConfigurarSetoresComissao />
-            : <FuncionalidadeBloqueada nome="Setores Configuráveis" />
-          }
+          <ConfigurarSetoresComissao />
         </TabsContent>
       </Tabs>
     </div>

@@ -28,7 +28,7 @@ function preencherVariaveis(template, funcionario) {
     .replace(/\{\{cpf\}\}/g, funcionario.cpf || '')
     .replace(/\{\{cargo\}\}/g, funcionario.funcao || '')
     .replace(/\{\{setor\}\}/g, funcionario.setor || '')
-    .replace(/\{\{salario\}\}/g, funcionario.salario_base ? `R$ ${Number(funcionario.salario_base).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '')
+    .replace(/\{\{salario\}\}/g, funcionario.salario_base ? `R$ ${Number((funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '')
     .replace(/\{\{data_admissao\}\}/g, admissao)
     .replace(/\{\{data_atual\}\}/g, hoje)
     .replace(/\{\{periodo_experiencia\}\}/g, expAdmissao)

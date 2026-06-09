@@ -20,7 +20,7 @@ export default function DetalhesFuncionarioModal({ open, onClose, funcionario, l
 
   const totalDescontos = lancamentos.filter(l => TIPOS_DESCONTO.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
   const totalAdicionais = lancamentos.filter(l => TIPOS_ADICIONAL.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
-  const salarioLiquido = (funcionario?.salario_base || 0) + totalAdicionais - totalDescontos;
+  const salarioLiquido = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) + totalAdicionais - totalDescontos;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -47,6 +47,12 @@ export default function DetalhesFuncionarioModal({ open, onClose, funcionario, l
             <p className="text-xs text-muted-foreground">Sal. Base</p>
             <p className="font-bold text-sm">{formatCurrency(funcionario?.salario_base || 0)}</p>
           </div>
+          {funcionario?.ajuda_custo > 0 && (
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">Ajuda de Custo</p>
+              <p className="font-bold text-sm text-blue-600">{formatCurrency(funcionario.ajuda_custo)}</p>
+            </div>
+          )}
           <div className="bg-red-50 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground">Descontos</p>
             <p className="font-bold text-sm text-red-600">-{formatCurrency(totalDescontos)}</p>

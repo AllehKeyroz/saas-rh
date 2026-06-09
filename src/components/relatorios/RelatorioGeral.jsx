@@ -34,14 +34,16 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
       convenios: sumTipo('convenio'),
       consumos: sumTipo('consumo'),
       totalDescontos: fech?.total_descontos ?? sumTipo('vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'),
-      salarioLiquido: fech?.salario_liquido ?? ((func.salario_base || 0) + sumTipo('adicional', 'ajuste', 'comissao') - sumTipo('vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado')),
-      salarioBase: func.salario_base || 0,
+      salarioLiquido: fech?.salario_liquido ?? ((func.salario_base || 0) + (func.ajuda_custo || 0) + sumTipo('adicional', 'ajuste', 'comissao') - sumTipo('vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado')),
+      salarioBase: (func.salario_base || 0) + (func.ajuda_custo || 0),
+      ajudaCusto: func.ajuda_custo || 0,
       byTipo,
     };
   });
 
   const totals = rows.reduce((acc, r) => ({
     salarioBase: acc.salarioBase + r.salarioBase,
+    ajudaCusto: acc.ajudaCusto + r.ajudaCusto,
     comissoes: acc.comissoes + r.comissoes,
     adicionais: acc.adicionais + r.adicionais,
     vales: acc.vales + r.vales,
@@ -51,7 +53,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
     consumos: acc.consumos + r.consumos,
     totalDescontos: acc.totalDescontos + r.totalDescontos,
     salarioLiquido: acc.salarioLiquido + r.salarioLiquido,
-  }), { salarioBase: 0, comissoes: 0, adicionais: 0, vales: 0, consignados: 0, adiantamentos: 0, convenios: 0, consumos: 0, totalDescontos: 0, salarioLiquido: 0 });
+  }), { salarioBase: 0, ajudaCusto: 0, comissoes: 0, adicionais: 0, vales: 0, consignados: 0, adiantamentos: 0, convenios: 0, consumos: 0, totalDescontos: 0, salarioLiquido: 0 });
 
   const openDrill = (titulo, lancs) => {
     if (lancs.length === 0) return;
@@ -88,6 +90,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
                   <TableHead>Função</TableHead>
                   <TableHead>Setor</TableHead>
                   <TableHead>Sal. Base</TableHead>
+                  <TableHead>Ajuda Custo</TableHead>
                   <TableHead>Comissão</TableHead>
                   <TableHead>Adicionais</TableHead>
                   <TableHead>Vales</TableHead>
@@ -106,6 +109,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
                     <TableCell>{r.func.funcao || '-'}</TableCell>
                     <TableCell>{r.func.setor || '-'}</TableCell>
                     <TableCell>{formatCurrency(r.salarioBase)}</TableCell>
+                    <TableCell>{r.ajudaCusto > 0 ? formatCurrency(r.ajudaCusto) : '-'}</TableCell>
                       <TableCell>
                         <ClickableValue value={r.comissoes} lancamentos={r.byTipo('comissao')} className="text-emerald-600 font-medium" />
                       </TableCell>
@@ -138,6 +142,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
                 <TableRow className="bg-muted font-bold">
                   <TableCell colSpan={3}>TOTAL</TableCell>
                   <TableCell>{formatCurrency(totals.salarioBase)}</TableCell>
+                  <TableCell>{totals.ajudaCusto > 0 ? formatCurrency(totals.ajudaCusto) : '-'}</TableCell>
                   <TableCell className="text-emerald-600">{formatCurrency(totals.comissoes)}</TableCell>
                   <TableCell className="text-green-600">{formatCurrency(totals.adicionais)}</TableCell>
                   <TableCell className="text-red-600">{formatCurrency(totals.vales)}</TableCell>

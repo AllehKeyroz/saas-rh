@@ -105,7 +105,7 @@ export default function IndicadoresFinanceiros() {
   const totais = useMemo(() => {
     const salarios = funcionarios
       .filter(f => f.ativo !== false && !f.data_demissao)
-      .reduce((s, f) => s + (f.salario_base || 0), 0);
+      .reduce((s, f) => s + (f.salario_base || 0) + (f.ajuda_custo || 0), 0);
 
     const adiantamentos = lancamentosMes
       .filter(l => TIPOS_ADIANTAMENTO.includes(l.tipo_lancamento))
@@ -131,7 +131,7 @@ export default function IndicadoresFinanceiros() {
       .filter(f => f.ativo !== false && !f.data_demissao && f.setor)
       .forEach(f => {
         if (!setores[f.setor]) setores[f.setor] = { setor: f.setor, salarios: 0, adiantamentos: 0, extras: 0 };
-        setores[f.setor].salarios += f.salario_base || 0;
+        setores[f.setor].salarios += (f.salario_base || 0) + (f.ajuda_custo || 0);
       });
 
     // Lançamentos por setor

@@ -46,7 +46,7 @@ function FuncionarioCard({ func, canEdit, onEdit, onPasta, onPermissoes }) {
             <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
               {func.data_admissao && <span>Admissão: {formatDate(func.data_admissao)}</span>}
               {func.data_demissao && <span className="text-red-500">Demissão: {formatDate(func.data_demissao)}</span>}
-              {func.salario_base != null && <span>Sal: {formatCurrency(func.salario_base)}</span>}
+              {func.salario_base != null && <span>Sal: {formatCurrency(func.salario_base)}{func.ajuda_custo > 0 ? ` + ${formatCurrency(func.ajuda_custo)}` : ''}</span>}
             </div>
           </div>
           <div className="flex flex-col gap-1 shrink-0">

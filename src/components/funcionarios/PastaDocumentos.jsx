@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Upload, Download, Trash2, FileText, Image, Loader2, User, FolderOpen, PackageOpen } from 'lucide-react';
+import { Upload, Download, Trash2, FileText, Image, Loader2, User, FolderOpen, PackageOpen, Eye, EyeOff } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import JSZip from 'jszip';
 import { formatDate } from '@/lib/formatters';
 
@@ -43,15 +44,16 @@ export default function PastaDocumentos({ open, onClose, funcionario }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const { file_uri } = await client.integrations.Core.UploadPrivateFile({ file });
+    const { file_url } = await client.integrations.Core.UploadFile({ file });
     await client.entities.DocumentoFuncionario.create({
       funcionario_id: funcionario.id,
       funcionario_nome: funcionario.nome,
       nome_arquivo: file.name,
       descricao: descricao || '',
       categoria,
-      file_uri,
+      file_uri: file_url,
       file_type: file.type,
+      visivel_ao_funcionario: false,
     });
     queryClient.invalidateQueries({ queryKey: ['documentos', funcionario.id] });
     setDescricao('');
@@ -61,9 +63,8 @@ export default function PastaDocumentos({ open, onClose, funcionario }) {
 
   const handleDownload = async (doc) => {
     setDownloading(doc.id);
-    const { signed_url } = await client.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_uri });
     const a = document.createElement('a');
-    a.href = signed_url;
+    a.href = doc.file_uri;
     a.download = doc.nome_arquivo;
     a.target = '_blank';
     a.click();
@@ -75,8 +76,7 @@ export default function PastaDocumentos({ open, onClose, funcionario }) {
     setZipping(true);
     const zip = new JSZip();
     await Promise.all(documentos.map(async (doc) => {
-      const { signed_url } = await client.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_uri });
-      const response = await fetch(signed_url);
+      const response = await fetch(doc.file_uri);
       const blob = await response.blob();
       zip.file(doc.nome_arquivo, blob);
     }));
@@ -94,9 +94,14 @@ export default function PastaDocumentos({ open, onClose, funcionario }) {
     queryClient.invalidateQueries({ queryKey: ['documentos', funcionario.id] });
   };
 
+  const handleToggleVisivel = async (doc) => {
+    await client.entities.DocumentoFuncionario.update(doc.id, { visivel_ao_funcionario: !doc.visivel_ao_funcionario });
+    queryClient.invalidateQueries({ queryKey: ['documentos', funcionario.id] });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center overflow-hidden shrink-0">
@@ -181,7 +186,7 @@ export default function PastaDocumentos({ open, onClose, funcionario }) {
               <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
                 <FileIcon type={doc.file_type} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{doc.nome_arquivo}</p>
+                  <p className="text-sm font-medium truncate max-w-[250px]" title={doc.nome_arquivo}>{doc.nome_arquivo}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <Badge className={`text-xs ${CATEGORIAS[doc.categoria]?.color || CATEGORIAS.outros.color}`}>
                       {CATEGORIAS[doc.categoria]?.label || 'Outros'}
@@ -191,6 +196,15 @@ export default function PastaDocumentos({ open, onClose, funcionario }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 ${doc.visivel_ao_funcionario ? 'text-green-600' : 'text-muted-foreground'}`}
+                    onClick={() => handleToggleVisivel(doc)}
+                    title={doc.visivel_ao_funcionario ? 'Visível ao funcionário' : 'Oculto do funcionário'}
+                  >
+                    {doc.visivel_ao_funcionario ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

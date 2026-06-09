@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,7 +47,7 @@ function SetorRow({ setor, onChange, onDelete }) {
               const val = parseFloat(e.target.value);
               onChange({ ...setor, percentual: isNaN(val) ? 0 : Math.min(100, Math.max(0, val)) });
             }}
-            className="h-8 text-sm w-24"
+            className="h-8 text-sm w-24 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <span className="text-sm font-semibold text-primary">{typeof setor.percentual === 'string' ? parseFloat(setor.percentual) || 0 : setor.percentual}%</span>
         </div>
@@ -72,11 +72,26 @@ function SetorRow({ setor, onChange, onDelete }) {
 export default function ConfigurarSetoresComissao() {
   const queryClient = useQueryClient();
   const [salvando, setSalvando] = useState(false);
+  const [salvandoRetencao, setSalvandoRetencao] = useState(false);
 
   const { data: setoresDB = [], isLoading } = useQuery({
     queryKey: ['setores_comissao'],
     queryFn: () => client.entities.SetoresComissao.list('ordem_exibicao', 50),
   });
+
+  const { data: todasConfigsRH = [] } = useQuery({
+    queryKey: ['config_rh_retencao'],
+    queryFn: () => client.entities.ConfiguracoesRH.list(),
+  });
+
+  const configRetencao = todasConfigsRH.find(c => c.chave === 'comissao_retencao_padrao');
+  const [retencaoInput, setRetencaoInput] = useState('0');
+
+  useEffect(() => {
+    if (configRetencao?.valor != null) {
+      setRetencaoInput(String(configRetencao.valor));
+    }
+  }, [configRetencao]);
 
   const [setores, setSetores] = useState(null);
   const lista = setores ?? setoresDB;
@@ -141,10 +156,64 @@ export default function ConfigurarSetoresComissao() {
       }
       };
 
+  const handleSalvarRetencao = async () => {
+    setSalvandoRetencao(true);
+    try {
+      const payload = { chave: 'comissao_retencao_padrao', valor: parseFloat(retencaoInput) || 0, ativa: true };
+      if (configRetencao) {
+        await client.entities.ConfiguracoesRH.update(configRetencao.id, payload);
+      } else {
+        await client.entities.ConfiguracoesRH.create(payload);
+      }
+      queryClient.invalidateQueries({ queryKey: ['config_rh_retencao'] });
+      toast.success('Retenção padrão salva!');
+    } catch (e) {
+      toast.error(`Erro ao salvar: ${e.message}`);
+    } finally {
+      setSalvandoRetencao(false);
+    }
+  };
+
   if (isLoading) return <Skeleton className="h-48" />;
 
   return (
     <div className="space-y-4">
+      {/* Retenção padrão — no TOPO */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Info className="w-4 h-4 text-primary" />
+            Retenção Padrão da Empresa
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Percentual do valor total que será retido pela empresa em cada lançamento.
+            Pode ser alterado no momento do lançamento.
+          </p>
+          <div className="flex items-end gap-3">
+            <div className="w-32">
+              <Label className="text-xs text-muted-foreground mb-1 block">% Retenção</Label>
+              <Input
+                type="number" min="0" max="99"
+                value={retencaoInput}
+                onChange={e => setRetencaoInput(e.target.value)}
+                placeholder="0"
+                className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+            <Button variant="outline" onClick={handleSalvarRetencao} disabled={salvandoRetencao}>
+              {salvandoRetencao ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </div>
+          {parseFloat(retencaoInput) > 0 && (
+            <p className="text-xs text-amber-700">
+              ⚠️ {retencaoInput}% do valor será retido por padrão. O valor restante ({100 - (parseFloat(retencaoInput) || 0)}%) será distribuído entre os setores.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -175,7 +244,6 @@ export default function ConfigurarSetoresComissao() {
             <Plus className="w-4 h-4 mr-1" />Adicionar Setor
           </Button>
 
-          {/* Indicador de soma */}
           <div className={`flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg ${valido ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
             {valido
               ? <><CheckCircle2 className="w-4 h-4" />Total: {totalPercentual.toFixed(1)}% ✓</>

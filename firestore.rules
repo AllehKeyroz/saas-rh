@@ -75,7 +75,7 @@ service cloud.firestore {
     match /FinalidadeDocumento/{docId}  { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ModeloAdvertencia/{docId}    { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /Advertencias/{docId}         { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow delete: if isAdmin(); }
-    match /DocumentoFuncionario/{docId} { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow delete: if isAdmin(); }
+    match /DocumentoFuncionario/{docId} { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /Ferias/{docId}                { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /SolicitacoesFuncionario/{docId} { allow read: if isAuthenticated(); allow create: if isAuthenticated(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /MensagensRH/{docId}             { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isAuthenticated(); allow delete: if isAdmin(); }

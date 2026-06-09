@@ -45,12 +45,12 @@ export default function Dashboard360({ funcionario, lancamentos, vales, comissoe
     <div className="space-y-4">
       {/* Cards de Indicadores */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <IndicadorCard
-          icon={TrendingUp}
-          label="Evolução Salarial"
-          valor={formatCurrency(funcionario.salario_base || 0)}
-          sublabel="Salário base"
-        />
+          <IndicadorCard
+            icon={TrendingUp}
+            label="Evolução Salarial"
+            valor={formatCurrency((funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0))}
+            sublabel={funcionario.ajuda_custo > 0 ? `Base: ${formatCurrency(funcionario.salario_base || 0)} + Ajuda: ${formatCurrency(funcionario.ajuda_custo)}` : 'Salário base'}
+          />
 
         <IndicadorCard
           icon={Wallet}

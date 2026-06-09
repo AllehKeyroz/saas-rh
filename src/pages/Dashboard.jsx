@@ -99,7 +99,7 @@ export default function Dashboard() {
         />
         <StatCard
           title="Custo Total da Folha"
-          value={formatCurrency(totalFolha || ativos.reduce((s, f) => s + (f.salario_base || 0), 0))}
+          value={formatCurrency(totalFolha || ativos.reduce((s, f) => s + (f.salario_base || 0) + (f.ajuda_custo || 0), 0))}
           icon={DollarSign}
           color="bg-accent"
           subtitle={`${fechamentosMes.length > 0 ? 'Salários líquidos processados' : 'Salários base estimados'} — ${mesAtual}`}

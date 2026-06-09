@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/formatters';
-import { SETOR_LABELS, formatPeriodo } from '@/lib/comissoes';
+import { formatPeriodo } from '@/lib/comissoes';
 import { Users, AlertTriangle, TrendingUp, Calendar, CalendarMinus } from 'lucide-react';
 
 function normSetorKey(setor) {
@@ -82,7 +82,7 @@ export default function RelatorioComissoes({ funcionarios, comissoes, comissoesF
         <Card key={setor}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center justify-between">
-              <span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />{SETOR_LABELS[setor] || setor}</span>
+              <span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />{setor}</span>
               <Badge variant="outline">{aptos.length} aptos</Badge>
             </CardTitle>
           </CardHeader>

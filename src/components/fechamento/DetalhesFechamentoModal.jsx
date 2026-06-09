@@ -38,7 +38,7 @@ export default function DetalhesFechamentoModal({ func, lancamentos, mesRef, onC
 
   const totalDescontos = descontoLanc.reduce((s, l) => s + (l.valor || 0), 0);
   const totalAdicionais = adicionalLanc.reduce((s, l) => s + (l.valor || 0), 0);
-  const salarioLiquido = (func.salario_base || 0) + totalAdicionais - totalDescontos;
+  const salarioLiquido = (func.salario_base || 0) + (func.ajuda_custo || 0) + totalAdicionais - totalDescontos;
 
   const LancItem = ({ item }) => (
     <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
@@ -67,6 +67,12 @@ export default function DetalhesFechamentoModal({ func, lancamentos, mesRef, onC
             <p className="text-xs text-muted-foreground mb-1">Salário Base</p>
             <p className="font-bold text-sm">{formatCurrency(func.salario_base || 0)}</p>
           </div>
+          {func.ajuda_custo > 0 && (
+            <div className="bg-blue-50 rounded-xl p-3 text-center">
+              <p className="text-xs text-muted-foreground mb-1">Ajuda de Custo</p>
+              <p className="font-bold text-sm text-blue-600">{formatCurrency(func.ajuda_custo)}</p>
+            </div>
+          )}
           <div className="bg-red-50 rounded-xl p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Descontos</p>
             <p className="font-bold text-sm text-destructive">–{formatCurrency(totalDescontos)}</p>

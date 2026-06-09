@@ -92,10 +92,11 @@ export default function CorrigirComissaoDialog({
 
       for (const cf of cfPorComissao) {
         if (cf.apto) {
-          const novoValorIndividual = (cf.valor_individual_cheio || cf.valor_individual || 0) * (1 + proporcaoDiferenca);
-          const novoValorFinal = novoValorIndividual * (cf.proporcao || 1);
+          const fator = 1 + proporcaoDiferenca;
+          const novoValorFinal = (cf.valor_individual_final || cf.valor_individual || 0) * fator;
+          const novoCheio = (cf.valor_individual_cheio || cf.valor_individual || 0) * fator;
           await client.entities.ComissaoPorFuncionario.update(cf.id, {
-            valor_individual_cheio: novoValorIndividual,
+            valor_individual_cheio: novoCheio,
             valor_individual: novoValorFinal,
             valor_individual_final: novoValorFinal,
           });

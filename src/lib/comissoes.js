@@ -1,40 +1,5 @@
 // Utilitários compartilhados do módulo de comissões
 
-// Divisão padrão (fallback quando não há SetoresComissao configurados)
-export const DIVISAO_DEFAULT = {
-  empresa: 0.20,
-  salao: 0.40,
-  cozinha: 0.24,
-  copa_playground_caixa: 0.14,
-  limpeza_rh: 0.02,
-};
-
-// Mapa de palavras-chave padrão para setores fixos (retrocompatibilidade)
-export const SETOR_MAP = {
-  salao: ['salão', 'salao', 'garçom', 'garcom', 'atendimento', 'recepção', 'recepcao'],
-  cozinha: ['cozinha', 'cozinheiro', 'auxiliar de cozinha', 'chefe'],
-  copa_playground_caixa: ['copa', 'playground', 'caixa'],
-  limpeza_rh: ['limpeza', 'rh', 'recursos humanos', 'higienização', 'higienizacao'],
-};
-
-export const SETOR_LABELS = {
-  empresa: 'Empresa',
-  salao: 'Salão',
-  cozinha: 'Cozinha',
-  copa_playground_caixa: 'Copa / Playground / Caixa',
-  limpeza_rh: 'Limpeza / RH',
-};
-
-// Normaliza setor usando SETOR_MAP padrão (para retrocompatibilidade)
-export function normalizarSetor(setor) {
-  if (!setor) return null;
-  const s = setor.toLowerCase().trim();
-  for (const [key, values] of Object.entries(SETOR_MAP)) {
-    if (values.some(v => s.includes(v))) return key;
-  }
-  return null;
-}
-
 // Mapeia nome do setor de um funcionário para o ID de um SetoresComissao dinâmico
 export function mapearSetorDinamico(setorFuncionario, setoresDinamicos) {
   if (!setorFuncionario || !setoresDinamicos?.length) return null;
@@ -63,17 +28,6 @@ export function calcularDivisaoDinamica(valorTotal, setoresAtivos) {
     };
   }
   return result;
-}
-
-// Fallback: calcula divisão com percentuais fixos
-export function calcularDivisao(valorTotal, percentuais = DIVISAO_DEFAULT) {
-  return {
-    empresa: valorTotal * (percentuais.empresa ?? DIVISAO_DEFAULT.empresa),
-    salao: valorTotal * (percentuais.salao ?? DIVISAO_DEFAULT.salao),
-    cozinha: valorTotal * (percentuais.cozinha ?? DIVISAO_DEFAULT.cozinha),
-    copa_playground_caixa: valorTotal * (percentuais.copa_playground_caixa ?? DIVISAO_DEFAULT.copa_playground_caixa),
-    limpeza_rh: valorTotal * (percentuais.limpeza_rh ?? DIVISAO_DEFAULT.limpeza_rh),
-  };
 }
 
 // Calcula dias totais de um período (inclusivo)

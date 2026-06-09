@@ -118,7 +118,7 @@ export default function Fechamento() {
   const calcular = (funcId) => {
     const funcLanc = lancMes.filter(l => l.funcionario_id === funcId);
     const func = funcionarios.find(f => f.id === funcId);
-    const salarioBase = func?.salario_base || 0;
+    const salarioBase = (func?.salario_base || 0) + (func?.ajuda_custo || 0);
     const comissaoGorjeta = calcularComissaoMes(funcId);
 
     const descontos = {};

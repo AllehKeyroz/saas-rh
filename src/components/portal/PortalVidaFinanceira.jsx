@@ -54,6 +54,7 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const funcionarioId = funcionario?.id;
   const salarioBase = funcionario?.salario_base;
+  const ajudaCusto = funcionario?.ajuda_custo || 0;
   const mesAtual = getMesReferenciaAtual();
   const meses = getMesesOptions(12);
 
@@ -227,7 +228,7 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
         <StatCard icon={Wallet} label="Saldo Pessoal" value={formatCurrency(saldoPessoal)} colorClass={saldoPessoal >= 0 ? 'text-green-600' : 'text-red-600'} />
       </div>
 
-      <MiniDRE mesSelecionado={mesSelecionado} salarioBase={salario} comissaoMes={comissaoMesAtual}
+      <MiniDRE mesSelecionado={mesSelecionado} salarioBase={salario} ajudaCusto={ajudaCusto} comissaoMes={comissaoMesAtual}
         receitaExtra={isAtiva('receitas_extras_vida_financeira') ? receitaExtra : 0}
         gastoFixo={gastoFixo} gastoVariavel={gastoVariavel} investimento={investimento}
         gastosFixosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'gasto_fixo')}
@@ -322,8 +323,8 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
 
       {tab === 'dashboard' && renderDashboard()}
       {tab === 'gastos' && <MeusGastos funcionarioId={funcionarioId} />}
-      {tab === 'assinaturas' && <MinhasAssinaturas funcionarioId={funcionarioId} salarioBase={funcionario?.salario_base || 0} />}
-      {tab === 'dividas' && <MinhasDividas funcionarioId={funcionarioId} salarioBase={funcionario?.salario_base || 0} />}
+      {tab === 'assinaturas' && <MinhasAssinaturas funcionarioId={funcionarioId} salarioBase={(funcionario?.salario_base || 0) + ajudaCusto} />}
+      {tab === 'dividas' && <MinhasDividas funcionarioId={funcionarioId} salarioBase={(funcionario?.salario_base || 0) + ajudaCusto} />}
       {tab === 'metas' && <MetasObjetivos funcionarioId={funcionarioId} />}
       {tab === 'simuladores' && <SimuladoresFinanceiros />}
       {tab === 'educacao' && <EducacaoFinanceira />}

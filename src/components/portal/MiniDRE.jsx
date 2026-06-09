@@ -28,6 +28,7 @@ function DRERow({ label, value, percentual = null, indent = false, isTotal = fal
 export default function MiniDRE({
   mesSelecionado,
   salarioBase,
+  ajudaCusto = 0,
   comissaoMes,
   receitaExtra = 0,
   gastoFixo,
@@ -50,7 +51,7 @@ export default function MiniDRE({
     .filter(l => ['adicional', 'ajuste'].includes(l.tipo_lancamento))
     .reduce((s, l) => s + (l.valor || 0), 0);
   
-  const totalEntradas = salarioBase + comissaoMes + adicionais + receitaExtra;
+  const totalEntradas = (salarioBase || 0) + (ajudaCusto || 0) + comissaoMes + adicionais + receitaExtra;
 
   // Calcular despesas por categoria - listar itens individuais
   // Gastos Fixos: consignado (automático) + gastos fixos lançados pelo funcionário
@@ -144,6 +145,7 @@ export default function MiniDRE({
       // Entradas
       const entradas = [
         salarioBase > 0 ? ['Salário Fixo', formatCurrency(salarioBase), calcularPercentual(salarioBase, totalEntradas)] : null,
+        ajudaCusto > 0 ? ['Ajuda de Custo', formatCurrency(ajudaCusto), calcularPercentual(ajudaCusto, totalEntradas)] : null,
         comissaoMes > 0 ? ['Comissão', formatCurrency(comissaoMes), calcularPercentual(comissaoMes, totalEntradas)] : null,
         receitaExtra > 0 ? ['Receitas Extras', formatCurrency(receitaExtra), calcularPercentual(receitaExtra, totalEntradas)] : null,
         adicionais > 0 ? ['Outras Receitas', formatCurrency(adicionais), calcularPercentual(adicionais, totalEntradas)] : null,
@@ -196,6 +198,7 @@ export default function MiniDRE({
         [],
         ['ENTRADAS (RECEITAS)'],
         salarioBase > 0 ? ['Salário Fixo', salarioBase, calcularPercentual(salarioBase, totalEntradas) + '%'] : null,
+        ajudaCusto > 0 ? ['Ajuda de Custo', ajudaCusto, calcularPercentual(ajudaCusto, totalEntradas) + '%'] : null,
         comissaoMes > 0 ? ['Comissão', comissaoMes, calcularPercentual(comissaoMes, totalEntradas) + '%'] : null,
         receitaExtra > 0 ? ['Receitas Extras', receitaExtra, calcularPercentual(receitaExtra, totalEntradas) + '%'] : null,
         adicionais > 0 ? ['Outras Receitas', adicionais, calcularPercentual(adicionais, totalEntradas) + '%'] : null,
@@ -270,6 +273,15 @@ export default function MiniDRE({
             percentual={calcularPercentual(salarioBase, totalEntradas)}
             indent 
             colorClass="text-green-600" 
+          />
+        )}
+        {ajudaCusto > 0 && (
+          <DRERow 
+            label="Ajuda de Custo" 
+            value={formatCurrency(ajudaCusto)} 
+            percentual={calcularPercentual(ajudaCusto, totalEntradas)}
+            indent 
+            colorClass="text-blue-600" 
           />
         )}
         {comissaoMes !== undefined && comissaoMes > 0 && (

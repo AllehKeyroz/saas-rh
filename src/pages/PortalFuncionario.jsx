@@ -25,6 +25,7 @@ import MinhasSolicitacoes from '@/components/portal/MinhasSolicitacoes';
 import AvisosPendentes from '@/components/portal/AvisosPendentes';
 import AvisosCloudMobile from '@/components/portal/AvisosCloudMobile';
 import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
+import MeusDocumentos from '@/components/portal/MeusDocumentos';
 
 
 const TIPOS_LIMITE = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
@@ -38,6 +39,7 @@ const ABA_LABELS = {
   'vida-financeira': 'Minha Vida Financeira',
   'comissoes': 'Minhas Comissões',
   'metas': 'Minhas Metas',
+  'meus-documentos': 'Meus Documentos',
   'mensagens': 'Mensagens',
   'solicitacoes': 'Minhas Solicitações',
   'assinaturas': 'Assinaturas Digitais',
@@ -341,10 +343,14 @@ export default function PortalFuncionario() {
               funcionarioId={funcionario?.id}
               funcionarioSetor={funcionario?.setor}
               salarioBase={funcionario?.salario_base}
+              ajudaCusto={funcionario?.ajuda_custo || 0}
               comissoesFuncionarios={comissoesFuncionarios}
               mesSelecionado={mesSelecionado}
               setMesSelecionado={setMesSelecionado}
             />
+          )}
+          {aba === 'meus-documentos' && (
+            <MeusDocumentos funcionarioId={funcionario?.id} />
           )}
           {aba === 'mensagens' && isAtiva('modulo_mensagens') && (
             <MensagensPortal funcionario={funcionario} />

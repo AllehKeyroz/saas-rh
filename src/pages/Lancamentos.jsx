@@ -134,7 +134,7 @@ export default function Lancamentos() {
       ) : (
         <div className="space-y-3">
           {resumo.map(({ func, fl, totalDescontos, totalAdicionais, total }) => {
-            const salarioLiquido = (func.salario_base || 0) + totalAdicionais - totalDescontos;
+            const salarioLiquido = (func.salario_base || 0) + (func.ajuda_custo || 0) + totalAdicionais - totalDescontos;
             const temLancamentos = total > 0;
             const consolidados = fl.filter(l => l.consolidado).length;
             const todosConsolidados = temLancamentos && consolidados === total;

@@ -42,10 +42,14 @@ export default function ExportarContrachequesMassaDialog({
         doc.text(`Funcionário: ${func.nome}`, 20, 32)
         doc.text(`Mês: ${mesRef}`, 20, 40)
         doc.text(`Salário Base: R$ ${Number(func.salario_base || 0).toFixed(2)}`, 20, 50)
+        if (func.ajuda_custo) {
+          doc.text(`Ajuda de Custo: R$ ${Number(func.ajuda_custo || 0).toFixed(2)}`, 20, 58)
+        }
+        const yOffset = func.ajuda_custo ? 66 : 58
         if (fechamento) {
-          doc.text(`Descontos: R$ ${Number(fechamento.total_descontos || 0).toFixed(2)}`, 20, 58)
-          doc.text(`Adicionais: R$ ${Number(fechamento.total_adicionais || 0).toFixed(2)}`, 20, 66)
-          doc.text(`Salário Líquido: R$ ${Number(fechamento.salario_liquido || 0).toFixed(2)}`, 20, 74)
+          doc.text(`Descontos: R$ ${Number(fechamento.total_descontos || 0).toFixed(2)}`, 20, yOffset)
+          doc.text(`Adicionais: R$ ${Number(fechamento.total_adicionais || 0).toFixed(2)}`, 20, yOffset + 8)
+          doc.text(`Salário Líquido: R$ ${Number(fechamento.salario_liquido || 0).toFixed(2)}`, 20, yOffset + 16)
         }
         const pdfBlob = doc.output('blob')
         zip.file(`contracheque_${func.nome.replace(/\s+/g, '_')}_${mesRef.replace('/', '-')}.pdf`, pdfBlob)

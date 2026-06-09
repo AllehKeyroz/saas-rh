@@ -117,7 +117,7 @@ export default function DashboardRH() {
     const porSetor = {};
     funcionarios.filter(f => f.ativo !== false).forEach(f => {
       const setor = f.setor || 'Sem setor';
-      porSetor[setor] = (porSetor[setor] || 0) + (f.salario_base || 0);
+      porSetor[setor] = (porSetor[setor] || 0) + (f.salario_base || 0) + (f.ajuda_custo || 0);
     });
     return Object.entries(porSetor).map(([setor, custo]) => ({ setor, custo }));
   }, [funcionarios]);

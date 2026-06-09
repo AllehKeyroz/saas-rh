@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { DIVISAO_DEFAULT } from '@/lib/comissoes';
+// Componente mantido para retrocompatibilidade
 import { Percent, Save, RotateCcw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,7 +29,7 @@ export default function PercentuaisComissaoTab() {
   });
 
   const config = configs[0];
-  const [percentuais, setPercentuais] = useState(config?.valor || DIVISAO_DEFAULT);
+  const [percentuais, setPercentuais] = useState(config?.valor || { empresa: 0.2, salao: 0.4, cozinha: 0.24, copa_playground_caixa: 0.14, limpeza_rh: 0.02 });
 
   const total = Object.values(percentuais).reduce((s, v) => s + (parseFloat(v) || 0), 0);
   const valido = Math.abs(total - 1.0) < 0.001;
@@ -61,10 +61,11 @@ export default function PercentuaisComissaoTab() {
   };
 
   const handleReset = async () => {
-    setPercentuais(DIVISAO_DEFAULT);
+    const defaultPct = { empresa: 0.2, salao: 0.4, cozinha: 0.24, copa_playground_caixa: 0.14, limpeza_rh: 0.02 };
+    setPercentuais(defaultPct);
     if (config) {
-      try {
-        await client.entities.ConfiguracoesRH.update(config.id, { valor: DIVISAO_DEFAULT });
+      if (config.valor) {
+        await client.entities.ConfiguracoesRH.update(config.id, { valor: defaultPct });
         queryClient.invalidateQueries({ queryKey: ['config_percentuais'] });
         toast.success('Percentuais redefinidos para o padrão');
       } catch (e) {

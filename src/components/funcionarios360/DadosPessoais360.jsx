@@ -57,6 +57,10 @@ export default function DadosPessoais360({ funcionario }) {
             <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.salario_base || 0)}</p>
           </div>
           <div>
+            <label className="text-xs font-semibold text-muted-foreground">Ajuda de Custo</label>
+            <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.ajuda_custo || 0)}</p>
+          </div>
+          <div>
             <label className="text-xs font-semibold text-muted-foreground">Limite de Vales</label>
             <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.limite_vales || 0)}</p>
           </div>

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, User, FileText, ChevronRight, ChevronDown, Download, FolderOpen } from 'lucide-react';
+import { Search, User, FileText, ChevronRight, ChevronDown, Download, FolderOpen, Eye, EyeOff } from 'lucide-react';
 
 const CATEGORIA_CONFIG = {
   admissional: { label: 'Admissional', color: 'bg-green-100 text-green-700' },
@@ -32,13 +32,12 @@ function DocumentoItem({ doc }) {
 
   const handleDownload = async () => {
     setLoadingUrl(true);
-    const { signed_url } = await client.integrations.Core.CreateFileSignedUrl({ file_uri: doc.file_uri });
-    window.open(signed_url, '_blank');
+    window.open(doc.file_uri, '_blank');
     setLoadingUrl(false);
   };
 
   return (
-    <div className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/40 rounded-lg group">
+      <div className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/40 rounded-lg group">
       <div className="flex items-center gap-3 min-w-0">
         <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
         <div className="min-w-0">
@@ -47,6 +46,11 @@ function DocumentoItem({ doc }) {
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-2">
+        {doc.visivel_ao_funcionario ? (
+          <Eye className="w-3 h-3 text-green-500" title="Visível ao funcionário" />
+        ) : (
+          <EyeOff className="w-3 h-3 text-muted-foreground" title="Oculto do funcionário" />
+        )}
         <Badge className={`text-xs ${cfg.color} border-0`}>{cfg.label}</Badge>
         <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={handleDownload} disabled={loadingUrl}>
           <Download className="w-3.5 h-3.5" />

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Pencil, Plus, Trash2, Loader2, Building2, Tags, HardDrive, Bell, Palette, Power, FileWarning, Briefcase, PenLine, LayoutTemplate } from 'lucide-react';
+import { toast } from 'sonner';
 import BackupsTab from '@/components/configuracoes/BackupsTab';
 import NotificacoesTab from '@/components/configuracoes/NotificacoesTab';
 import AparenciaTab from '@/components/configuracoes/AparenciaTab';
@@ -19,22 +20,36 @@ import ModelosDocumentosTab from '@/components/configuracoes/ModelosDocumentosTa
 import LimiteValesTab from '@/components/configuracoes/LimiteValesTab';
 import { Switch } from '@/components/ui/switch';
 
-// ─── Setor Form ───────────────────────────────────────────────────────────────
+// ─── Setor Form (SetoresComissao como fonte única) ────────────────────────────
 function SetorForm({ open, onClose, setor, onSaved }) {
-  const [form, setForm] = useState(setor || { nome: '', descricao: '', ativo: true });
+  const [form, setForm] = useState(setor ? { nome: setor.nome_do_setor || setor.nome, descricao: setor.descricao || '', ativo: setor.ativo !== false } : { nome: '', descricao: '', ativo: true });
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    if (setor) {
-      await client.entities.Setor.update(setor.id, form);
-    } else {
-      await client.entities.Setor.create(form);
+    try {
+      if (setor?.id) {
+        await client.entities.SetoresComissao.update(setor.id, {
+          nome_do_setor: form.nome,
+          descricao: form.descricao,
+          ativo: form.ativo,
+        });
+      } else {
+        await client.entities.SetoresComissao.create({
+          nome_do_setor: form.nome,
+          descricao: form.descricao,
+          ativo: form.ativo,
+          percentual: 0,
+        });
+      }
+      setSaving(false);
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(e.message);
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
-    onClose();
   };
 
   return (
@@ -204,7 +219,7 @@ export default function Configuracoes() {
 
   const { data: setores = [], isLoading: loadingSetores } = useQuery({
     queryKey: ['setores'],
-    queryFn: () => client.entities.Setor.list(),
+    queryFn: () => client.entities.SetoresComissao.list(),
   });
 
   const { data: tipos = [], isLoading: loadingTipos } = useQuery({
@@ -224,8 +239,9 @@ export default function Configuracoes() {
       await client.entities.Funcao.delete(id);
       queryClient.invalidateQueries({ queryKey: ['funcoes'] });
     } else if (type === 'setor') {
-      await client.entities.Setor.delete(id);
+      await client.entities.SetoresComissao.delete(id);
       queryClient.invalidateQueries({ queryKey: ['setores'] });
+      queryClient.invalidateQueries({ queryKey: ['setores_comissao'] });
     } else if (type === 'tipo') {
       await client.entities.TipoLancamento.delete(id);
       queryClient.invalidateQueries({ queryKey: ['tiposLancamento'] });
@@ -234,8 +250,9 @@ export default function Configuracoes() {
   };
 
   const handleToggleSetor = async (setor) => {
-    await client.entities.Setor.update(setor.id, { ativo: !setor.ativo });
+    await client.entities.SetoresComissao.update(setor.id, { ativo: !setor.ativo });
     queryClient.invalidateQueries({ queryKey: ['setores'] });
+    queryClient.invalidateQueries({ queryKey: ['setores_comissao'] });
   };
 
   return (
@@ -264,11 +281,12 @@ export default function Configuracoes() {
           ) : (
             <div className="divide-y border rounded-lg overflow-hidden bg-card">
               {setores.map(s => (
-                <div key={s.id} className="flex items-center justify-between px-4 py-3">
-                  <div>
-                    <p className="font-medium text-sm">{s.nome}</p>
-                    {s.descricao && <p className="text-xs text-muted-foreground">{s.descricao}</p>}
-                  </div>
+                  <div key={s.id} className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="font-medium text-sm">{s.nome_do_setor}</p>
+                      {s.descricao && <p className="text-xs text-muted-foreground">{s.descricao}</p>}
+                      {s.percentual > 0 && <p className="text-xs text-muted-foreground">{s.percentual}% — comissão</p>}
+                    </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={s.ativo !== false ? 'default' : 'secondary'} className="text-xs">
                       {s.ativo !== false ? 'Ativo' : 'Inativo'}
@@ -412,7 +430,7 @@ export default function Configuracoes() {
           open
           setor={setorForm?.id ? setorForm : null}
           onClose={() => setSetorForm(null)}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ['setores'] })}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey: ['setores'] }); queryClient.invalidateQueries({ queryKey: ['setores_comissao'] }); }}
         />
       )}
       {tipoForm !== null && (

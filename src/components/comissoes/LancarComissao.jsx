@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatCurrency, getMesReferenciaAtual } from '@/lib/formatters';
 import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, Info, CalendarMinus } from 'lucide-react';
 import { toast } from 'sonner';
-import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDivisao, SETOR_LABELS, normalizarSetor, calcularProporcionalidade } from '@/lib/comissoes';
+import { mapearSetorDinamico, calcularDivisaoDinamica, calcularProporcionalidade } from '@/lib/comissoes';
 import { registrarAuditoria } from '@/lib/audit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRHControl } from '@/lib/rhControl';
@@ -28,6 +28,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   const [observacao, setObservacao] = useState('');
   const [calculado, setCalculado] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [retencao, setRetencao] = useState('0');
   // diasAusentes por funcionário: { [funcId]: número }
   const [diasAusentesPorFunc, setDiasAusentesPorFunc] = useState({});
 
@@ -38,16 +39,36 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     queryFn: () => client.entities.SetoresComissao.list('ordem_exibicao', 50),
   });
 
-  // Usar setores dinâmicos apenas se a funcionalidade estiver ativa
-  const setoresAtivos = isAtiva('setores_configuráveis') ? setoresDB.filter(s => s.ativo !== false) : [];
-  const usarDinamico = setoresAtivos.length > 0 && isAtiva('divisao_automatica_setor');
+  // Carrega retenção padrão da configuração
+  const { data: configsRH = [] } = useQuery({
+    queryKey: ['config_rh_retencao_lancar'],
+    queryFn: () => client.entities.ConfiguracoesRH.list(),
+  });
 
-  // Divisão de valores por setor
+  useEffect(() => {
+    const cfg = configsRH.find(c => c.chave === 'comissao_retencao_padrao');
+    if (cfg && cfg.valor != null) {
+      setRetencao(String(cfg.valor));
+    }
+  }, [configsRH]);
+
+  // Setores dinâmicos (obrigatórios)
+  const setoresAtivos = setoresDB.filter(s => s.ativo !== false);
+  const setoresProntos = isAtiva('divisao_automatica_setor') && setoresAtivos.length > 0;
+  const somaPercentuais = setoresAtivos.reduce((s, setor) => s + (setor.percentual || 0), 0);
+  const setoresValidos = setoresProntos && Math.abs(somaPercentuais - 100) < 0.01;
+
+  const pctRetencao = Math.min(Math.max(parseFloat(retencao) || 0, 0), 100);
+
+  // Divisão de valores por setor (aplicando retenção)
   const divisao = useMemo(() => {
     const v = parseFloat(valorTotal) || 0;
-    if (usarDinamico) return calcularDivisaoDinamica(v, setoresAtivos);
-    return calcularDivisao(v);
-  }, [valorTotal, setoresAtivos, usarDinamico]);
+    const vDistribuir = v * (1 - pctRetencao / 100);
+    if (!setoresValidos) return {};
+    return calcularDivisaoDinamica(vDistribuir, setoresAtivos);
+  }, [valorTotal, setoresAtivos, setoresValidos, pctRetencao]);
+
+  const valorRetido = (parseFloat(valorTotal) || 0) * (pctRetencao / 100);
 
   const hoje = new Date().toISOString().split('T')[0];
 
@@ -68,31 +89,18 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   // Agrupa funcionários por setor
   const porSetor = useMemo(() => {
     const grupos = {};
-    if (usarDinamico) {
-      setoresAtivos.forEach(s => { grupos[s.id] = []; });
-      grupos['__outros'] = []; // fallback para aptos sem setor mapeado
-      funcionariosAptos.filter(f => f.ativo !== false).forEach(f => {
-        const sid = mapearSetorDinamico(f.setor, setoresAtivos);
-        if (sid && grupos[sid]) {
-          grupos[sid].push(f);
-        } else {
-          grupos['__outros'].push(f); // garante que não seja ignorado
-        }
-      });
-    } else {
-      const chaves = { salao: [], cozinha: [], copa_playground_caixa: [], limpeza_rh: [], __outros: [] };
-      funcionariosAptos.filter(f => f.ativo !== false).forEach(f => {
-        const setor = normalizarSetor(f.setor);
-        if (setor && chaves[setor]) {
-          chaves[setor].push(f);
-        } else {
-          chaves['__outros'].push(f); // garante que não seja ignorado
-        }
-      });
-      return chaves;
-    }
+    setoresAtivos.forEach(s => { grupos[s.id] = []; });
+    grupos['__outros'] = [];
+    funcionariosAptos.filter(f => f.ativo !== false).forEach(f => {
+      const sid = mapearSetorDinamico(f.setor, setoresAtivos);
+      if (sid && grupos[sid]) {
+        grupos[sid].push(f);
+      } else {
+        grupos['__outros'].push(f);
+      }
+    });
     return grupos;
-  }, [funcionariosAptos, setoresAtivos, usarDinamico]);
+  }, [funcionariosAptos, setoresAtivos]);
 
   // Aptos e excluídos por setor (exclusão só se funcionalidade ativa)
   const aptoPorSetor = useMemo(() => {
@@ -110,36 +118,82 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   // Distribuição final
   const distribuicao = useMemo(() => {
     const result = {};
+    let totalComAptos = 0;
+    let totalSemAptos = 0;
+
     for (const [setorId, { aptos, excluidos }] of Object.entries(aptoPorSetor)) {
-      // __outros: funcionários aptos cujo setor não foi mapeado — recebem valor proporcional à sua participação individual
-      // Eles dividem o valor que ficaria "sem dono" de forma igualitária entre si
       let valorSetor, nome;
       if (setorId === '__outros') {
-        // Soma dos valores de todos os setores com valor (para calcular o não distribuído)
-        const totalDistribuido = Object.entries(divisao)
-          .filter(([k]) => k !== '__outros')
-          .reduce((s, [, v]) => s + (typeof v === 'object' ? (v?.valor || 0) : (v || 0)), 0);
-        const totalGeral = parseFloat(valorTotal) || 0;
-        valorSetor = Math.max(0, totalGeral - totalDistribuido);
+        const totalDistribuido = Object.values(divisao).reduce((s, v) => s + (v?.valor || 0), 0);
+        valorSetor = Math.max(0, (parseFloat(valorTotal) || 0) - totalDistribuido);
         nome = 'Outros (setor não mapeado)';
       } else {
-        valorSetor = usarDinamico ? (divisao[setorId]?.valor || 0) : (divisao[setorId] || 0);
-        nome = usarDinamico ? (divisao[setorId]?.nome || setorId) : (SETOR_LABELS[setorId] || setorId);
+        valorSetor = divisao[setorId]?.valor || 0;
+        nome = divisao[setorId]?.nome || setorId;
       }
-      const valorInd = aptos.length > 0 ? valorSetor / aptos.length : 0;
-      result[setorId] = { aptos, excluidos, valorSetor, valorInd, semAptos: aptos.length === 0, nome };
+      const semAptos = aptos.length === 0;
+      if (setorId !== '__outros') {
+        if (semAptos) totalSemAptos += valorSetor;
+        else totalComAptos += valorSetor;
+      }
+      result[setorId] = { aptos, excluidos, valorSetor, valorInd: 0, semAptos, nome };
     }
+
+    // Redistribui valor de setores vazios para quem tem gente
+    for (const [setorId, data] of Object.entries(result)) {
+      if (setorId === '__outros') continue;
+      if (data.semAptos) {
+        data.valorSetor = 0;
+      } else if (totalComAptos > 0 && totalSemAptos > 0) {
+        data.valorSetor += totalSemAptos * (data.valorSetor / totalComAptos);
+      }
+      data.valorInd = data.aptos.length > 0 ? data.valorSetor / data.aptos.length : 0;
+    }
+
+    // __outros: residual
+    if (result['__outros']) {
+      const totalDistribuido = Object.values(result)
+        .filter(v => v !== result['__outros'])
+        .reduce((s, v) => s + (v.valorSetor || 0), 0);
+      result['__outros'].valorSetor = Math.max(0, (parseFloat(valorTotal) || 0) - totalDistribuido);
+      result['__outros'].valorInd = result['__outros'].aptos.length > 0
+        ? result['__outros'].valorSetor / result['__outros'].aptos.length : 0;
+    }
+
     return result;
-  }, [aptoPorSetor, divisao, usarDinamico, valorTotal]);
+  }, [aptoPorSetor, divisao, valorTotal]);
 
   const totalExcluidos = Object.values(aptoPorSetor).reduce((s, v) => s + v.excluidos.length, 0);
   const setoresSemAptosComFuncs = Object.entries(distribuicao).filter(([sid, v]) => v.semAptos && (porSetor[sid]?.length || 0) > 0 && sid !== '__outros');
   const outrosFuncs = aptoPorSetor['__outros']?.aptos || [];
 
+  // Preview em tempo real com redistribuição proporcional pelas ausências
+  const previewAptos = useMemo(() => {
+    const mapa = {};
+    for (const [setorId, { aptos, valorSetor }] of Object.entries(distribuicao)) {
+      if (aptos.length === 0) continue;
+      const props = aptos.map(f => {
+        const diasAus = parseInt(diasAusentesPorFunc[f.id] || 0);
+        const { proporcao } = calcularProporcionalidade(periodoInicio, periodoFim, diasAus);
+        return { func: f, diasAus, proporcao };
+      });
+      const somaProp = props.reduce((s, p) => s + p.proporcao, 0);
+      for (const p of props) {
+        const valorRedistribuido = somaProp > 0 ? valorSetor * (p.proporcao / somaProp) : 0;
+        const valorSemRateio = valorSetor / aptos.length * p.proporcao;
+        mapa[p.func.id] = { ...p, valorRedistribuido, valorSemRateio };
+      }
+    }
+    return mapa;
+  }, [distribuicao, diasAusentesPorFunc, periodoInicio, periodoFim]);
+
   const handleCalcular = () => {
     if (!periodoInicio || !periodoFim) { toast.error('Informe o período'); return; }
     if (!parseFloat(valorTotal)) { toast.error('Informe o valor total'); return; }
     if (new Date(periodoInicio) > new Date(periodoFim)) { toast.error('Data início deve ser anterior ao fim'); return; }
+    if (!setoresAtivos.length) { toast.error('Configure os setores na aba "Setores" antes de lançar comissões.'); return; }
+    if (!setoresValidos) { toast.error('Os percentuais dos setores não somam 100%. Verifique a aba "Setores".'); return; }
+    if (pctRetencao >= 100) { toast.error('Retenção não pode ser 100%. Deixe espaço para distribuir aos funcionários.'); return; }
     setCalculado(true);
   };
 
@@ -154,43 +208,38 @@ export default function LancarComissao({ funcionarios, onSaved }) {
         periodo_fim: periodoFim,
         mes_referencia: mesRef,
         valor_total_periodo: v,
+        valor_empresa: valorRetido,
+        percentual_retencao: pctRetencao,
         observacao,
         status: 'confirmado',
       };
-
-      // Adicionar campos de valor por setor
-      if (!usarDinamico) {
-        comissaoData.valor_empresa = divisao.empresa;
-        comissaoData.valor_salao = divisao.salao;
-        comissaoData.valor_cozinha = divisao.cozinha;
-        comissaoData.valor_copa_playground_caixa = divisao.copa_playground_caixa;
-        comissaoData.valor_limpeza_rh = divisao.limpeza_rh;
-      }
 
       const comissao = await client.entities.ComissoesGorjetas.create(comissaoData);
 
       const registros = [];
       for (const [setorId, { aptos, excluidos, valorSetor, valorInd, nome }] of Object.entries(distribuicao)) {
-        const nomeSetor = setorId === '__outros'
-          ? 'Outros'
-          : usarDinamico
-            ? setoresAtivos.find(s => s.id === setorId)?.nome_do_setor || setorId
-            : (SETOR_LABELS[setorId] || setorId);
-        for (const f of aptos) {
+        const nomeSetor = setorId === '__outros' ? 'Outros' : (divisao[setorId]?.nome || setorId);
+        // Redistribuição proporcional: calcula a proporção de cada apto
+        // e distribui o valorSetor proporcionalmente (sobra de faltas é rateada)
+        const proporcoesAptos = aptos.map(f => {
           const diasAusentes = getDiasAusentes(f.id);
           const { diasTotais, diasTrabalhados, proporcao } = calcularProporcionalidade(periodoInicio, periodoFim, diasAusentes);
-          const valorFinal = valorInd * proporcao;
+          return { func: f, diasAusentes, diasTotais, diasTrabalhados, proporcao };
+        });
+        const somaProporcoes = proporcoesAptos.reduce((s, p) => s + p.proporcao, 0);
+        for (const p of proporcoesAptos) {
+          const valorFinal = somaProporcoes > 0 ? valorSetor * (p.proporcao / somaProporcoes) : 0;
           registros.push({
-            funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id,
+            funcionario_id: p.func.id, funcionario_nome: p.func.nome, comissao_id: comissao.id,
             setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
             mes_referencia: mesRef, valor_setor: valorSetor,
             valor_individual: valorFinal, // retrocompatibilidade
-            valor_individual_cheio: valorInd,
+            valor_individual_cheio: valorSetor / aptos.length,
             valor_individual_final: valorFinal,
-            dias_ausentes_no_periodo: diasAusentes,
-            dias_trabalhados: diasTrabalhados,
-            dias_totais: diasTotais,
-            proporcao,
+            dias_ausentes_no_periodo: p.diasAusentes,
+            dias_trabalhados: p.diasTrabalhados,
+            dias_totais: p.diasTotais,
+            proporcao: p.proporcao,
             apto: true,
           });
         }
@@ -236,19 +285,17 @@ export default function LancarComissao({ funcionarios, onSaved }) {
         </p>
       </div>
 
-      {!usarDinamico && (
-        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl p-3">
-          <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-          <p className="text-xs text-blue-800">Usando percentuais padrão (20%/40%/24%/14%/2%). Configure setores dinâmicos na aba "Setores".</p>
-        </div>
-      )}
-
-      {usarDinamico && (
+      {setoresAtivos.length > 0 ? (
         <div className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
           <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
           <p className="text-xs text-green-800">
-            Usando <strong>{setoresAtivos.length} setores configurados</strong>: {setoresAtivos.map(s => `${s.nome_do_setor} (${s.percentual}%)`).join(', ')}
+            Setores configurados: {setoresAtivos.map(s => `${s.nome_do_setor} (${s.percentual}%)`).join(', ')}
           </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-red-800">Nenhum setor configurado. Acesse a aba <strong>Setores</strong> para criar os setores e definir os percentuais antes de lançar comissões.</p>
         </div>
       )}
 
@@ -277,6 +324,23 @@ export default function LancarComissao({ funcionarios, onSaved }) {
           <div className="space-y-1.5">
             <Label>Valor Total das Gorjetas (R$) *</Label>
             <Input type="number" placeholder="0,00" value={valorTotal} onChange={e => { setValorTotal(e.target.value); setCalculado(false); }} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Retenção da Empresa (%)</Label>
+              <Input type="number" min="0" max="99" placeholder="0" value={retencao} onChange={e => { setRetencao(e.target.value); setCalculado(false); }} className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+              <p className="text-xs text-muted-foreground">Percentual retido pela empresa (ex: 20). Não distribuído.</p>
+            </div>
+            {pctRetencao > 0 && (
+              <div className="space-y-1.5 pt-6">
+                <p className="text-sm text-muted-foreground">
+                  Valor retido: <strong className="text-amber-700">{formatCurrency(valorRetido)}</strong>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  A distribuir: <strong className="text-green-700">{formatCurrency((parseFloat(valorTotal) || 0) - valorRetido)}</strong>
+                </p>
+              </div>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label>Observação (opcional)</Label>
@@ -327,7 +391,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
           {setoresSemAptosComFuncs.map(([sid, { nome, valorSetor }]) => (
             <div key={sid} className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl p-4">
               <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-orange-800">Nenhum apto no setor <strong>{nome}</strong>. Valor <strong>{formatCurrency(valorSetor)}</strong> será retido.</p>
+              <p className="text-sm text-orange-800">Nenhum apto no setor <strong>{nome}</strong>. Valor <strong>{formatCurrency(valorSetor)}</strong> foi redistribuído entre os setores com funcionários.</p>
             </div>
           ))}
 
@@ -336,26 +400,20 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             <CardHeader><CardTitle className="text-sm">Divisão por Setor</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {usarDinamico
-                  ? setoresAtivos.map(s => (
-                    <div key={s.id} className="rounded-xl p-3 bg-primary/5">
-                      <p className="text-xs font-medium text-muted-foreground">{s.nome_do_setor} ({s.percentual}%)</p>
-                      <p className="text-lg font-bold mt-0.5 text-primary">{formatCurrency(divisao[s.id]?.valor || 0)}</p>
-                    </div>
-                  ))
-                  : [
-                    { key: 'empresa', color: 'bg-slate-100 text-slate-700' },
-                    { key: 'salao', color: 'bg-blue-50 text-blue-700' },
-                    { key: 'cozinha', color: 'bg-orange-50 text-orange-700' },
-                    { key: 'copa_playground_caixa', color: 'bg-purple-50 text-purple-700' },
-                    { key: 'limpeza_rh', color: 'bg-green-50 text-green-700' },
-                  ].map(({ key, color }) => (
-                    <div key={key} className={`rounded-xl p-3 ${color}`}>
-                      <p className="text-xs font-medium opacity-70">{SETOR_LABELS[key]}</p>
-                      <p className="text-lg font-bold mt-0.5">{formatCurrency(divisao[key] || 0)}</p>
-                    </div>
-                  ))
-                }
+                {pctRetencao > 0 && (
+                  <div className="rounded-xl p-3 bg-slate-100 border border-slate-200">
+                    <p className="text-xs font-medium text-slate-600">Retido (Empresa) — {pctRetencao}%</p>
+                    <p className="text-lg font-bold mt-0.5 text-slate-500">{formatCurrency(valorRetido)}</p>
+                  </div>
+                )}
+                {setoresAtivos.length > 0 ? setoresAtivos.map(s => (
+                  <div key={s.id} className="rounded-xl p-3 bg-primary/5">
+                    <p className="text-xs font-medium text-muted-foreground">{s.nome_do_setor} ({s.percentual}%)</p>
+                    <p className="text-lg font-bold mt-0.5 text-primary">{formatCurrency(divisao[s.id]?.valor || 0)}</p>
+                  </div>
+                )) : (
+                  <div className="col-span-full text-sm text-muted-foreground text-center py-4">Configure os setores na aba "Setores".</div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -382,14 +440,22 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                   {aptos.map(f => {
                     const diasAus = getDiasAusentes(f.id);
                     const { diasTotais, diasTrabalhados, proporcao } = calcularProporcionalidade(periodoInicio, periodoFim, diasAus);
+                    const preview = previewAptos[f.id];
                     const valorFinal = valorInd * proporcao;
+                    const valorRedistribuido = preview?.valorRedistribuido ?? valorFinal;
                     const temReducao = diasAus > 0;
+                    const temDiferenca = Math.abs(valorFinal - valorRedistribuido) > 0.01;
                     return (
                       <div key={f.id} className="py-2 border-b last:border-0 space-y-1.5">
                         <div className="flex items-center justify-between text-sm">
                           <span className="font-medium">{f.nome}</span>
                           <div className="flex items-center gap-3">
-                            {temReducao ? (
+                            {temDiferenca ? (
+                              <div className="text-right">
+                                <p className="text-xs text-muted-foreground line-through">{formatCurrency(valorFinal)}</p>
+                                <p className="font-bold text-green-600">{formatCurrency(valorRedistribuido)} <span className="text-xs font-normal text-green-500">(c/ rateio)</span></p>
+                              </div>
+                            ) : temReducao ? (
                               <div className="text-right">
                                 <p className="text-xs text-muted-foreground line-through">{formatCurrency(valorInd)}</p>
                                 <p className="font-bold text-amber-600">{formatCurrency(valorFinal)}</p>

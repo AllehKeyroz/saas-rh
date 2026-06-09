@@ -43,10 +43,10 @@ export default function VidaFinanceiraPessoal({ funcionario }) {
             {isOpen && (
               <div className="px-2 pb-3 pt-1 bg-background border-t">
                 {mod.id === 'assinaturas' && (
-                  <MinhasAssinaturas funcionarioId={funcionario?.id} salarioBase={funcionario?.salario_base || 0} />
+                  <MinhasAssinaturas funcionarioId={funcionario?.id} salarioBase={(funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)} />
                 )}
                 {mod.id === 'dividas' && (
-                  <MinhasDividas funcionarioId={funcionario?.id} salarioBase={funcionario?.salario_base || 0} />
+                  <MinhasDividas funcionarioId={funcionario?.id} salarioBase={(funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)} />
                 )}
                 {mod.id === 'metas' && (
                   <MetasObjetivos funcionarioId={funcionario?.id} />

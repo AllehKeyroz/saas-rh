@@ -89,6 +89,15 @@ export default function ProfileHeader360({ funcionario }) {
               }) || 'N/A'}
             </p>
           </div>
+          <div className="bg-white/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground mb-1">Ajuda de Custo</p>
+            <p className="text-sm font-semibold text-foreground">
+              R$ {(funcionario.ajuda_custo || 0).toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })}
+            </p>
+          </div>
         </div>
       </CardContent>
     </Card>

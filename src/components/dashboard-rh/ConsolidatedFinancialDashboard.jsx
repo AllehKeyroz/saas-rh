@@ -34,7 +34,7 @@ export default function ConsolidatedFinancialDashboard() {
           if (!costByDept[func.setor]) {
             costByDept[func.setor] = { name: func.setor, folha: 0, adiantamentos: 0, total: 0 };
           }
-          costByDept[func.setor].folha += func.salario_base || 0;
+          costByDept[func.setor].folha += (func.salario_base || 0) + (func.ajuda_custo || 0);
         }
       });
 
@@ -81,7 +81,7 @@ export default function ConsolidatedFinancialDashboard() {
       date.setMonth(date.getMonth() - i);
       months.push({
         mes: date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-        folha: funcionarios.reduce((sum, f) => sum + (f.salario_base || 0), 0),
+        folha: funcionarios.reduce((sum, f) => sum + (f.salario_base || 0) + (f.ajuda_custo || 0), 0),
         adiantamentos: lancamentos
           .filter(l => {
             const lDate = new Date(l.data_lancamento);

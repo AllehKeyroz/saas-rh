@@ -44,7 +44,7 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
     .filter(l => !TIPOS_LIMITE.includes(l.tipo_lancamento))
     .reduce((s, l) => s + (l.valor || 0), 0);
   const totalReceitasExtras = receitasExtras.reduce((s, r) => s + (r.valor || 0), 0);
-  const saldoBase = funcionario?.salario_base || 0;
+  const saldoBase = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0);
   const saldoFinal = saldoBase + totalCreditos + totalReceitasExtras - totalDebitos;
 
   const sorted = [...lancamentosMes].sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
@@ -84,6 +84,15 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
                 <p className="text-xs text-muted-foreground">Competência {mesSelecionado}</p>
               </div>
               <span className="text-sm font-bold text-green-600">+ {formatCurrency(saldoBase)}</span>
+            </div>
+          )}
+          {funcionario?.ajuda_custo > 0 && (
+            <div className="flex items-center justify-between py-2.5 border-b">
+              <div>
+                <span className="text-sm font-medium">Ajuda de Custo</span>
+                <p className="text-xs text-muted-foreground">Competência {mesSelecionado}</p>
+              </div>
+              <span className="text-sm font-bold text-blue-600">+ {formatCurrency(funcionario.ajuda_custo)}</span>
             </div>
           )}
 

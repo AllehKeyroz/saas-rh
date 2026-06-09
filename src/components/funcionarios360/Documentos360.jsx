@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Upload, ExternalLink, Trash2, Loader2, ShieldCheck } from 'lucide-react';
+import { Upload, ExternalLink, Trash2, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { formatDate } from '@/lib/formatters';
 import { client } from '@/api/client';
 import { toast } from 'sonner';
@@ -15,6 +16,11 @@ export default function Documentos360({ funcionario, documentos, onRefresh }) {
   const [uploading, setUploading] = useState(false);
   const [auditoriaDoc, setAuditoriaDoc] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const handleToggleVisivel = async (doc) => {
+    await client.entities.DocumentoFuncionario.update(doc.id, { visivel_ao_funcionario: !doc.visivel_ao_funcionario });
+    if (onRefresh) onRefresh();
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -39,6 +45,7 @@ export default function Documentos360({ funcionario, documentos, onRefresh }) {
           file_uri: uploadResult.file_url,
           file_type: file.type,
           categoria: 'outros',
+          visivel_ao_funcionario: false,
         });
         await registrarAuditoria({
           acao: ACOES.DOCUMENTO_CARREGADO, modulo: 'documento', origem: 'rh',
@@ -91,6 +98,7 @@ export default function Documentos360({ funcionario, documentos, onRefresh }) {
                   <TableHead>Categoria</TableHead>
                   <TableHead>Descrição</TableHead>
                   <TableHead>Data</TableHead>
+                  <TableHead>Visível</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -103,6 +111,16 @@ export default function Documentos360({ funcionario, documentos, onRefresh }) {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{doc.descricao || '-'}</TableCell>
                     <TableCell className="text-sm">{doc.created_date ? formatDate(doc.created_date) : '-'}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon" variant="ghost"
+                        className={`h-8 w-8 ${doc.visivel_ao_funcionario ? 'text-green-600' : 'text-muted-foreground'}`}
+                        onClick={() => handleToggleVisivel(doc)}
+                        title={doc.visivel_ao_funcionario ? 'Visível ao funcionário' : 'Oculto do funcionário'}
+                      >
+                        {doc.visivel_ao_funcionario ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      </Button>
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         {doc.file_uri && (

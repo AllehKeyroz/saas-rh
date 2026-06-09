@@ -37,7 +37,7 @@ function calcularIdade(dataNascimento) {
 const DEFAULT_FORM = {
   nome: '', email: '', telefone: '', funcao: '', setor: '',
   data_admissao: '', data_demissao: '', data_nascimento: '',
-  salario_base: '', limite_vales: '', ativo: true, foto: '',
+  salario_base: '', ajuda_custo: '', limite_vales: '', ativo: true, foto: '',
   apto_comissao: false, data_inicio_comissao: '',
   // Documentos
   cpf: '', rg: '', rg_orgao: '', rg_uf: '', ctps: '', ctps_serie: '',
@@ -95,6 +95,11 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
     queryFn: () => client.entities.Funcao.list(),
   });
 
+  const { data: setoresComissao = [] } = useQuery({
+    queryKey: ['setores_comissao_form'],
+    queryFn: () => client.entities.SetoresComissao.filter({ ativo: true }),
+  });
+
   const comissaoAtivaByData = form.data_inicio_comissao && form.data_inicio_comissao <= hojeStr;
   const [limiteEditado, setLimiteEditado] = useState(false);
 
@@ -147,7 +152,8 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
   }, [lancamentosUso]);
 
   const salarioBaseCalc = Number(form.salario_base) || 0;
-  const baseCalculoLimite = salarioBaseCalc + comissaoUltimoMes;
+  const ajudaCustoCalc = Number(form.ajuda_custo) || 0;
+  const baseCalculoLimite = salarioBaseCalc + ajudaCustoCalc + comissaoUltimoMes;
   const limiteCalculado = baseCalculoLimite * (LIMITE_PERCENTUAL / 100);
 
   useEffect(() => {
@@ -210,6 +216,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
   const normalizeData = (d) => ({
     ...d,
     salario_base: d.salario_base ? Number(d.salario_base) : null,
+    ajuda_custo: d.ajuda_custo ? Number(d.ajuda_custo) : null,
     limite_vales: d.limite_vales ? Number(d.limite_vales) : null,
     ativo: d.data_demissao ? false : d.ativo,
     vale_transporte_valor: d.vale_transporte_valor ? Number(d.vale_transporte_valor) : null,
@@ -422,18 +429,26 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         </div>
         <div>
           <Label>Setor</Label>
-          {setores.length > 0 ? (
-            <Select value={form.setor || ''} onValueChange={v => handleChange('setor', v)}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {setores.filter(s => s.ativo !== false).map(s => (
-                  <SelectItem key={s.id} value={s.nome}>{s.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Input value={form.setor || ''} onChange={e => handleChange('setor', e.target.value)} placeholder="Ex: Produção" />
-          )}
+          {(() => {
+            const opcoesSetores = [
+              ...new Set([
+                ...setores.filter(s => s.ativo !== false).map(s => s.nome),
+                ...setoresComissao.map(s => s.nome_do_setor),
+              ]),
+            ];
+            return opcoesSetores.length > 0 ? (
+              <Select value={form.setor || ''} onValueChange={v => handleChange('setor', v)}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {opcoesSetores.map(nome => (
+                    <SelectItem key={nome} value={nome}>{nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input value={form.setor || ''} onChange={e => handleChange('setor', e.target.value)} placeholder="Ex: Produção" />
+            );
+          })()}
         </div>
       </div>
 
@@ -492,11 +507,15 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <Label>Salário Base *</Label>
           <Input type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => { setLimiteEditado(false); handleChange('salario_base', e.target.value); }} placeholder="0,00" required />
           {errors.salario_base && <p className="text-xs text-destructive mt-1">{errors.salario_base}</p>}
+        </div>
+        <div>
+          <Label>Ajuda de Custo</Label>
+          <Input type="number" step="0.01" min="0" value={form.ajuda_custo || ''} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" />
         </div>
         <div>
           <Label>Limite de Vales ({LIMITE_PERCENTUAL}%)</Label>
@@ -511,15 +530,18 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
             Cálculo do Limite de Vales ({LIMITE_PERCENTUAL}%)
           </div>
           <div className="text-xs text-blue-600 space-y-1">
-            <p>
-              Salário base: <strong>{formatCurrency(salarioBaseCalc)}</strong>
-              {ultimoFechamento && (
-                <> + Comissão ({ultimoFechamento.mes_referencia}): <strong>{formatCurrency(comissaoUltimoMes)}</strong></>
-              )}
-              {!ultimoFechamento && isEdit && (
-                <> + Comissão: <strong>R$ 0,00</strong> <span className="text-blue-400">(sem fechamento anterior)</span></>
-              )}
-            </p>
+                <p>
+                  Salário base: <strong>{formatCurrency(salarioBaseCalc)}</strong>
+                  {ajudaCustoCalc > 0 && (
+                    <> + Ajuda de custo: <strong>{formatCurrency(ajudaCustoCalc)}</strong></>
+                  )}
+                  {ultimoFechamento && (
+                    <> + Comissão ({ultimoFechamento.mes_referencia}): <strong>{formatCurrency(comissaoUltimoMes)}</strong></>
+                  )}
+                  {!ultimoFechamento && isEdit && (
+                    <> + Comissão: <strong>R$ 0,00</strong> <span className="text-blue-400">(sem fechamento anterior)</span></>
+                  )}
+                </p>
             <p>
               Base de cálculo: <strong>{formatCurrency(baseCalculoLimite)}</strong>
               {' × '}{LIMITE_PERCENTUAL}% = <strong className="text-blue-800">{formatCurrency(limiteCalculado)}</strong>

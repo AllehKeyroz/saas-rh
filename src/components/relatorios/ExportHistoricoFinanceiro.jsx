@@ -48,8 +48,8 @@ export default function ExportHistoricoFinanceiro({ funcionario, lancamentos, fe
 
       doc.setFontSize(9);
       doc.setFont(undefined, 'normal');
-      const colWidths = [30, 30, 30, 30, 30];
-      const headers = ['Mês Ref.', 'Sal. Base', 'Descontos', 'Adicionais', 'Sal. Líquido'];
+      const colWidths = [30, 30, 30, 30, 30, 30];
+      const headers = ['Mês Ref.', 'Sal. Base', 'Ajuda Custo', 'Descontos', 'Adicionais', 'Sal. Líquido'];
       let xPos = 20;
 
       headers.forEach((header, idx) => {
@@ -72,10 +72,13 @@ export default function ExportHistoricoFinanceiro({ funcionario, lancamentos, fe
         xPos += colWidths[0];
         doc.text(formatCurrency(fech.salario_base), xPos, yPos);
         xPos += colWidths[1];
-        doc.text(formatCurrency(fech.total_descontos), xPos, yPos);
+        const ajudaCustoVal = (funcionario.ajuda_custo || 0);
+        doc.text(formatCurrency(ajudaCustoVal), xPos, yPos);
         xPos += colWidths[2];
-        doc.text(formatCurrency(fech.total_adicionais), xPos, yPos);
+        doc.text(formatCurrency(fech.total_descontos), xPos, yPos);
         xPos += colWidths[3];
+        doc.text(formatCurrency(fech.total_adicionais), xPos, yPos);
+        xPos += colWidths[4];
         doc.setFont(undefined, 'bold');
         doc.text(formatCurrency(fech.salario_liquido), xPos, yPos);
         doc.setFont(undefined, 'normal');
@@ -147,8 +150,8 @@ export default function ExportHistoricoFinanceiro({ funcionario, lancamentos, fe
         ['Função:', funcionario.funcao || 'N/A'],
         ['Setor:', funcionario.setor || 'N/A'],
         [],
-        ['Mês Ref.', 'Salário Base', 'Descontos', 'Adicionais', 'Salário Líquido'],
-        ...funcFech.map(f => [f.mes_referencia, f.salario_base, f.total_descontos, f.total_adicionais, f.salario_liquido]),
+        ['Mês Ref.', 'Salário Base', 'Ajuda Custo', 'Descontos', 'Adicionais', 'Salário Líquido'],
+        ...funcFech.map(f => [f.mes_referencia, f.salario_base, funcionario.ajuda_custo || 0, f.total_descontos, f.total_adicionais, f.salario_liquido]),
       ];
 
       // Aba 2: Lançamentos

@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/formatters';
-import { SETOR_LABELS, formatPeriodo } from '@/lib/comissoes';
+import { formatPeriodo } from '@/lib/comissoes';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { AlertTriangle, RefreshCw, Trash2, Users, Loader2, Edit2 } from 'lucide-react';
 import { client } from '@/api/client';
@@ -117,27 +117,18 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
             <div className="bg-red-50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Excluídos</p><p className="text-lg font-bold text-red-700">{excluidos.length}</p></div>
           </div>
 
-          {/* Divisão setores */}
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {[
-              { k: 'valor_empresa', label: 'Empresa (20%)', v: comissao.valor_empresa },
-              { k: 'valor_salao', label: 'Salão (40%)', v: comissao.valor_salao },
-              { k: 'valor_cozinha', label: 'Cozinha (24%)', v: comissao.valor_cozinha },
-              { k: 'valor_copa_playground_caixa', label: 'Copa/PG/Cx (14%)', v: comissao.valor_copa_playground_caixa },
-              { k: 'valor_limpeza_rh', label: 'Limpeza/RH (2%)', v: comissao.valor_limpeza_rh },
-            ].map(({ k, label, v }) => (
-              <div key={k} className="bg-muted/30 rounded-lg px-3 py-2">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="font-semibold">{formatCurrency(v || 0)}</p>
-              </div>
-            ))}
-          </div>
+          {comissao.valor_empresa > 0 && (
+            <div className="bg-slate-100 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-600">Retido (Empresa){comissao.percentual_retencao ? ` — ${comissao.percentual_retencao}%` : ''}</span>
+              <span className="font-bold text-slate-500">{formatCurrency(comissao.valor_empresa)}</span>
+            </div>
+          )}
 
           {/* Por setor */}
           {Object.entries(porSetor).map(([setor, { aptos: a, excluidos: e, valorSetor }]) => (
             <div key={setor} className="border rounded-xl p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-sm flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />{SETOR_LABELS[setor] || setor}</span>
+                <span className="font-medium text-sm flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />{setor}</span>
                 <span className="text-xs text-muted-foreground">{formatCurrency(valorSetor)}</span>
               </div>
               {a.map(r => (
@@ -203,11 +194,5 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
 }
 
 function normalizarSetorKey(setor) {
-  if (!setor) return 'outros';
-  const s = setor.toLowerCase();
-  if (s.includes('salão') || s.includes('salao') || s.includes('garçom') || s.includes('atendimento')) return 'salao';
-  if (s.includes('cozinha')) return 'cozinha';
-  if (s.includes('copa') || s.includes('playground') || s.includes('caixa')) return 'copa_playground_caixa';
-  if (s.includes('limpeza') || s.includes('rh')) return 'limpeza_rh';
-  return setor;
+  return setor || 'outros';
 }

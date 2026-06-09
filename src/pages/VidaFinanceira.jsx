@@ -147,7 +147,7 @@ export default function VidaFinanceira() {
         {funcionario && tab === 'dashboard' && (
           <DashboardFinanceiro
             funcionarioId={funcionario.id}
-            salarioBase={funcionario.salario_base || 0}
+            salarioBase={(funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0)}
             lancamentosRH={lancamentosRH}
           />
         )}
@@ -155,17 +155,17 @@ export default function VidaFinanceira() {
           <MeusGastos funcionarioId={funcionario.id} />
         )}
         {funcionario && tab === 'assinaturas' && (
-          <MinhasAssinaturas funcionarioId={funcionario.id} salarioBase={funcionario.salario_base || 0} />
+          <MinhasAssinaturas funcionarioId={funcionario.id} salarioBase={(funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0)} />
         )}
         {funcionario && tab === 'dividas' && (
-          <MinhasDividas funcionarioId={funcionario.id} salarioBase={funcionario.salario_base || 0} />
+          <MinhasDividas funcionarioId={funcionario.id} salarioBase={(funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0)} />
         )}
         {funcionario && tab === 'metas' && (
           <div className="space-y-6">
             <MetasObjetivos funcionarioId={funcionario.id} />
             <div className="border-t pt-4">
               <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wide">Meta de Economia Mensal</p>
-              <MinhasMetas funcionarioId={funcionario.id} salarioBase={funcionario.salario_base} />
+              <MinhasMetas funcionarioId={funcionario.id} salarioBase={(funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0)} />
             </div>
           </div>
         )}

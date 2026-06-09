@@ -3,7 +3,7 @@ import { client } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard, User, LogOut, Menu, X, MessageSquare, ClipboardList, PenLine,
-  DollarSign, Wallet, FileText, BarChart2, Award, Target
+  DollarSign, Wallet, FileText, BarChart2, Award, Target, FolderOpen
 } from 'lucide-react';
 import { useRHControl } from '@/lib/rhControl';
 
@@ -13,6 +13,7 @@ const ALL_NAV_ITEMS = [
   { id: 'meu-salario',        label: 'Meu Salário',          icon: DollarSign, always: true },
   { id: 'meus-vales',         label: 'Meus Vales',           icon: Wallet, always: true },
   { id: 'extrato',            label: 'Extrato Mensal',        icon: FileText, always: true },
+  { id: 'meus-documentos',    label: 'Meus Documentos',      icon: FolderOpen, always: true },
   { id: 'vida-financeira',    label: 'Minha Vida Financeira', icon: BarChart2, always: true },
   { id: 'comissoes',          label: 'Minhas Comissões',      icon: Award, always: true },
   { id: 'metas',              label: 'Minhas Metas',          icon: Target, always: true },

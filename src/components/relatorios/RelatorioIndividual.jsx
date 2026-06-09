@@ -44,7 +44,7 @@ export default function RelatorioIndividual({ funcionario, lancamentos, fechamen
                 {funcionario.funcao || 'Sem função'} • {funcionario.setor || 'Sem setor'}
               </p>
               <p className="text-sm text-muted-foreground">
-                Salário base: {formatCurrency(funcionario.salario_base || 0)} •
+                Salário base: {formatCurrency(funcionario.salario_base || 0)}{funcionario.ajuda_custo > 0 ? ` + Ajuda de Custo: ${formatCurrency(funcionario.ajuda_custo)}` : ''} •
                 Limite vales: {funcionario.limite_vales != null ? formatCurrency(funcionario.limite_vales) : 'Sem limite'}
               </p>
             </div>

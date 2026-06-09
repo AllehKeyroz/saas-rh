@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Upload, Download, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react';
 
-const COLUNAS = ['nome', 'email', 'telefone', 'funcao', 'setor', 'data_admissao', 'data_nascimento', 'salario_base', 'limite_vales'];
+const COLUNAS = ['nome', 'email', 'telefone', 'funcao', 'setor', 'data_admissao', 'data_nascimento', 'salario_base', 'ajuda_custo', 'limite_vales'];
 
 function parseCSV(text) {
   const lines = text.trim().split('\n').map(l => l.replace(/\r/g, ''));
@@ -31,6 +31,7 @@ function rowToFuncionario(row) {
     data_admissao: row.data_admissao || '',
     data_nascimento: row.data_nascimento || '',
     salario_base: row.salario_base ? Number(row.salario_base.replace(',', '.')) : null,
+    ajuda_custo: row.ajuda_custo ? Number(row.ajuda_custo.replace(',', '.')) : null,
     limite_vales: row.limite_vales ? Number(row.limite_vales.replace(',', '.')) : null,
     ativo: true,
   };

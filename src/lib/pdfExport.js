@@ -125,17 +125,20 @@ export async function exportDemonstrativoPDF(funcionario, lancamentos, fechament
     const boxX = pageWidth - 90;
     doc.setTextColor(...GRAY);
     doc.setFontSize(8);
-    doc.text('Salário Base', boxX, y + 8);
-    doc.text('Descontos', boxX + 30, y + 8);
-    doc.text('Líquido', boxX + 60, y + 8);
+    doc.text('Salário Base', boxX, y + 4);
+    doc.text('Ajuda Custo', boxX + 30, y + 4);
+    doc.text('Descontos', boxX + 60, y + 4);
+    doc.text('Líquido', boxX + 90, y + 4);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...BLACK);
-    doc.text(formatCurrency(fechMes.salario_base), boxX, y + 14);
+    doc.text(formatCurrency(fechMes.salario_base), boxX, y + 11);
+    doc.setTextColor(...BLUE);
+    doc.text(formatCurrency(funcionario.ajuda_custo || 0), boxX + 30, y + 11);
     doc.setTextColor(...RED);
-    doc.text(formatCurrency(fechMes.total_descontos), boxX + 30, y + 14);
+    doc.text(formatCurrency(fechMes.total_descontos), boxX + 60, y + 11);
     doc.setTextColor(...GREEN);
-    doc.text(formatCurrency(fechMes.salario_liquido), boxX + 60, y + 14);
+    doc.text(formatCurrency(fechMes.salario_liquido), boxX + 90, y + 11);
   }
   doc.setTextColor(...BLACK);
 

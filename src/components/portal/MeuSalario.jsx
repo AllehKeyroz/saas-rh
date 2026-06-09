@@ -44,7 +44,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
      const descontos = lancs.filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
      const adicionais = lancs.filter(l => ['adicional', 'ajuste'].includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
      const comissao = calcularComissaoMensal(comissoesFuncionarios, funcionario?.id, mes);
-     const liquido = (funcionario?.salario_base || 0) + comissao + adicionais - descontos;
+      const liquido = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) + comissao + adicionais - descontos;
      return { descontos, adicionais, comissao, liquido };
    }
 
@@ -54,7 +54,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
    const mesPosterior = indiceAtual > 0 ? mesesIndice[indiceAtual - 1] : null;
    const comissaoMesAnterior = mesPosterior ? calcularComissaoMensal(comissoesFuncionarios, funcionario?.id, mesPosterior) : 0;
 
-   const limite40 = funcionario?.salario_base ? funcionario.salario_base * 0.4 : null;
+   const limite40 = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) ? ((funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)) * 0.4 : null;
    const percentualDesconto = limite40 ? (dadosMes.descontos / limite40) * 100 : null;
 
    // Dados para gráfico de comissão evolutiva
@@ -74,16 +74,18 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         <>
           <ResumoSalarioCard 
             label="Salário Médio (Contrato + Última Comissão)" 
-            valor={(funcionario?.salario_base || 0) + comissaoMesAnterior}
-            salarioBase={funcionario?.salario_base || 0}
+            valor={(funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) + comissaoMesAnterior}
+            salarioBase={(funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)}
             comissao={comissaoMesAnterior}
+            ajudaCusto={funcionario?.ajuda_custo || 0}
             tipo="medio"
           />
           <ResumoSalarioCard 
             label="Salário Referente ao Mês Corrente" 
-            valor={(funcionario?.salario_base || 0) + dadosMes.comissao}
-            salarioBase={funcionario?.salario_base || 0}
+            valor={(funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) + dadosMes.comissao}
+            salarioBase={(funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)}
             comissao={dadosMes.comissao}
+            ajudaCusto={funcionario?.ajuda_custo || 0}
             tipo="corrente"
           />
         </>
@@ -97,6 +99,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
           </CardHeader>
           <CardContent>
             <StatRow label="Salário base" value={formatCurrency(funcionario?.salario_base)} colorClass="text-foreground" bold />
+            {funcionario?.ajuda_custo > 0 && <StatRow label="Ajuda de Custo" value={`+ ${formatCurrency(funcionario.ajuda_custo)}`} colorClass="text-blue-600" />}
           </CardContent>
         </Card>
       )}
@@ -111,6 +114,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         </CardHeader>
         <CardContent>
           <StatRow label="Salário base" value={formatCurrency(funcionario?.salario_base)} colorClass="text-foreground" />
+          {funcionario?.ajuda_custo > 0 && <StatRow label="Ajuda de Custo" value={`+ ${formatCurrency(funcionario.ajuda_custo)}`} colorClass="text-blue-600" />}
           {dadosMes.comissao > 0 && (
             <StatRow label="Comissão do mês" value={formatCurrency(dadosMes.comissao)} colorClass="text-green-600" />
           )}
