@@ -86,7 +86,7 @@ export default function RelatorioLeituraDetalhado() {
                         <span className="text-sm font-medium text-green-700">✅ Lido ({lidas.length}/{todasDisp.length})</span>
                       </div>
                       <div className="space-y-2">
-                        {lidas.map(f => {
+                        {lidas.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => {
                           const leitura = leituras.find(l => l.funcionario_id === f.id);
                           return (
                             <div key={f.id} className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
@@ -119,7 +119,7 @@ export default function RelatorioLeituraDetalhado() {
                         <span className="text-sm font-medium text-orange-700">⏳ Pendente ({naoLidas.length}/{todasDisp.length})</span>
                       </div>
                       <div className="space-y-2">
-                        {naoLidas.map(f => (
+                        {naoLidas.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => (
                           <div key={f.id} className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                             <p className="text-sm font-medium text-orange-900">{f.nome}</p>
                             <p className="text-xs text-orange-700 mt-1">Aguardando confirmação</p>

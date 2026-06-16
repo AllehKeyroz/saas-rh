@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Pencil, User, Briefcase, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle } from 'lucide-react';
+import { Plus, Search, Pencil, User, Briefcase, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle, Trash2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';

@@ -227,6 +227,7 @@ export default function RelatorioLeitura() {
                               return false;
                             })
                             .filter(f => !info.leituras.some(l => l.funcionario_id === f.id))
+                            .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
                             .map(f => (
                               <div 
                                 key={f.id}

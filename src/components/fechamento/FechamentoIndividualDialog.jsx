@@ -43,7 +43,7 @@ export default function FechamentoIndividualDialog({ open, onClose, funcionarios
                 <SelectValue placeholder="Selecione o funcionário..." />
               </SelectTrigger>
               <SelectContent>
-                {funcionarios.map(f => (
+                {[...funcionarios].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => (
                   <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
                 ))}
               </SelectContent>

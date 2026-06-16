@@ -105,7 +105,7 @@ export default function Fechamento() {
     return d.getMonth() === mes && d.getFullYear() === ano;
   });
 
-  const ativos = funcionarios.filter(f => f.ativo !== false);
+  const ativos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   const fechamentosMes = fechamentos.filter(f => f.mes_referencia === mesRef);
   const fechadosIds = new Set(fechamentosMes.map(f => f.funcionario_id));
 

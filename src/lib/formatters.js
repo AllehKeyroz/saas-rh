@@ -5,8 +5,19 @@ export function formatCurrency(value) {
 
 export function formatDate(dateStr) {
   if (!dateStr) return '-';
+  // Extrai partes para evitar interpretação como UTC (que desloca um dia em TZ diferente)
+  const parts = dateStr.split(/[-\/]/);
+  if (parts.length === 3 && dateStr.includes('-')) {
+    const [y, m, d] = parts.map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('pt-BR');
+  }
+  if (parts.length === 3 && dateStr.includes('/')) {
+    // Já está no formato dd/MM/yyyy ou MM/yyyy
+    return dateStr;
+  }
+  // Fallback para outros formatos
   const d = new Date(dateStr);
-  return d.toLocaleDateString('pt-BR');
+  return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('pt-BR');
 }
 
 export const TIPO_LABELS = {

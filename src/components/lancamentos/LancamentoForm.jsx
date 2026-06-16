@@ -110,7 +110,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
         const dataParcela = new Date(dataBase.getFullYear(), dataBase.getMonth() + i, dataBase.getDate());
         const dataStr = dataParcela.toISOString().split('T')[0];
         const descricao = `${form.descricao ? form.descricao + ' — ' : ''}Parcela ${i + 1}/${numParcelas}`;
-        const payload = { ...form, valor: valorParcela, data_lancamento: dataStr, descricao, funcionario_nome: func?.nome || '' };
+        const payload = { ...form, tipo_lancamento: 'vale_parcelado', valor: valorParcela, data_lancamento: dataStr, descricao, funcionario_nome: func?.nome || '' };
         const criado = await client.entities.FichaFinanceira.create(payload);
         await registrarAuditoria({
           acao: 'criar', modulo: 'lancamento', entidade_id: criado?.id,
@@ -133,7 +133,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     onClose();
   };
 
-  const ativosOnly = funcionarios.filter(f => f.ativo !== false && !f.data_demissao);
+  const ativosOnly = funcionarios.filter(f => f.ativo !== false && !f.data_demissao).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   // Separar tipos em grupos para o select
   const tiposDescontos = TIPOS_DESCONTO_FORM;
@@ -243,7 +243,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[2,3,4,5,6,8,10,12].map(n => (
+                            {[2,3,4,5,6,7,8,9,10,11,12].map(n => (
                               <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
                             ))}
                           </SelectContent>

@@ -42,7 +42,7 @@ export default function PainelValesCard({ funcionarios, lancamentos, mesAtual })
       label: 'Limite esgotado (≥ 100%)',
       count: atingiram100.length,
       badgeVariant: 'destructive',
-      names: atingiram100.map(f => f.nome),
+      names: atingiram100.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => f.nome),
     },
     {
       icon: AlertTriangle,
@@ -51,7 +51,7 @@ export default function PainelValesCard({ funcionarios, lancamentos, mesAtual })
       label: 'Alerta (≥ 80%)',
       count: atingiram80.length,
       badgeVariant: 'outline',
-      names: atingiram80.map(f => f.nome),
+      names: atingiram80.sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => f.nome),
     },
     {
       icon: CheckCircle,

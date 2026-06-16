@@ -171,7 +171,7 @@ export default function ConfigurarMetasComissao({ funcionarios = [], comissoesFu
                 <Select value={form.funcionario_id} onValueChange={v => setForm(f => ({ ...f, funcionario_id: v }))}>
                   <SelectTrigger className="h-8"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
-                    {funcionarios.filter(f => f.ativo !== false).map(f => (
+                    {funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => (
                       <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
                     ))}
                   </SelectContent>

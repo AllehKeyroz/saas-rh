@@ -259,7 +259,7 @@ export default function EnviarDocumentoDialog({ open, onClose, funcionarios, onS
             <Select value={form.funcionario_id} onValueChange={v => setForm(p => ({ ...p, funcionario_id: v }))}>
               <SelectTrigger><SelectValue placeholder="Selecione o funcionário..." /></SelectTrigger>
               <SelectContent>
-                {funcionarios.map(f => (
+                {[...funcionarios].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => (
                   <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
                 ))}
               </SelectContent>

@@ -13,7 +13,8 @@ export default function AniversariantesCard({ funcionarios }) {
   const aniversariantes = funcionarios
     .filter(f => f.ativo !== false && !f.data_demissao && f.data_nascimento)
     .map(f => {
-      const nasc = new Date(f.data_nascimento);
+      const [y, m, d] = f.data_nascimento.split('-').map(Number);
+      const nasc = new Date(y, m - 1, d);
       return { ...f, diaNasc: nasc.getDate(), mesNasc: nasc.getMonth() };
     })
     .filter(f => f.mesNasc === mesAtual)

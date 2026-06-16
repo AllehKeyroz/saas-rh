@@ -66,7 +66,7 @@ export default function EspelhoPortal() {
   });
 
   const funcionario = funcionarios.find(f => f.id === funcionarioId);
-  const funcionariosAtivos = funcionarios.filter(f => f.ativo !== false);
+  const funcionariosAtivos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   const lancamentosFunc = lancamentos.filter(l => l.funcionario_id === funcionarioId);
   const lancamentosMes = lancamentosFunc.filter(l => {

@@ -15,11 +15,12 @@ import DetalhesFuncionarioModal from '@/components/lancamentos/DetalhesFuncionar
 import ImportarLancamentos from '@/components/importacao/ImportarLancamentos';
 
 const TIPOS_NAVBAR = [
-  { key: 'todos',     label: 'Todos',         icon: List },
-  { key: 'consignado', label: 'Consignados',   icon: TrendingUp, tipo: 'credito_consignado' },
-  { key: 'convenio',   label: 'Convênios',     icon: Wallet,     tipo: 'convenio' },
-  { key: 'consumo',    label: 'Consumo',       icon: DollarSign, tipo: 'consumo' },
-  { key: 'vale_parcelado', label: 'Vales Parcelados', icon: Clock, tipo: 'vale_parcelado' },
+  { key: 'todos',          label: 'Todos',           icon: List,        tipo: null },
+  { key: 'vale',           label: 'Vales',           icon: DollarSign,  tipo: 'vale' },
+  { key: 'vale_parcelado', label: 'Vales Parcelados', icon: Clock,      tipo: 'vale_parcelado' },
+  { key: 'consignado',     label: 'Consignados',     icon: TrendingUp,  tipo: 'credito_consignado' },
+  { key: 'convenio',       label: 'Convênios',       icon: Wallet,      tipo: 'convenio' },
+  { key: 'consumo',        label: 'Consumo',         icon: FileText,    tipo: 'consumo' },
 ];
 
 export default function Lancamentos() {
@@ -57,6 +58,7 @@ export default function Lancamentos() {
 
   const ativos = funcionarios.filter(f => f.ativo !== false && !f.data_demissao);
   const resumo = ativos
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
     .map(func => {
       const fl = lancamentosMes.filter(l => l.funcionario_id === func.id);
       const totalDescontos = fl.filter(l => TIPOS_DESCONTO.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
@@ -120,7 +122,7 @@ export default function Lancamentos() {
             <Select value={mesFiltro} onValueChange={setMesFiltro}>
               <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {getMesesOptions().map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                {getMesesOptions(12).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

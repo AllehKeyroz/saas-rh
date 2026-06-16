@@ -167,6 +167,7 @@ function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved 
               <SelectContent>
                 {funcionarios
                   .filter(f => !f.data_demissao && f.ativo !== false)
+                  .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
                   .map(f => (
                     <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
                   ))}

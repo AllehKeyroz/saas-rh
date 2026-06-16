@@ -49,7 +49,7 @@ const DEFAULT_FORM = {
   bairro: '', cidade: '', uf: '',
   // Dados bancários
   banco: '', agencia: '', agencia_dv: '', conta: '', conta_dv: '', tipo_conta: '',
-  chave_pix: '',
+  chave_pix: '', chave_pix_tipo: 'cpf',
   // Dependentes
   dependentes: [],
   historico_contratos: [],
@@ -717,7 +717,23 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
           </Select>
         </div>
       </div>
-      <div><Label>Chave PIX</Label><Input value={form.chave_pix || ''} onChange={e => handleChange('chave_pix', e.target.value)} placeholder="CPF, email, telefone ou chave aleatória" /></div>
+      <div className="grid grid-cols-4 gap-3">
+        <div className="col-span-1">
+          <Label>Tipo</Label>
+          <Select value={form.chave_pix_tipo || 'cpf'} onValueChange={v => handleChange('chave_pix_tipo', v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[{v:'cpf',l:'CPF'},{v:'email',l:'E-mail'},{v:'telefone',l:'Telefone'},{v:'aleatoria',l:'Aleatória'},{v:'cnpj',l:'CNPJ'}].map(o => (
+                <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="col-span-3">
+          <Label>Chave PIX</Label>
+          <Input value={form.chave_pix || ''} onChange={e => handleChange('chave_pix', e.target.value)} placeholder="Digite a chave" />
+        </div>
+      </div>
     </div>
   );
 

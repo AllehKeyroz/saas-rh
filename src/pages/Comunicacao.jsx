@@ -168,7 +168,7 @@ export default function Comunicacao() {
                     <Select value={form.funcionario_id_alvo} onValueChange={v => setForm(p => ({ ...p, funcionario_id_alvo: v }))}>
                       <SelectTrigger><SelectValue placeholder="Selecione o funcionário" /></SelectTrigger>
                       <SelectContent>
-                        {funcionarios.filter(f => f.ativo !== false).map(f => (
+                        {funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => (
                           <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
                         ))}
                       </SelectContent>
@@ -275,12 +275,14 @@ export default function Comunicacao() {
               {(() => {
                 const lidas = mensagemSelecionada.lidas_por || [];
                 const leituras = mensagemSelecionada.leituras || [];
-                const todasDisp = funcionarios.filter(f => {
-                  if (mensagemSelecionada.publico_alvo === 'todos') return f.ativo !== false;
-                  if (mensagemSelecionada.publico_alvo === 'setor') return f.setor === mensagemSelecionada.setor_alvo && f.ativo !== false;
-                  if (mensagemSelecionada.publico_alvo === 'funcionario') return f.id === mensagemSelecionada.funcionario_id_alvo;
-                  return false;
-                });
+                const todasDisp = funcionarios
+                  .filter(f => {
+                    if (mensagemSelecionada.publico_alvo === 'todos') return f.ativo !== false;
+                    if (mensagemSelecionada.publico_alvo === 'setor') return f.setor === mensagemSelecionada.setor_alvo && f.ativo !== false;
+                    if (mensagemSelecionada.publico_alvo === 'funcionario') return f.id === mensagemSelecionada.funcionario_id_alvo;
+                    return false;
+                  })
+                  .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
                 const naoLidas = todasDisp.filter(f => !lidas.includes(f.id));
                 const getLeitura = (funcId) => leituras.find(l => l.funcionario_id === funcId);
 

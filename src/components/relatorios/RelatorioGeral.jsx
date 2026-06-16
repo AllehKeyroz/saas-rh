@@ -6,7 +6,7 @@ import DrilldownModal from './DrilldownModal';
 
 export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios, mesRef }) {
   const [drilldown, setDrilldown] = useState(null); // { titulo, lancamentos }
-  const ativos = funcionarios.filter(f => f.ativo !== false);
+  const ativos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   const [mesNum, anoStr] = mesRef.split('/');
   const mes = parseInt(mesNum) - 1;
   const ano = parseInt(anoStr);

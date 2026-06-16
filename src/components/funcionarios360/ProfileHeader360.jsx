@@ -73,7 +73,7 @@ export default function ProfileHeader360({ funcionario }) {
           <div className="bg-white/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground mb-1">Admissão</p>
             <p className="text-sm font-semibold text-foreground">
-              {new Date(funcionario.data_admissao).toLocaleDateString('pt-BR')}
+              {funcionario.data_admissao ? (() => { const [y,m,d] = funcionario.data_admissao.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('pt-BR'); })() : '-'}
             </p>
           </div>
           <div className="bg-white/50 rounded-lg p-3">
