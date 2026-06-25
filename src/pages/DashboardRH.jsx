@@ -1,19 +1,21 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import StatisticsGrid from '@/components/dashboard-rh/StatisticsGrid';
-import QuickActions from '@/components/dashboard-rh/QuickActions';
 import AlertBanner from '@/components/dashboard-rh/AlertBanner';
 import IndicadoresFinanceiros from '@/components/dashboard-rh/IndicadoresFinanceiros';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
-
-const TIPOS_DESCONTO = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+import { User, ExternalLink, CalendarDays } from 'lucide-react';
+import { formatDate } from '@/lib/formatters';
+import { mergeTipos } from '@/lib/formatters';
 
 export default function DashboardRH() {
   const navigate = useNavigate();
+  const [feriasModalOpen, setFeriasModalOpen] = useState(false);
   const { data: funcionarios, isLoading: loadingFuncionarios } = useQuery({
     queryKey: ['funcionarios'],
     queryFn: () => client.entities.Funcionarios.list(),
@@ -48,6 +50,13 @@ export default function DashboardRH() {
     queryKey: ['ferias_dashboard'],
     queryFn: () => client.entities.Ferias.list(),
   });
+
+  const { data: tiposLancamento = [] } = useQuery({
+    queryKey: ['tipos-lancamento-rh'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
+  const descontosList = useMemo(() => mergeTipos(tiposLancamento, 'desconto'), [tiposLancamento]);
 
   const stats = React.useMemo(() => {
     if (!funcionarios) return {};
@@ -84,10 +93,19 @@ export default function DashboardRH() {
       const d = new Date(l.data_lancamento);
       return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` === mesAtual;
     });
-    const vales = lancamentosMes.filter(l => TIPOS_DESCONTO.includes(l.tipo_lancamento));
+    const vales = lancamentosMes.filter(l => descontosList.includes(l.tipo_lancamento));
     const valesMes = vales.reduce((s, l) => s + (l.valor || 0), 0);
-    const consignados = (lancamentos || []).filter(l => l.tipo_lancamento === 'credito_consignado');
-    const funcionariosConsignados = new Set(consignados.map(l => l.funcionario_id)).size;
+    // Funcionários em férias agora
+    const agora = new Date();
+    const feriadosAtivos = (todasFerias || []).filter(fc => {
+      if (!fc.data_inicio || !fc.data_fim) return false;
+      const inicio = new Date(fc.data_inicio);
+      const fim = new Date(fc.data_fim);
+      return inicio <= agora && fim >= agora;
+    });
+    const funcIdsFerias = new Set(feriadosAtivos.map(fc => fc.funcionario_id));
+    const funcionariosFeriasList = (funcionarios || []).filter(f => funcIdsFerias.has(f.id));
+    const funcionariosFerias = funcionariosFeriasList.length;
 
     const docsVencendo = (assinaturas || []).filter(a => {
       if (a.status !== 'aguardando' || !a.data_expiracao) return false;
@@ -102,8 +120,8 @@ export default function DashboardRH() {
       .filter(c => c.mes_referencia === mesAtual && c.status === 'confirmado')
       .reduce((s, c) => s + (c.valor_total_periodo || 0), 0);
 
-    return { funcionariosAtivos: ativas, solicitacoesPendentes: pendentes, feriasVencidas, docsVencendo, valesMes, consignadosAtivos: funcionariosConsignados, custoFolha, comissaoTotal };
-  }, [funcionarios, solicitacoes, lancamentos, assinaturas, comissoes, fechamentos, todasFerias]);
+    return { funcionariosAtivos: ativas, solicitacoesPendentes: pendentes, feriasVencidas, docsVencendo, valesMes, custoFolha, comissaoTotal, funcionariosFerias, funcionariosFeriasList };
+  }, [funcionarios, solicitacoes, lancamentos, assinaturas, comissoes, fechamentos, todasFerias, descontosList, funcionarios]);
 
   const alerts = React.useMemo(() => {
     const result = [];
@@ -161,9 +179,8 @@ export default function DashboardRH() {
   return (
     <div className="space-y-6">
       <AlertBanner alerts={alerts} />
-      <StatisticsGrid stats={stats} />
+      <StatisticsGrid stats={stats} onFeriasClick={() => setFeriasModalOpen(true)} />
       <IndicadoresFinanceiros />
-      <QuickActions />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <Card>
@@ -229,6 +246,47 @@ export default function DashboardRH() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={feriasModalOpen} onOpenChange={setFeriasModalOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-primary" />
+              Funcionários em Férias
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {!stats.funcionariosFeriasList?.length ? (
+              <p className="text-center py-8 text-muted-foreground">Nenhum funcionário em período de férias no momento.</p>
+            ) : (
+              stats.funcionariosFeriasList.map(func => {
+                const feriasAtual = (todasFerias || []).find(fc =>
+                  fc.funcionario_id === func.id &&
+                  fc.data_inicio && fc.data_fim &&
+                  new Date(fc.data_inicio) <= new Date() &&
+                  new Date(fc.data_fim) >= new Date()
+                );
+                return (
+                  <div key={func.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                      {func.foto ? <img src={func.foto} alt="" className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <a href={`/funcionarios/${func.id}/360`} target="_blank" rel="noopener noreferrer" className="font-medium text-sm hover:text-primary transition-colors flex items-center gap-1">
+                        {func.nome}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <p className="text-xs text-muted-foreground">
+                        {func.funcao || func.setor || '—'} • {feriasAtual ? `${formatDate(feriasAtual.data_inicio)} → ${formatDate(feriasAtual.data_fim)}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -10,11 +10,19 @@ export default function ClickableStatsCard({
   color = 'blue',
   route,
   tooltip,
-  loading = false
+  loading = false,
+  onClick
 }) {
   const Icon = icon;
   const [isPressed, setIsPressed] = useState(false);
   const navigate = useNavigate();
+
+  const handleClick = () => {
+    if (onClick) { onClick(); return; }
+    if (route) {
+      navigate(route);
+    }
+  };
 
   const colorClasses = {
     blue: 'bg-primary/10 text-primary border-primary/30',
@@ -32,12 +40,6 @@ export default function ClickableStatsCard({
     purple: 'bg-chart-4/10',
     orange: 'bg-accent/10',
     pink: 'bg-warning/10',
-  };
-
-  const handleClick = () => {
-    if (route) {
-      navigate(route);
-    }
   };
 
   const handleMouseDown = () => setIsPressed(true);
@@ -71,7 +73,7 @@ export default function ClickableStatsCard({
           <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-              <p className="text-3xl font-bold text-foreground">
+              <p className="text-2xl font-bold text-foreground text-nowrap overflow-hidden text-ellipsis" title={value}>
                 {loading ? '...' : value}
               </p>
             </div>

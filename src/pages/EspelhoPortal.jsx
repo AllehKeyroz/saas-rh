@@ -3,11 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { getMesReferenciaAtual, getMesesOptions, formatCurrency, formatDate } from '@/lib/formatters';
-import { ChevronLeft, ChevronRight, Eye, User, FileText, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, User, FileText, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useRHControl } from '@/lib/rhControl';
+import { cn } from '@/lib/utils';
 
 import VisaoGeral from '@/components/portal/VisaoGeral';
 import MeusDados from '@/components/portal/MeusDados';
@@ -97,18 +100,32 @@ export default function EspelhoPortal() {
           <p className="text-xs text-amber-800">Modo somente leitura — visualização do ponto de vista do funcionário</p>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Select value={funcionarioId} onValueChange={id => { setFuncionarioId(id); setAba('visao-geral'); }}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Selecione um funcionário..." />
-            </SelectTrigger>
-            <SelectContent>
-              {funcionariosAtivos.map(f => (
-                <SelectItem key={f.id} value={f.id}>
-                  {f.nome}{f.setor ? ` — ${f.setor}` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" role="combobox" className="w-72 justify-between">
+                {funcionarioId ? funcionarios.find(f => f.id === funcionarioId)?.nome : 'Selecione um funcionário...'}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0">
+              <Command>
+                <CommandInput placeholder="Buscar funcionário..." />
+                <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                <CommandGroup className="max-h-60 overflow-y-auto">
+                  {funcionariosAtivos.map(f => (
+                    <CommandItem
+                      key={f.id}
+                      value={f.id}
+                      onSelect={id => { setFuncionarioId(id); setAba('visao-geral'); }}
+                    >
+                      <Check className={cn('mr-2 h-4 w-4', funcionarioId === f.id ? 'opacity-100' : 'opacity-0')} />
+                      {f.nome}{f.setor ? <span className="text-muted-foreground ml-1">— {f.setor}</span> : ''}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 

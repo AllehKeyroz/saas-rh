@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, User, ChevronRight, Upload, TrendingUp, FileText, Wallet, DollarSign, Clock, List } from 'lucide-react';
+import { Plus, Search, User, ChevronRight, Upload, TrendingUp, FileText, Wallet, DollarSign, Clock, List, Settings } from 'lucide-react';
 import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import LancamentoForm from '@/components/lancamentos/LancamentoForm';
+import GerenciarTiposLancamento from '@/components/lancamentos/TiposLancamentoForm';
 import DetalhesFuncionarioModal from '@/components/lancamentos/DetalhesFuncionarioModal';
 import ImportarLancamentos from '@/components/importacao/ImportarLancamentos';
 
@@ -26,6 +27,7 @@ const TIPOS_NAVBAR = [
 export default function Lancamentos() {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [tiposOpen, setTiposOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [mesFiltro, setMesFiltro] = useState(getMesReferenciaAtual());
   const [funcSelecionado, setFuncSelecionado] = useState(null);
@@ -44,6 +46,30 @@ export default function Lancamentos() {
     queryFn: () => client.entities.Funcionarios.list(),
   });
 
+  const { data: tiposLancamento = [] } = useQuery({
+    queryKey: ['tipos-lancamento'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
+  const customDescontos = useMemo(() => {
+    return new Set(
+      tiposLancamento
+        .filter(t => t.ativo !== false && t.categoria === 'desconto')
+        .map(t => t.nome)
+    );
+  }, [tiposLancamento]);
+
+  const customAdicionais = useMemo(() => {
+    return new Set(
+      tiposLancamento
+        .filter(t => t.ativo !== false && t.categoria === 'adicional')
+        .map(t => t.nome)
+    );
+  }, [tiposLancamento]);
+
+  const isDesconto = (tipo) => TIPOS_DESCONTO.includes(tipo) || customDescontos.has(tipo);
+  const isAdicional = (tipo) => TIPOS_ADICIONAL.includes(tipo) || customAdicionais.has(tipo);
+
   // Filtra lançamentos do mês selecionado
   const lancamentosMes = lancamentos.filter(l => {
     if (!l.data_lancamento) return false;
@@ -61,8 +87,8 @@ export default function Lancamentos() {
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
     .map(func => {
       const fl = lancamentosMes.filter(l => l.funcionario_id === func.id);
-      const totalDescontos = fl.filter(l => TIPOS_DESCONTO.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
-      const totalAdicionais = fl.filter(l => TIPOS_ADICIONAL.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
+      const totalDescontos = fl.filter(l => isDesconto(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
+      const totalAdicionais = fl.filter(l => isAdicional(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
       // Para filtro por tipo: verifica se funcionário tem algum lançamento desse tipo (em todo o histórico)
       const temTipoFiltro = filtroConfig
         ? lancamentos.some(l => l.funcionario_id === func.id && l.tipo_lancamento === filtroConfig.tipo)
@@ -86,8 +112,11 @@ export default function Lancamentos() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             Lançamentos Financeiros
+            <button onClick={() => setTiposOpen(true)} className="text-muted-foreground hover:text-foreground transition-colors text-sm flex items-center gap-1" title="Gerenciar tipos">
+              <Settings className="w-4 h-4" /> Gerenciar Tipos
+            </button>
           </h1>
           <p className="text-muted-foreground mt-1">
             Resumo mensal por funcionário
@@ -273,6 +302,11 @@ export default function Lancamentos() {
         onClose={() => setImportOpen(false)}
         onSaved={handleSaved}
         funcionarios={funcionarios}
+      />
+
+      <GerenciarTiposLancamento
+        open={tiposOpen}
+        onClose={() => setTiposOpen(false)}
       />
     </div>
   );

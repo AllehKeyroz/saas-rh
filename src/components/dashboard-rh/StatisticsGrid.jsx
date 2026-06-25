@@ -3,17 +3,17 @@ import ClickableStatsCard from './ClickableStatsCard';
 import { DASHBOARD_CARD_ROUTES } from '@/lib/dashboardRoutes';
 import {
   Users, Clock, FileText, AlertCircle, DollarSign,
-  TrendingUp, Calculator, Award
+  Calculator, Award, CalendarDays
 } from 'lucide-react';
 
-export default function StatisticsGrid({ stats = {} }) {
+export default function StatisticsGrid({ stats = {}, onFeriasClick } = {}) {
   const defaultStats = {
     funcionariosAtivos: 0,
     solicitacoesPendentes: 0,
     feriasVencidas: 0,
     docsVencendo: 0,
     valesMes: 0,
-    consignadosAtivos: 0,
+    funcionariosFerias: 0,
     custoFolha: 0,
     comissaoTotal: 0,
     ...stats
@@ -65,12 +65,12 @@ export default function StatisticsGrid({ stats = {} }) {
         tooltip={DASHBOARD_CARD_ROUTES.valesMes.label}
       />
       <ClickableStatsCard
-        title="Consignados Ativos"
-        value={defaultStats.consignadosAtivos}
-        icon={TrendingUp}
-        color="purple"
-        route={DASHBOARD_CARD_ROUTES.consignadosAtivos.path}
-        tooltip={DASHBOARD_CARD_ROUTES.consignadosAtivos.label}
+        title="Em Férias"
+        value={defaultStats.funcionariosFerias ?? 0}
+        icon={CalendarDays}
+        color="blue"
+        tooltip="Funcionários em período de férias"
+        onClick={onFeriasClick}
       />
       <ClickableStatsCard
         title="Custo da Folha"

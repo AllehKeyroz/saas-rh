@@ -1,11 +1,15 @@
 import jsPDF from 'jspdf';
-import { formatCurrency, formatDate, TIPO_LABELS } from './formatters';
+import { formatCurrency, formatDate, TIPO_LABELS, mergeTipos } from './formatters';
+import { ref, getBytes } from '@firebase/storage';
+import { storage } from '@/firebase/config';
+import { client } from '@/api/client';
 
 const BRAND_COLOR = [37, 99, 235]; // blue-600
 const GRAY = [100, 116, 139];
 const LIGHT_GRAY = [241, 245, 249];
 const RED = [220, 38, 38];
 const GREEN = [22, 163, 74];
+const BLUE = [37, 99, 235];
 const EMERALD = [5, 150, 105];
 const BLACK = [15, 23, 42];
 
@@ -84,6 +88,9 @@ function addTable(doc, headers, rows, startY, pageWidth) {
 
 // ─── EXPORT: Demonstrativo Individual ───────────────────────────────────────
 export async function exportDemonstrativoPDF(funcionario, lancamentos, fechamentos, mesRef) {
+  const tiposLancamento = await client.entities.TipoLancamento.list().catch(() => []);
+  const descontosList = mergeTipos(tiposLancamento, 'desconto');
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -160,13 +167,13 @@ export async function exportDemonstrativoPDF(funcionario, lancamentos, fechament
       value: formatCurrency(l.valor),
       align: 'right',
       bold: true,
-      color: ['vale','adiantamento','convenio','consumo'].includes(l.tipo_lancamento) ? RED : GREEN,
+      color: descontosList.includes(l.tipo_lancamento) ? RED : GREEN,
     },
   ]);
   y = addTable(doc, headers, rows, y, pageWidth);
 
-  // Comprovantes / thumbnails de imagem
-  const comImagem = funcLanc.filter(l => l.comprovante && /\.(jpg|jpeg|png|webp)/i.test(l.comprovante));
+  // Comprovantes / thumbnails
+  const comImagem = funcLanc.filter(l => l.comprovante_data || l.comprovante);
   if (comImagem.length > 0) {
     y += 4;
     if (y > 240) { doc.addPage(); y = 20; }
@@ -187,8 +194,13 @@ export async function exportDemonstrativoPDF(funcionario, lancamentos, fechament
         thumbX = 14;
       }
 
-      // Load image
-      const imgData = await loadImageAsBase64(l.comprovante);
+      let imgData = null;
+      if (l.comprovante_data) {
+        const format = l.comprovante_data.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        imgData = { data: l.comprovante_data, format };
+      } else if (l.comprovante) {
+        imgData = await loadImageAsBase64(l.comprovante);
+      }
       if (imgData) {
         doc.setDrawColor(200, 200, 200);
         doc.setLineWidth(0.3);
@@ -294,22 +306,26 @@ export function exportFechamentoPDF(funcionarios, calcular, mesRef) {
   doc.save(`fechamento_${mesRef.replace('/', '-')}.pdf`);
 }
 
-// ─── Helper: load image as base64 ───────────────────────────────────────────
+// ─── Helper: load image as base64 via Firebase Storage SDK ──────────────
 async function loadImageAsBase64(url) {
   try {
-    const res = await fetch(url);
-    const blob = await res.blob();
+    const u = new URL(url);
+    const pathMatch = u.pathname.match(/\/o\/(.+)/);
+    if (!pathMatch) return null;
+    const path = decodeURIComponent(pathMatch[1]);
+    const storageRef = ref(storage, path);
+    const bytes = await getBytes(storageRef);
+    const blob = new Blob([bytes], { type: 'image/jpeg' });
     return await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const data = reader.result;
-        const format = blob.type.includes('png') ? 'PNG' : 'JPEG';
-        resolve({ data, format });
+        const format = blob.type?.includes('png') ? 'PNG' : 'JPEG';
+        resolve({ data: reader.result, format });
       };
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
-  } catch {
+  } catch (e) {
     return null;
   }
 }

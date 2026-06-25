@@ -11,6 +11,7 @@ import {
 import { DollarSign, TrendingUp, Wallet, Building2, CreditCard } from 'lucide-react';
 import { format, subMonths, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { mergeTipos } from '@/lib/formatters';
 
 const fmt = (val) => `R$ ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtK = (val) => `R$ ${(val / 1000).toFixed(1)}k`;
@@ -24,8 +25,8 @@ function gerarMeses(n = 12) {
   });
 }
 
-const TIPOS_ADIANTAMENTO = ['vale', 'adiantamento', 'vale_parcelado'];
-const TIPOS_SALARIO = ['adicional', 'ajuste', 'comissao'];
+const TIPOS_ADIANTAMENTO_DEFAULT = ['vale', 'adiantamento', 'vale_parcelado'];
+const TIPOS_EXTRAS_DEFAULT = ['adicional', 'ajuste', 'comissao'];
 
 function StatCard({ icon: Icon, label, value, color, sub }) {
   return (
@@ -79,6 +80,25 @@ export default function IndicadoresFinanceiros() {
     queryFn: () => client.entities.FichaFinanceira.list(),
   });
 
+  const { data: comissoesFunc = [] } = useQuery({
+    queryKey: ['comissoes-func-indicadores'],
+    queryFn: () => client.entities.ComissaoPorFuncionario.list('-created_date', 2000),
+  });
+
+  const { data: tiposLancamento = [] } = useQuery({
+    queryKey: ['tipos-lancamento-indicadores'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
+  const TIPOS_ADIANTAMENTO = useMemo(() => {
+    const custom = (tiposLancamento || []).filter(t => t.ativo !== false && t.categoria === 'desconto').map(t => t.nome);
+    return [...new Set([...TIPOS_ADIANTAMENTO_DEFAULT, ...custom])];
+  }, [tiposLancamento]);
+  const TIPOS_EXTRAS = useMemo(() => {
+    const custom = (tiposLancamento || []).filter(t => t.ativo !== false && t.categoria === 'adicional').map(t => t.nome);
+    return [...new Set([...TIPOS_EXTRAS_DEFAULT, ...custom])];
+  }, [tiposLancamento]);
+
   const isLoading = loadingF || loadingL;
 
   // Filtra lançamentos do mês selecionado
@@ -116,11 +136,17 @@ export default function IndicadoresFinanceiros() {
       .reduce((s, l) => s + (l.valor || 0), 0);
 
     const extras = lancamentosMes
-      .filter(l => TIPOS_SALARIO.includes(l.tipo_lancamento))
+      .filter(l => TIPOS_EXTRAS.includes(l.tipo_lancamento))
       .reduce((s, l) => s + (l.valor || 0), 0);
 
-    return { salarios, adiantamentos, vales, extras, total: salarios + adiantamentos + extras };
-  }, [funcionarios, lancamentosMes]);
+    // Comissões do módulo de comissões (ComissaoPorFuncionario) para o mês
+    const [mm, yyyy] = mesSelecionado.split('/');
+    const comissaoModulo = comissoesFunc
+      .filter(c => c.mes_referencia === mesSelecionado && c.apto)
+      .reduce((s, c) => s + (c.valor_individual_final ?? c.valor_individual ?? 0), 0);
+
+    return { salarios, adiantamentos, vales, extras: extras + comissaoModulo, total: salarios + adiantamentos + extras + comissaoModulo };
+  }, [funcionarios, lancamentosMes, mesSelecionado, comissoesFunc, TIPOS_EXTRAS]);
 
   // Dados por setor
   const dadosPorSetor = useMemo(() => {
@@ -143,7 +169,7 @@ export default function IndicadoresFinanceiros() {
 
       if (TIPOS_ADIANTAMENTO.includes(l.tipo_lancamento)) {
         setores[setor].adiantamentos += l.valor || 0;
-      } else if (TIPOS_SALARIO.includes(l.tipo_lancamento)) {
+      } else if (TIPOS_EXTRAS.includes(l.tipo_lancamento)) {
         setores[setor].extras += l.valor || 0;
       }
     });
@@ -151,7 +177,7 @@ export default function IndicadoresFinanceiros() {
     return Object.values(setores)
       .map(s => ({ ...s, total: s.salarios + s.adiantamentos + s.extras }))
       .sort((a, b) => b.total - a.total);
-  }, [funcionarios, lancamentosMes, funcMap]);
+  }, [funcionarios, lancamentosMes, funcMap, TIPOS_ADIANTAMENTO, TIPOS_EXTRAS]);
 
   if (isLoading) {
     return (
@@ -208,14 +234,14 @@ export default function IndicadoresFinanceiros() {
           label="Vales / Adiant."
           value={fmtK(totais.adiantamentos)}
           color="bg-orange-100 text-orange-600"
-          sub={`${lancamentosMes.filter(l => TIPOS_ADIANTAMENTO.includes(l.tipo_lancamento)).length} lançamentos`}
+          sub={`${lancamentosMes.filter(l => TIPOS_ADIANTAMENTO.includes(l.tipo_lancamento)).length} lanç. + ${comissoesFunc.filter(c => c.mes_referencia === mesSelecionado && c.apto).length} comiss.`}
         />
         <StatCard
           icon={TrendingUp}
           label="Extras / Comissões"
           value={fmtK(totais.extras)}
           color="bg-green-100 text-green-600"
-          sub={`${lancamentosMes.filter(l => TIPOS_SALARIO.includes(l.tipo_lancamento)).length} lançamentos`}
+          sub={`${lancamentosMes.filter(l => TIPOS_EXTRAS.includes(l.tipo_lancamento)).length} lanç. + ${comissoesFunc.filter(c => c.mes_referencia === mesSelecionado && c.apto).length} comiss.`}
         />
         <StatCard
           icon={DollarSign}

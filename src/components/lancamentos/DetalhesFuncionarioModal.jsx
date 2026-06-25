@@ -1,5 +1,5 @@
-import React from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -7,10 +7,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ExternalLink, Trash2, User } from 'lucide-react';
-import { formatCurrency, formatDate, TIPO_LABELS, TIPO_COLORS, TIPOS_DESCONTO, TIPOS_ADICIONAL } from '@/lib/formatters';
+import { formatCurrency, formatDate, TIPO_LABELS, TIPO_COLORS, mergeTipos } from '@/lib/formatters';
 
 export default function DetalhesFuncionarioModal({ open, onClose, funcionario, lancamentos, mesRef }) {
   const queryClient = useQueryClient();
+
+  const { data: tiposLancamento = [] } = useQuery({
+    queryKey: ['tipos-lancamento-detalhes'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
+  const descontosList = useMemo(() => mergeTipos(tiposLancamento, 'desconto'), [tiposLancamento]);
+  const adicionaisList = useMemo(() => mergeTipos(tiposLancamento, 'adicional'), [tiposLancamento]);
 
   const handleDelete = async (lanc) => {
     if (lanc.consolidado) return;
@@ -18,8 +26,8 @@ export default function DetalhesFuncionarioModal({ open, onClose, funcionario, l
     queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
   };
 
-  const totalDescontos = lancamentos.filter(l => TIPOS_DESCONTO.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
-  const totalAdicionais = lancamentos.filter(l => TIPOS_ADICIONAL.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
+  const totalDescontos = lancamentos.filter(l => descontosList.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
+  const totalAdicionais = lancamentos.filter(l => adicionaisList.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
   const salarioLiquido = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) + totalAdicionais - totalDescontos;
 
   return (
@@ -91,8 +99,8 @@ export default function DetalhesFuncionarioModal({ open, onClose, funcionario, l
                   <TableCell className="text-sm">{formatDate(l.data_lancamento)}</TableCell>
                   <TableCell>
                     {l.comprovante ? (
-                      <a href={l.comprovante} target="_blank" rel="noopener noreferrer" className="text-primary">
-                        <ExternalLink className="w-4 h-4" />
+                      <a href={l.comprovante} target="_blank" rel="noopener noreferrer" className="text-primary flex items-center gap-1 hover:underline text-xs">
+                        <ExternalLink className="w-3.5 h-3.5" />Ver
                       </a>
                     ) : '-'}
                   </TableCell>

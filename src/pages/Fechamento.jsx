@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,14 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Calculator, Loader2, CheckCircle2, RefreshCw, FileDown, LockOpen, ChevronDown, UserCheck } from 'lucide-react';
+import { Calculator, Loader2, CheckCircle2, RefreshCw, FileDown, LockOpen, ChevronDown, UserCheck, FileSpreadsheet, FileType, FileArchive } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { formatDate } from '@/lib/formatters';
-import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL } from '@/lib/formatters';
+import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL, mergeTipos } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserRole } from '@/lib/useUserRole';
 import { toast } from 'sonner';
 import { exportFechamentoPDF, exportDemonstrativoPDF } from '@/lib/pdfExport';
+import { exportFechamentoXLSX } from '@/lib/xlsxExport';
 import DetalhesFechamentoModal from '@/components/fechamento/DetalhesFechamentoModal';
 import ExportarContrachequesMassaDialog from '@/components/fechamento/ExportarContrachequesMassaDialog';
 import FechamentoIndividualDialog from '@/components/fechamento/FechamentoIndividualDialog';
@@ -94,6 +96,14 @@ export default function Fechamento() {
     queryFn: () => client.entities.ComissaoPorFuncionario.list('-created_date', 2000),
   });
 
+  const { data: tiposLancamento = [] } = useQuery({
+    queryKey: ['tipos-lancamento-fechamento'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
+  const customDescontosList = useMemo(() => mergeTipos(tiposLancamento, 'desconto'), [tiposLancamento]);
+  const customAdicionaisList = useMemo(() => mergeTipos(tiposLancamento, 'adicional'), [tiposLancamento]);
+
   const isLoading = lf || ll || lfech;
   const [mesNum, anoStr] = mesRef.split('/');
   const mes = parseInt(mesNum) - 1;
@@ -123,7 +133,7 @@ export default function Fechamento() {
 
     const descontos = {};
     let totalDescontos = 0;
-    TIPOS_DESCONTO.forEach(tipo => {
+    customDescontosList.forEach(tipo => {
       const val = funcLanc.filter(l => l.tipo_lancamento === tipo).reduce((s, l) => s + (l.valor || 0), 0);
       descontos[tipo] = val;
       totalDescontos += val;
@@ -131,7 +141,7 @@ export default function Fechamento() {
 
     const adicionais = {};
     let totalAdicionais = 0;
-    TIPOS_ADICIONAL.forEach(tipo => {
+    customAdicionaisList.forEach(tipo => {
       const val = funcLanc.filter(l => l.tipo_lancamento === tipo).reduce((s, l) => s + (l.valor || 0), 0);
       adicionais[tipo] = val;
       totalAdicionais += val;
@@ -259,11 +269,11 @@ export default function Fechamento() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Fechamento Mensal</h1>
-          <p className="text-muted-foreground mt-1">Calcule e processe a folha</p>
+          <span className="text-muted-foreground text-sm hidden sm:inline">— Calcule e processe a folha</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={mesRef} onValueChange={setMesRef}>
             <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -288,14 +298,26 @@ export default function Fechamento() {
               <LockOpen className="w-4 h-4 mr-2" />Reabrir Todos
             </Button>
           )}
-          {isAdmin && fechamentosMes.length > 0 && (
-            <Button variant="outline" onClick={() => setExportMassaOpen(true)} disabled={isLoading}>
-              <FileDown className="w-4 h-4 mr-2" />Exportar Contracheques
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => exportFechamentoPDF(ativos, calcular, mesRef)} disabled={isLoading}>
-            <FileDown className="w-4 h-4 mr-2" />Exportar PDF
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={isLoading}>
+                <FileDown className="w-4 h-4 mr-2" />Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => exportFechamentoPDF(ativos, calcular, mesRef)}>
+                <FileType className="w-4 h-4 mr-2 text-blue-600" />PDF — Resumo da Folha
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportFechamentoXLSX(funcionarios, lancamentos, fechamentos, calcular, mesRef, tiposLancamento)}>
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />XLSX — Planilha Completa
+              </DropdownMenuItem>
+              {isAdmin && fechamentosMes.length > 0 && (
+                <DropdownMenuItem onClick={() => setExportMassaOpen(true)}>
+                  <FileArchive className="w-4 h-4 mr-2 text-orange-600" />ZIP — Contracheques Individuais
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -312,13 +334,9 @@ export default function Fechamento() {
                      <TableHead>Sal. Base</TableHead>
                      <TableHead>Comissão</TableHead>
                      <TableHead>Adicionais</TableHead>
-                     <TableHead>Vales</TableHead>
-                     <TableHead>Consignado</TableHead>
-                     <TableHead>Adiantamento</TableHead>
-                     <TableHead>Convênio</TableHead>
-                     <TableHead>Consumo</TableHead>
+                     <TableHead>Descontos</TableHead>
                      <TableHead>Sal. Líquido</TableHead>
-                     <TableHead>Lançamentos</TableHead>
+                     <TableHead>Lanç.</TableHead>
                      <TableHead>Status</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
@@ -340,36 +358,8 @@ export default function Fechamento() {
                         <TableCell>{formatCurrency(calc.salarioBase)}</TableCell>
                         <TableCell className="text-emerald-600 font-medium">{formatCurrency(calc.comissaoGorjeta || 0)}</TableCell>
                         <TableCell className="text-green-600">{formatCurrency(calc.totalAdicionais)}</TableCell>
-                        <TableCell className="text-destructive">{formatCurrency(calc.detalhes.vale || 0)}</TableCell>
-                         <TableCell>
-                           <CelulaLancamentos
-                             total={calc.detalhes.credito_consignado || 0}
-                             lancamentos={lancMes.filter(l => l.funcionario_id === func.id)}
-                             tipo="credito_consignado"
-                             label="Crédito Consignado"
-                             colorClass="text-purple-600 font-medium"
-                           />
-                         </TableCell>
-                         <TableCell className="text-destructive">{formatCurrency(calc.detalhes.adiantamento || 0)}</TableCell>
-                         <TableCell>
-                           <CelulaLancamentos
-                             total={calc.detalhes.convenio || 0}
-                             lancamentos={lancMes.filter(l => l.funcionario_id === func.id)}
-                             tipo="convenio"
-                             label="Convênio"
-                             colorClass="text-destructive"
-                           />
-                           </TableCell>
-                           <TableCell>
-                           <CelulaLancamentos
-                             total={calc.detalhes.consumo || 0}
-                             lancamentos={lancMes.filter(l => l.funcionario_id === func.id)}
-                             tipo="consumo"
-                             label="Consumo"
-                             colorClass="text-destructive"
-                           />
-                           </TableCell>
-                           <TableCell className="font-bold">{formatCurrency(calc.salarioLiquido)}</TableCell>
+                        <TableCell className="text-destructive font-medium">{formatCurrency(calc.totalDescontos)}</TableCell>
+                        <TableCell className="font-bold">{formatCurrency(calc.salarioLiquido)}</TableCell>
                         <TableCell>{calc.lancamentos}</TableCell>
                         <TableCell>
                           {fechado ? (

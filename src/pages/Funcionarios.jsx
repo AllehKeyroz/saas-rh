@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Pencil, User, Briefcase, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, User, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle, Trash2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,37 +26,59 @@ const ABAS = [
   { id: 'advertencias', label: 'Advertências', icon: AlertCircle },
 ];
 
-function FuncionarioCard({ func, canEdit, onEdit, onPasta, onPermissoes }) {
+function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta, onPermissoes }) {
   const navigate = useNavigate();
+  if (isLoading) return <div className="space-y-2">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>;
+  if (list.length === 0) return <div className="text-center py-16 text-muted-foreground">{emptyMsg}</div>;
   return (
-    <Card className="group hover:shadow-lg transition-all duration-300">
-      <CardContent className="p-5">
-        <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center overflow-hidden shrink-0">
-            {func.foto ? (
-              <img src={func.foto} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <User className="w-6 h-6 text-muted-foreground" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold truncate cursor-pointer hover:text-primary transition-colors" onClick={() => navigate(`/funcionarios/${func.id}/360`)}>{func.nome}</h3>
-            {func.funcao && <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1"><Briefcase className="w-3.5 h-3.5 shrink-0" />{func.funcao}</p>}
-            {func.setor && <p className="text-sm text-muted-foreground flex items-center gap-1"><Building2 className="w-3.5 h-3.5 shrink-0" />{func.setor}</p>}
-            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-              {func.data_admissao && <span>Admissão: {formatDate(func.data_admissao)}</span>}
-              {func.data_demissao && <span className="text-red-500">Demissão: {formatDate(func.data_demissao)}</span>}
-              {func.salario_base != null && <span>Sal: {formatCurrency(func.salario_base)}{func.ajuda_custo > 0 ? ` + ${formatCurrency(func.ajuda_custo)}` : ''}</span>}
-            </div>
-          </div>
-          <div className="flex flex-col gap-1 shrink-0">
-            {canEdit && <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity" title="Editar" onClick={() => onEdit(func)}><Pencil className="w-4 h-4" /></Button>}
-            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity text-primary" title="Documentos" onClick={() => onPasta(func)}><FolderOpen className="w-4 h-4" /></Button>
-            {canEdit && <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity text-accent" title="Permissões do Portal" onClick={() => onPermissoes(func)}><ShieldCheck className="w-4 h-4" /></Button>}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/50 text-left">
+            <th className="py-3 px-4 font-medium text-muted-foreground w-12"></th>
+            <th className="py-3 px-4 font-medium text-muted-foreground">Funcionário</th>
+            <th className="py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Setor</th>
+            <th className="py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Admissão</th>
+            <th className="py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Demissão</th>
+            <th className="py-3 px-4 font-medium text-muted-foreground hidden sm:table-cell">Salário</th>
+            <th className="py-3 px-4 font-medium text-muted-foreground w-32"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map(func => (
+            <tr key={func.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+              <td className="py-2 px-4">
+                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                  {func.foto ? (
+                    <img src={func.foto} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </div>
+              </td>
+              <td className="py-2 px-4">
+                <span className="font-medium cursor-pointer hover:text-primary transition-colors" onClick={() => navigate(`/funcionarios/${func.id}/360`)}>{func.nome}</span>
+                {func.funcao && <span className="block text-xs text-muted-foreground">{func.funcao}</span>}
+              </td>
+              <td className="py-2 px-4 text-muted-foreground hidden md:table-cell">{func.setor || '—'}</td>
+              <td className="py-2 px-4 text-muted-foreground hidden lg:table-cell">{func.data_admissao ? formatDate(func.data_admissao) : '—'}</td>
+              <td className="py-2 px-4 hidden lg:table-cell">{func.data_demissao ? <span className="text-red-500">{formatDate(func.data_demissao)}</span> : '—'}</td>
+              <td className="py-2 px-4 hidden sm:table-cell">
+                {func.salario_base != null ? formatCurrency(func.salario_base) : '—'}
+                {func.ajuda_custo > 0 && <span className="block text-xs text-muted-foreground">+ {formatCurrency(func.ajuda_custo)} ajuda de custo</span>}
+              </td>
+              <td className="py-2 px-4">
+                <div className="flex gap-1">
+                  {canEdit && <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" onClick={() => onEdit(func)}><Pencil className="w-3.5 h-3.5" /></Button>}
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Documentos" onClick={() => onPasta(func)}><FolderOpen className="w-3.5 h-3.5" /></Button>
+                  {canEdit && <Button variant="ghost" size="icon" className="h-8 w-8 text-accent" title="Permissões do Portal" onClick={() => onPermissoes(func)}><ShieldCheck className="w-3.5 h-3.5" /></Button>}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -97,16 +119,6 @@ function FilterBar({ search, setSearch, setores, setorFiltro, setSetorFiltro, or
           <SelectItem value="admissao">Ordenar por Admissão</SelectItem>
         </SelectContent>
       </Select>
-    </div>
-  );
-}
-
-function FuncionarioGrid({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta, onPermissoes }) {
-  if (isLoading) return <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-40" />)}</div>;
-  if (list.length === 0) return <div className="text-center py-16 text-muted-foreground">{emptyMsg}</div>;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {list.map(func => <FuncionarioCard key={func.id} func={func} canEdit={canEdit} onEdit={onEdit} onPasta={onPasta} onPermissoes={onPermissoes} />)}
     </div>
   );
 }
@@ -280,10 +292,10 @@ export default function Funcionarios() {
               <TabsTrigger value="inativos">Inativos <Badge className="ml-2 bg-gray-100 text-gray-600 text-xs">{inativosL.length}</Badge></TabsTrigger>
             </TabsList>
             <TabsContent value="ativos" className="mt-4">
-              <FuncionarioGrid list={ativos} isLoading={isLoading} emptyMsg="Nenhum funcionário ativo encontrado" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} />
+              <FuncionarioTable list={ativos} isLoading={isLoading} emptyMsg="Nenhum funcionário ativo encontrado" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} />
             </TabsContent>
             <TabsContent value="inativos" className="mt-4">
-              <FuncionarioGrid list={inativosL} isLoading={isLoading} emptyMsg="Nenhum funcionário inativo" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} />
+              <FuncionarioTable list={inativosL} isLoading={isLoading} emptyMsg="Nenhum funcionário inativo" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} />
             </TabsContent>
           </Tabs>
         </TabsContent>

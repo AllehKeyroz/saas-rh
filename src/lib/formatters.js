@@ -8,14 +8,18 @@ export function formatDate(dateStr) {
   // Extrai partes para evitar interpretação como UTC (que desloca um dia em TZ diferente)
   const parts = dateStr.split(/[-\/]/);
   if (parts.length === 3 && dateStr.includes('-')) {
-    const [y, m, d] = parts.map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('pt-BR');
+    // parts[2] pode conter timezone ("23T12:34:56") — extrair só a parte da data
+    const dPart = parts[2].split('T')[0];
+    const [y, m, d] = [parts[0], parts[1], dPart].map(Number);
+    if (!isNaN(d)) {
+      return new Date(y, m - 1, d).toLocaleDateString('pt-BR');
+    }
   }
   if (parts.length === 3 && dateStr.includes('/')) {
     // Já está no formato dd/MM/yyyy ou MM/yyyy
     return dateStr;
   }
-  // Fallback para outros formatos
+  // Fallback para outros formatos (ISO string, Timestamp, etc.)
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('pt-BR');
 }
@@ -45,11 +49,22 @@ export const TIPO_COLORS = {
 };
 
 export const LIMITE_PERCENTUAL = 40; // % do salário + comissão usado como limite de vales/adiantamentos
-export const TIPOS_DESCONTO = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
-export const TIPOS_ADICIONAL = ['adicional', 'ajuste', 'comissao'];
+export const TIPOS_DESCONTO_DEFAULT = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+export const TIPOS_ADICIONAL_DEFAULT = ['adicional', 'ajuste', 'comissao'];
+// Legacy aliases for backward compatibility
+export const TIPOS_DESCONTO = TIPOS_DESCONTO_DEFAULT;
+export const TIPOS_ADICIONAL = TIPOS_ADICIONAL_DEFAULT;
 
 export function isDesconto(tipo) {
   return TIPOS_DESCONTO.includes(tipo);
+}
+
+export function mergeTipos(tiposPersonalizados, categoria) {
+  const custom = (tiposPersonalizados || [])
+    .filter(t => t.ativo !== false && t.categoria === categoria)
+    .map(t => t.nome);
+  const defaults = categoria === 'desconto' ? TIPOS_DESCONTO_DEFAULT : TIPOS_ADICIONAL_DEFAULT;
+  return [...new Set([...defaults, ...custom])];
 }
 
 export function getMesReferenciaAtual() {

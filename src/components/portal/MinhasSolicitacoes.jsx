@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Palmtree, Wallet, Clock, FileText, Package, PlusCircle, CheckCircle2, XCircle, AlertCircle, Upload, X } from 'lucide-react';
+import { Loader2, Palmtree, Wallet, Clock, FileText, Package, PlusCircle, CheckCircle2, XCircle, AlertCircle, Upload, X, Key } from 'lucide-react';
 import { format } from 'date-fns';
 import { useRHControl } from '@/lib/rhControl';
 
@@ -25,6 +25,7 @@ const TIPO_CONFIG = {
   banco_horas: { label: 'Banco de Horas', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50', key: 'solicitacoes_banco_horas' },
   atestado: { label: 'Atestado', icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50', key: 'solicitacoes_atestado' },
   documento: { label: 'Documento', icon: Package, color: 'text-slate-600', bg: 'bg-slate-50', key: 'solicitacoes_documentos' },
+  pix: { label: 'Chave PIX', icon: Key, color: 'text-emerald-600', bg: 'bg-emerald-50', key: 'solicitacoes_pix' },
   outro: { label: 'Outra', icon: PlusCircle, color: 'text-pink-600', bg: 'bg-pink-50', key: 'solicitacoes_outros' },
 };
 
@@ -258,9 +259,9 @@ export default function MinhasSolicitacoes({ funcionario }) {
     enabled: !!funcionario?.id,
   });
 
-  const botoes = Object.entries(TIPO_CONFIG).filter(([tipo]) => isAtiva(TIPO_CONFIG[tipo].key));
+  const botoes = Object.entries(TIPO_CONFIG).filter(([tipo]) => tipo !== 'pix' && isAtiva(TIPO_CONFIG[tipo].key));
   // Se nenhum está configurado individualmente, mostrar todos (fallback)
-  const botoesVisiveis = botoes.length > 0 ? botoes : Object.entries(TIPO_CONFIG);
+  const botoesVisiveis = botoes.length > 0 ? botoes : Object.entries(TIPO_CONFIG).filter(([tipo]) => tipo !== 'pix');
 
   const pendentes = solicitacoes.filter(s => s.status === 'pendente').length;
 
@@ -325,6 +326,14 @@ export default function MinhasSolicitacoes({ funcionario }) {
                     </Badge>
                   </div>
                   {s.descricao && <p className="text-xs text-muted-foreground">{s.descricao}</p>}
+                  {s.tipo_solicitacao === 'pix' && (
+                    <div className="flex items-center gap-2 text-xs bg-muted/30 rounded-lg px-2 py-1.5">
+                      <Key className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Nova chave:</span>
+                      <span className="font-medium">{s.chave_pix_nova}</span>
+                      <Badge variant="outline" className="text-[10px] h-4">{s.chave_pix_tipo_novo}</Badge>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {s.valor_solicitado && <span>R$ {s.valor_solicitado.toFixed(2)}</span>}
                     {s.periodo_inicio && <span>{format(new Date(s.periodo_inicio), 'dd/MM/yyyy')}{s.periodo_fim ? ` → ${format(new Date(s.periodo_fim), 'dd/MM/yyyy')}` : ''}</span>}

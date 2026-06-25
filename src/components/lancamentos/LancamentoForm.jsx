@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { client } from '@/api/client';
 import { registrarAuditoria } from '@/lib/audit';
 import { useQuery } from '@tanstack/react-query';
@@ -12,16 +12,45 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Upload, Loader2, AlertTriangle, TrendingUp, Layers } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TIPO_LABELS, formatCurrency } from '@/lib/formatters';
+import { toast } from 'sonner';
 
 const TIPOS_DESCONTO_FORM = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 const TIPOS_ADICIONAL_FORM = ['adicional', 'ajuste'];
 const TIPO_COMISSAO = 'comissao';
 const TIPOS_PARCELAVEIS = ['vale', 'credito_consignado'];
+const HARDCODED_KEYS = Object.keys(TIPO_LABELS);
+
+function fileToBase64(file) {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => resolve('');
+      r.readAsDataURL(file);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 300;
+      const scale = Math.min(maxW / img.width, maxW / img.height, 1);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => resolve('');
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 export default function LancamentoForm({ open, onClose, onSaved, funcionarios }) {
   const [form, setForm] = useState({
     funcionario_id: '', tipo_lancamento: '', valor: '', data_lancamento: new Date().toISOString().split('T')[0],
-    descricao: '', comprovante: ''
+    descricao: '', comprovante: '', comprovante_data: ''
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -34,15 +63,51 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     queryFn: () => client.entities.FichaFinanceira.list(),
   });
 
+  const { data: tiposPersonalizados = [] } = useQuery({
+    queryKey: ['tipos-lancamento'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
+  const tiposDescontoMerge = useMemo(() => {
+    const extras = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'desconto' && !HARDCODED_KEYS.includes(t.nome))
+      .map(t => ({ value: t.nome, label: t.nome, cor: t.cor }));
+    return [...TIPOS_DESCONTO_FORM, ...extras.map(e => e.value)];
+  }, [tiposPersonalizados]);
+
+  const tiposAdicionalMerge = useMemo(() => {
+    const extras = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'adicional' && !HARDCODED_KEYS.includes(t.nome))
+      .map(t => ({ value: t.nome, label: t.nome, cor: t.cor }));
+    return [...TIPOS_ADICIONAL_FORM, ...extras.map(e => e.value)];
+  }, [tiposPersonalizados]);
+
+  const customTipoMap = useMemo(() => {
+    const map = {};
+    for (const t of tiposPersonalizados) {
+      if (t.nome && !HARDCODED_KEYS.includes(t.nome)) {
+        map[t.nome] = t;
+      }
+    }
+    return map;
+  }, [tiposPersonalizados]);
+
   const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await client.integrations.Core.UploadFile({ file });
-    handleChange('comprovante', file_url);
-    setUploading(false);
+    try {
+      const { file_url } = await client.integrations.Core.UploadFile({ file });
+      handleChange('comprovante', file_url);
+      const b64 = await fileToBase64(file);
+      handleChange('comprovante_data', b64);
+    } catch (err) {
+      toast.error('Erro ao fazer upload do comprovante');
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Calcula o aviso de limite em tempo real
@@ -135,10 +200,6 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
 
   const ativosOnly = funcionarios.filter(f => f.ativo !== false && !f.data_demissao).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-  // Separar tipos em grupos para o select
-  const tiposDescontos = TIPOS_DESCONTO_FORM;
-  const tiposAdicionais = TIPOS_ADICIONAL_FORM;
-
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
@@ -165,8 +226,13 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Descontos</div>
-                  {tiposDescontos.filter(k => k !== 'credito_consignado').map(k => (
-                    <SelectItem key={k} value={k}>{TIPO_LABELS[k]}</SelectItem>
+                  {tiposDescontoMerge.filter(k => k !== 'credito_consignado').map(k => (
+                    <SelectItem key={k} value={k}>
+                      <span className="flex items-center gap-2">
+                        {customTipoMap[k]?.cor && <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: customTipoMap[k].cor }} />}
+                        {TIPO_LABELS[k] || k}
+                      </span>
+                    </SelectItem>
                   ))}
                   <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-1">Consignado</div>
                   <SelectItem value="credito_consignado">
@@ -176,8 +242,13 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
                     </span>
                   </SelectItem>
                   <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-1">Adicionais</div>
-                  {tiposAdicionais.map(k => (
-                    <SelectItem key={k} value={k}>{TIPO_LABELS[k]}</SelectItem>
+                  {tiposAdicionalMerge.map(k => (
+                    <SelectItem key={k} value={k}>
+                      <span className="flex items-center gap-2">
+                        {customTipoMap[k]?.cor && <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: customTipoMap[k].cor }} />}
+                        {TIPO_LABELS[k] || k}
+                      </span>
+                    </SelectItem>
                   ))}
                   <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-1">Comissão</div>
                   <SelectItem value={TIPO_COMISSAO}>
@@ -305,9 +376,9 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Lançar
+              <Button type="submit" disabled={saving || uploading}>
+                {(saving || uploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {uploading ? 'Enviando comprovante...' : 'Lançar'}
               </Button>
             </div>
           </form>

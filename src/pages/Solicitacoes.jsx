@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, ClipboardList, CheckCircle2, XCircle, Clock, MessageSquare, Bell, AlertTriangle, FileText, X, Paperclip, ExternalLink, SquareCheck } from 'lucide-react';
+import { Loader2, ClipboardList, CheckCircle2, XCircle, Clock, MessageSquare, Bell, AlertTriangle, FileText, X, Paperclip, ExternalLink, SquareCheck, Key } from 'lucide-react';
 import { format } from 'date-fns';
 import { registrarAuditoria } from '@/lib/audit';
 import FiltrosAvancados from '@/components/solicitacoes/FiltrosAvancados';
@@ -22,6 +22,7 @@ const TIPO_LABELS = {
   banco_horas: 'Banco de Horas',
   atestado: 'Atestado',
   documento: 'Documento',
+  pix: 'Chave PIX',
   outro: 'Outro',
 };
 
@@ -32,6 +33,14 @@ const STATUS_CONFIG = {
 };
 
 const TIPOS_URGENTES = ['atestado', 'documento'];
+
+async function processarAprovacaoPix(solicitacao) {
+  if (solicitacao.tipo_solicitacao !== 'pix') return;
+  await client.entities.Funcionarios.update(solicitacao.funcionario_id, {
+    chave_pix: solicitacao.chave_pix_nova || '',
+    chave_pix_tipo: solicitacao.chave_pix_tipo_novo || 'cpf',
+  });
+}
 
 // Exibe os anexos de uma solicitação
 function AnexosView({ solicitacao }) {
@@ -88,6 +97,10 @@ function ResponderModal({ solicitacao, onClose, onSaved, meUser }) {
       lidas_por: [],
     });
 
+    if (status === 'aprovado') {
+      await processarAprovacaoPix(solicitacao);
+    }
+
     await registrarAuditoria({
       acao: 'editar',
       modulo: 'lancamento',
@@ -97,6 +110,7 @@ function ResponderModal({ solicitacao, onClose, onSaved, meUser }) {
     });
 
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
     toast.success(`Solicitação ${status === 'aprovado' ? 'aprovada' : 'recusada'} com sucesso!`);
     setSaving(false);
     onSaved();
@@ -121,6 +135,12 @@ function ResponderModal({ solicitacao, onClose, onSaved, meUser }) {
               </p>
             )}
             {solicitacao.tipo_documento && <p><span className="text-muted-foreground">Documento:</span> {solicitacao.tipo_documento}</p>}
+            {solicitacao.tipo_solicitacao === 'pix' && (
+              <div className="border-t pt-2 mt-2 space-y-1">
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Key className="w-3 h-3" /> Chave atual: <span className="font-medium text-foreground">{solicitacao.chave_pix_atual || 'Nenhuma'}</span></p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Key className="w-3 h-3 text-primary" /> Nova chave: <span className="font-medium text-foreground">{solicitacao.chave_pix_nova}</span> <Badge variant="outline" className="text-[10px] h-4">{solicitacao.chave_pix_tipo_novo}</Badge></p>
+              </div>
+            )}
             <AnexosView solicitacao={solicitacao} />
           </div>
 
@@ -387,7 +407,11 @@ export default function Solicitacoes() {
       push_ativado: false,
       lidas_por: [],
     });
+    if (novoStatus === 'aprovado') {
+      await processarAprovacaoPix(s);
+    }
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
     setExpandidoId(null);
     setRespostaInline(prev => { const n = { ...prev }; delete n[s.id]; return n; });
     toast.success(`Solicitação ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}!`);
@@ -413,7 +437,11 @@ export default function Solicitacoes() {
       push_ativado: false,
       lidas_por: [],
     });
+    if (novoStatus === 'aprovado') {
+      await processarAprovacaoPix(s);
+    }
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
     toast.success(`Solicitação ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}!`);
     };
 
@@ -541,6 +569,12 @@ export default function Solicitacoes() {
                       </div>
                       {s.titulo && <p className="text-sm font-medium">{s.titulo}</p>}
                       {s.descricao && <p className="text-sm text-muted-foreground">{s.descricao}</p>}
+                      {s.tipo_solicitacao === 'pix' && (
+                        <div className="bg-primary/5 rounded-lg p-2 space-y-1 text-xs">
+                          <p className="flex items-center gap-1"><Key className="w-3 h-3" /> <span className="text-muted-foreground">Chave atual:</span> <span className="font-medium">{s.chave_pix_atual || 'Nenhuma'}</span></p>
+                          <p className="flex items-center gap-1"><Key className="w-3 h-3 text-primary" /> <span className="text-muted-foreground">Nova chave:</span> <span className="font-medium">{s.chave_pix_nova}</span> <Badge variant="outline" className="text-[10px] h-4">{s.chave_pix_tipo_novo}</Badge></p>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         {s.valor_solicitado && <span>Valor: R$ {s.valor_solicitado.toFixed(2)}</span>}
                         {s.periodo_inicio && <span>Início: {format(new Date(s.periodo_inicio), 'dd/MM/yyyy')}</span>}

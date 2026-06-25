@@ -3,7 +3,7 @@ import { client } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, Trash2, Loader2, Tag, PenLine, FolderOpen, Power } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Tag, Power } from 'lucide-react';
 import FinalidadeForm from './FinalidadeForm';
 import { registrarAuditoria, ACOES } from '@/lib/auditoriaDocumentos';
 
@@ -53,18 +53,6 @@ export default function FinalidadesTab({ finalidades, loading, onRefresh }) {
                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: f.cor || '#6b7280' }} />
                 <div>
                   <p className="font-medium text-sm">{f.nome}</p>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    {f.pasta_padrao && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <FolderOpen className="w-3 h-3" />{f.pasta_padrao}
-                      </span>
-                    )}
-                    {f.exige_assinatura && (
-                      <span className="text-xs text-blue-600 flex items-center gap-1">
-                        <PenLine className="w-3 h-3" />Exige assinatura GovBR
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">

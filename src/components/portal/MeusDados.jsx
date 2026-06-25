@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Calendar, Briefcase, Building2, Mail, Phone, Key, CheckCircle2, X, Loader2, Pencil } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { User, Calendar, Briefcase, Building2, Mail, Phone, Key, CheckCircle2, X, Loader2, Pencil, Clock, AlertTriangle, Send } from 'lucide-react';
 import { formatDate } from '@/lib/formatters';
-import { registrarAuditoria } from '@/lib/audit';
 import { toast } from 'sonner';
 
 function InfoRow({ icon: Icon, label, value }) {
@@ -40,30 +40,33 @@ export default function MeusDados({ funcionario }) {
   const [pixValue, setPixValue] = useState(funcionario?.chave_pix || '');
   const [pixTipo, setPixTipo] = useState(funcionario?.chave_pix_tipo || 'cpf');
   const [salvando, setSalvando] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [enviadoOpen, setEnviadoOpen] = useState(false);
 
-  const handleSalvarPix = async () => {
+  const handleSolicitarPix = async () => {
     if (!funcionario?.id) return;
-    const valorAntigo = funcionario.chave_pix || '';
-    const tipoAntigo = funcionario.chave_pix_tipo || '';
-    if (pixValue.trim() === valorAntigo && pixTipo === tipoAntigo) { setEditandoPix(false); return; }
+    if (pixValue.trim() === (funcionario.chave_pix || '') && pixTipo === (funcionario.chave_pix_tipo || '')) {
+      setEditandoPix(false);
+      return;
+    }
     setSalvando(true);
     try {
-      await client.entities.Funcionarios.update(funcionario.id, {
-        chave_pix: pixValue.trim() || '',
-        chave_pix_tipo: pixTipo,
+      await client.entities.SolicitacoesFuncionario.create({
+        funcionario_id: funcionario.id,
+        funcionario_nome: funcionario.nome,
+        tipo_solicitacao: 'pix',
+        status: 'pendente',
+        chave_pix_nova: pixValue.trim() || '',
+        chave_pix_tipo_novo: pixTipo,
+        chave_pix_atual: funcionario.chave_pix || '',
+        chave_pix_tipo_atual: funcionario.chave_pix_tipo || '',
+        descricao: `Solicitação de alteração de chave PIX`,
+        push_enviado: false,
       });
-      await registrarAuditoria({
-        acao: 'editar',
-        modulo: 'funcionario',
-        entidade_id: funcionario.id,
-        descricao: `Funcionário "${funcionario.nome}" atualizou a chave PIX`,
-        dados_anteriores: { chave_pix: valorAntigo, chave_pix_tipo: tipoAntigo },
-        dados_novos: { chave_pix: pixValue.trim() || '', chave_pix_tipo: pixTipo },
-      });
-      toast.success('Chave PIX atualizada com sucesso!');
       setEditandoPix(false);
+      setEnviadoOpen(true);
     } catch (err) {
-      toast.error('Erro ao atualizar chave PIX');
+      toast.error('Erro ao enviar solicitação');
     } finally {
       setSalvando(false);
     }
@@ -128,6 +131,13 @@ export default function MeusDados({ funcionario }) {
         <CardContent>
           {editandoPix ? (
             <div className="space-y-3">
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium mb-1">Atenção com o prazo</p>
+                  <p>Alterações de chave PIX devem ser feitas com pelo menos 72 horas de antecedência ao fechamento da folha. Solicitações feitas após esse prazo refletirão apenas no fechamento do mês seguinte.</p>
+                </div>
+              </div>
               <div>
                 <Label>Tipo da chave</Label>
                 <Select value={pixTipo} onValueChange={setPixTipo}>
@@ -138,11 +148,11 @@ export default function MeusDados({ funcionario }) {
                 </Select>
               </div>
               <div>
-                <Label>Chave PIX</Label>
+                <Label>Nova chave PIX</Label>
                 <Input
                   value={pixValue}
                   onChange={e => setPixValue(e.target.value)}
-                  placeholder="Digite sua chave PIX"
+                  placeholder="Digite sua nova chave PIX"
                   autoFocus
                 />
               </div>
@@ -150,9 +160,9 @@ export default function MeusDados({ funcionario }) {
                 <Button variant="outline" size="sm" onClick={() => { setEditandoPix(false); setPixValue(funcionario?.chave_pix || ''); setPixTipo(funcionario?.chave_pix_tipo || 'cpf'); }} disabled={salvando}>
                   <X className="w-3.5 h-3.5 mr-1" />Cancelar
                 </Button>
-                <Button size="sm" onClick={handleSalvarPix} disabled={salvando}>
-                  {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1" />}
-                  {salvando ? 'Salvando...' : 'Salvar'}
+                <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={salvando || !pixValue.trim()}>
+                  <Send className="w-3.5 h-3.5 mr-1" />
+                  Solicitar Alteração
                 </Button>
               </div>
             </div>
@@ -171,6 +181,52 @@ export default function MeusDados({ funcionario }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Confirmação antes de enviar */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Confirmar solicitação
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>Você está solicitando a alteração da sua chave PIX para:</p>
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="font-medium">{pixValue}</p>
+              <p className="text-xs text-muted-foreground">{TIPOS_PIX.find(t => t.value === pixTipo)?.label}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">O RH será notificado e a alteração será efetivada após aprovação.</p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={salvando}>Cancelar</Button>
+            <Button size="sm" onClick={() => { setConfirmOpen(false); handleSolicitarPix(); }} disabled={salvando}>
+              {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+              {salvando ? 'Enviando...' : 'Confirmar e Enviar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação de envio */}
+      <Dialog open={enviadoOpen} onOpenChange={setEnviadoOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="w-5 h-5" />
+              Solicitação enviada!
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>Sua solicitação de alteração de chave PIX foi enviada para análise do RH.</p>
+            <p className="text-xs text-muted-foreground">Você pode acompanhar o status na aba <strong>Minhas Solicitações</strong> do portal. O RH será notificado e você receberá uma resposta em breve.</p>
+          </div>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => setEnviadoOpen(false)}>OK</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

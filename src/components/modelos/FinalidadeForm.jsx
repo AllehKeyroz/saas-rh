@@ -16,7 +16,7 @@ const FINALIDADES_EXEMPLO = [
 
 export default function FinalidadeForm({ open, onClose, finalidade, onSaved }) {
   const [form, setForm] = useState({
-    nome: '', descricao: '', pasta_padrao: '', exige_assinatura: false, ativo: true, cor: '#3b82f6'
+    nome: '', descricao: '', ativo: true, cor: '#3b82f6'
   });
   const [saving, setSaving] = useState(false);
 
@@ -25,13 +25,11 @@ export default function FinalidadeForm({ open, onClose, finalidade, onSaved }) {
       setForm({
         nome: finalidade.nome || '',
         descricao: finalidade.descricao || '',
-        pasta_padrao: finalidade.pasta_padrao || '',
-        exige_assinatura: finalidade.exige_assinatura || false,
         ativo: finalidade.ativo !== false,
         cor: finalidade.cor || '#3b82f6',
       });
     } else {
-      setForm({ nome: '', descricao: '', pasta_padrao: '', exige_assinatura: false, ativo: true, cor: '#3b82f6' });
+      setForm({ nome: '', descricao: '', ativo: true, cor: '#3b82f6' });
     }
   }, [finalidade, open]);
 
@@ -70,18 +68,6 @@ export default function FinalidadeForm({ open, onClose, finalidade, onSaved }) {
           <div className="space-y-1">
             <Label>Descrição (opcional)</Label>
             <Input value={form.descricao} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Descrição breve" />
-          </div>
-          <div className="space-y-1">
-            <Label>Pasta de Destino</Label>
-            <Input value={form.pasta_padrao} onChange={e => setForm(p => ({ ...p, pasta_padrao: e.target.value }))} placeholder="Ex: Contratos, Advertências..." />
-            <p className="text-xs text-muted-foreground">Documentos assinados serão salvos nesta pasta no perfil 360° do funcionário</p>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Exige Assinatura GovBR</p>
-              <p className="text-xs text-muted-foreground">Documentos desta finalidade serão enviados para assinatura</p>
-            </div>
-            <Switch checked={form.exige_assinatura} onCheckedChange={v => setForm(p => ({ ...p, exige_assinatura: v }))} />
           </div>
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">Ativa</p>

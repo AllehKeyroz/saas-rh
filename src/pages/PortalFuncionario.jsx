@@ -382,8 +382,12 @@ export default function PortalFuncionario() {
                 <div className="rounded-lg border overflow-hidden bg-white flex items-center justify-center min-h-[200px] sm:min-h-96">
                   {comprovante.comprovante.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
                     <img src={comprovante.comprovante} alt="Comprovante" className="max-w-full max-h-[50vh] sm:max-h-96 object-contain" />
-                  ) : (
+                  ) : comprovante.comprovante.match(/\.pdf$/i) ? (
                     <iframe src={comprovante.comprovante} className="w-full h-[50vh] sm:h-96" />
+                  ) : (
+                    <a href={comprovante.comprovante} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline">
+                      <FileText className="w-5 h-5" />Ver documento
+                    </a>
                   )}
                 </div>
               )}

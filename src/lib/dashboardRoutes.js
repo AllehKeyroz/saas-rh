@@ -25,11 +25,6 @@ export const DASHBOARD_CARD_ROUTES = {
     label: 'Ver vales lançados',
     description: 'Vales no Mês'
   },
-  consignadosAtivos: {
-    path: '/lancamentos',
-    label: 'Ver consignados ativos',
-    description: 'Consignados Ativos'
-  },
   custoFolha: {
     path: '/fechamento',
     label: 'Ver fechamento mensal',
