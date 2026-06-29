@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
-import { getAuth } from 'firebase/auth'
-import { getStorage } from 'firebase/storage'
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
+import { getAuth, connectAuthEmulator } from 'firebase/auth'
+import { getStorage, connectStorageEmulator } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,7 +15,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-export const db = getFirestore(app, 'rhdtalia')
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+
+// Emulador do Firestore não suporta databaseId nomeado — só o padrão "(default)"
+export const db = getFirestore(app, isLocal ? undefined : 'rhdtalia')
 export const auth = getAuth(app)
 export const storage = getStorage(app)
+
+// Auto-detect: se tiver rodando localhost, conecta nos emuladores
+if (isLocal) {
+  connectFirestoreEmulator(db, 'localhost', 8080)
+  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
+  connectStorageEmulator(storage, 'localhost', 9199)
+}
+
 export default app
