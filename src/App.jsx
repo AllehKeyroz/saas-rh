@@ -29,6 +29,7 @@ import AssinaturasDigitais from './pages/AssinaturasDigitais';
 import ModelosDocumentos from './pages/ModelosDocumentos';
 import AuditoriaDocumentos from './pages/AuditoriaDocumentos';
 import EspelhoPortal from './pages/EspelhoPortal';
+import ExportarDados from './pages/ExportarDados';
 import PageNotFound from './lib/PageNotFound';
 
 const AuthenticatedApp = () => {
@@ -90,6 +91,7 @@ const AuthenticatedApp = () => {
         <Route path="/auditoria-documentos" element={<AuditoriaDocumentos />} />
         <Route path="/centro-controle-rh" element={<CentroControleRH />} />
         <Route path="/espelho-portal" element={<EspelhoPortal />} />
+        <Route path="/exportar-dados" element={<ExportarDados />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

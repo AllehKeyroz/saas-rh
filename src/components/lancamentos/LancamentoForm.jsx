@@ -11,14 +11,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Upload, Loader2, AlertTriangle, TrendingUp, Layers } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { TIPO_LABELS, formatCurrency } from '@/lib/formatters';
+import { TIPO_LABELS, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { toast } from 'sonner';
 
 const TIPOS_DESCONTO_FORM = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 const TIPOS_ADICIONAL_FORM = ['adicional', 'ajuste'];
 const TIPO_COMISSAO = 'comissao';
-const TIPOS_PARCELAVEIS = ['vale', 'credito_consignado'];
+const TIPOS_PARCELAVEIS = ['vale'];
 const HARDCODED_KEYS = Object.keys(TIPO_LABELS);
+
+const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+const ANOS = Array.from({length: 20}, (_, i) => 2020 + i);
+
+function calcularMesFim(mesInicio, anoInicio, totalParcelas) {
+  if (!mesInicio || !anoInicio || !totalParcelas) return null;
+  const idx = MESES.indexOf(mesInicio.toUpperCase());
+  if (idx === -1) return null;
+  const totalIdx = idx + Number(totalParcelas) - 1;
+  const anoFim = Number(anoInicio) + Math.floor(totalIdx / 12);
+  const mesFim = MESES[totalIdx % 12];
+  return { mes: mesFim, ano: anoFim, label: `${mesFim}/${anoFim}` };
+}
 
 function fileToBase64(file) {
   return new Promise((resolve) => {
@@ -50,7 +63,12 @@ function fileToBase64(file) {
 export default function LancamentoForm({ open, onClose, onSaved, funcionarios }) {
   const [form, setForm] = useState({
     funcionario_id: '', tipo_lancamento: '', valor: '', data_lancamento: new Date().toISOString().split('T')[0],
-    descricao: '', comprovante: '', comprovante_data: ''
+    descricao: '', comprovante: '', comprovante_data: '',
+    // Consignado fields
+    numero_contrato: '', instituicao_financeira: '', valor_emprestimo: '',
+    valor_parcela: '', total_parcelas: '',
+    data_inicio_contrato: '', data_fim_contrato: '',
+    mes_inicio_desconto: '', ano_inicio_desconto: '',
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -116,7 +134,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     const func = funcionarios.find(f => f.id === form.funcionario_id);
     if (!func || func.limite_vales == null) return null;
 
-    const dataLanc = new Date(form.data_lancamento);
+    const dataLanc = parseDateLocal(form.data_lancamento);
     const mes = dataLanc.getMonth();
     const ano = dataLanc.getFullYear();
 
@@ -127,7 +145,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
         l.data_lancamento
       )
       .filter(l => {
-        const d = new Date(l.data_lancamento);
+        const d = parseDateLocal(l.data_lancamento);
         return d.getMonth() === mes && d.getFullYear() === ano;
       })
       .reduce((s, l) => s + (l.valor || 0), 0);
@@ -147,7 +165,15 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.funcionario_id || !form.tipo_lancamento || !form.valor || Number(form.valor) <= 0) return;
+    if (!form.funcionario_id || !form.tipo_lancamento) return;
+
+    if (form.tipo_lancamento === 'credito_consignado') {
+      if (!form.valor_parcela || Number(form.valor_parcela) <= 0) return;
+      if (!form.total_parcelas || Number(form.total_parcelas) < 1) return;
+      if (!form.mes_inicio_desconto || !form.ano_inicio_desconto) return;
+    } else {
+      if (!form.valor || Number(form.valor) <= 0) return;
+    }
 
     const func = funcionarios.find(f => f.id === form.funcionario_id);
     if (func && func.ativo === false) {
@@ -168,9 +194,67 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     setSaving(true);
     const func = funcionarios.find(f => f.id === form.funcionario_id);
 
-    if (parcelado && TIPOS_PARCELAVEIS.includes(form.tipo_lancamento) && numParcelas >= 2) {
+    if (form.tipo_lancamento === 'credito_consignado') {
+      const mesIdx = MESES.indexOf(form.mes_inicio_desconto);
+      const anoInicio = Number(form.ano_inicio_desconto);
+      const totalParc = Number(form.total_parcelas || 0);
+      const valorParcela = Number(form.valor_parcela);
+
+      const fim = calcularMesFim(form.mes_inicio_desconto, form.ano_inicio_desconto, form.total_parcelas);
+
+      // Cria TODOS os lançamentos na FichaFinanceira primeiro
+      const fichaIds = [];
+      const hoje = new Date();
+      let passadas = 0;
+      for (let i = 0; i < totalParc; i++) {
+        const mesAtual = (mesIdx + i) % 12;
+        const anoAtual = anoInicio + Math.floor((mesIdx + i) / 12);
+        const dataLanc = `${anoAtual}-${String(mesAtual + 1).padStart(2, '0')}-01`;
+        const payloadFF = {
+          funcionario_id: form.funcionario_id,
+          funcionario_nome: func?.nome || '',
+          tipo_lancamento: 'credito_consignado',
+          valor: valorParcela,
+          data_lancamento: dataLanc,
+          descricao: form.descricao || `Consignado — ${form.numero_contrato || ''} ${form.instituicao_financeira || ''} — Parcela ${i + 1}/${totalParc}`,
+          comprovante: form.comprovante,
+          comprovante_data: form.comprovante_data,
+        };
+        const criado = await client.entities.FichaFinanceira.create(payloadFF);
+        fichaIds.push(criado?.id);
+        // Conta parcelas já vencidas (data <= hoje)
+        if (new Date(dataLanc) <= hoje) passadas++;
+      }
+
+      const parcelasPagasInicial = Math.min(passadas, totalParc);
+
+      // Cria contrato Consignado com parcelas_pagas = contagem das já vencidas
+      const consignadoPayload = {
+        funcionario_id: form.funcionario_id,
+        funcionario_nome: func?.nome || '',
+        numero_contrato: form.numero_contrato,
+        instituicao_financeira: form.instituicao_financeira,
+        valor_emprestimo: Number(form.valor_emprestimo || 0),
+        valor_parcela: valorParcela,
+        total_parcelas: totalParc,
+        parcelas_pagas: parcelasPagasInicial,
+        data_inicio_contrato: form.data_inicio_contrato,
+        data_fim_contrato: form.data_fim_contrato,
+        mes_inicio_desconto: `${form.mes_inicio_desconto}/${form.ano_inicio_desconto}`,
+        mes_fim_desconto: fim?.label || '',
+        ativo: parcelasPagasInicial < totalParc,
+        descricao: form.descricao,
+      };
+      await client.entities.Consignado.create(consignadoPayload);
+
+      await registrarAuditoria({
+        acao: 'criar', modulo: 'consignado',
+        descricao: `Consignado nº ${form.numero_contrato} — ${totalParc}x de R$ ${valorParcela.toFixed(2)} (${fim?.label}) — ${passadas} vencidas para ${func?.nome || 'funcionário'}`,
+        dados_novos: { ...consignadoPayload, fichaFinanceiraIds: fichaIds },
+      });
+    } else if (parcelado && TIPOS_PARCELAVEIS.includes(form.tipo_lancamento) && numParcelas >= 2) {
       const valorParcela = Number((Number(form.valor) / numParcelas).toFixed(2));
-      const dataBase = new Date(form.data_lancamento);
+      const dataBase = parseDateLocal(form.data_lancamento);
       for (let i = 0; i < numParcelas; i++) {
         const dataParcela = new Date(dataBase.getFullYear(), dataBase.getMonth() + i, dataBase.getDate());
         const dataStr = dataParcela.toISOString().split('T')[0];
@@ -271,27 +355,30 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Valor *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={form.valor}
-                  onChange={e => handleChange('valor', e.target.value)}
-                  placeholder="0,00"
-                  required
-                />
+            {/* Valor e Data — ocultos para consignado (usa campos do contrato) */}
+            {form.tipo_lancamento !== 'credito_consignado' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Valor *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={form.valor}
+                    onChange={e => handleChange('valor', e.target.value)}
+                    placeholder="0,00"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label>Data *</Label>
+                  <Input type="date" value={form.data_lancamento} onChange={e => handleChange('data_lancamento', e.target.value)} required />
+                </div>
               </div>
-              <div>
-                <Label>Data *</Label>
-                <Input type="date" value={form.data_lancamento} onChange={e => handleChange('data_lancamento', e.target.value)} required />
-              </div>
-            </div>
+            )}
 
-            {/* Opção de parcelamento — vale e crédito consignado */}
-            {TIPOS_PARCELAVEIS.includes(form.tipo_lancamento) && (
+            {/* Parcelamento — apenas para vale */}
+            {form.tipo_lancamento === 'vale' && TIPOS_PARCELAVEIS.includes(form.tipo_lancamento) && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -301,7 +388,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
                   />
                   <label htmlFor="parcelado" className="text-sm font-medium cursor-pointer flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-primary" />
-                    Parcelar {form.tipo_lancamento === 'credito_consignado' ? 'crédito consignado' : 'vale'}
+                    Parcelar vale
                   </label>
                 </div>
                 {parcelado && (
@@ -334,6 +421,81 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Crédito Consignado — campos do contrato */}
+            {form.tipo_lancamento === 'credito_consignado' && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                <p className="text-xs font-semibold text-purple-700 flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5" /> Dados do Contrato Consignado
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label className="text-xs">Nº do Contrato</Label>
+                    <Input value={form.numero_contrato} onChange={e => handleChange('numero_contrato', e.target.value)} placeholder="Ex: 000592353905" />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs">Instituição Financeira</Label>
+                    <Input value={form.instituicao_financeira} onChange={e => handleChange('instituicao_financeira', e.target.value)} placeholder="Ex: 389 - BANCO MERCANTIL DO BRASIL S A" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Valor do Empréstimo</Label>
+                    <Input type="number" step="0.01" value={form.valor_emprestimo} onChange={e => handleChange('valor_emprestimo', e.target.value)} placeholder="0,00" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Valor da Parcela *</Label>
+                    <Input type="number" step="0.01" value={form.valor_parcela} onChange={e => handleChange('valor_parcela', e.target.value)} placeholder="0,00" required />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Total de Parcelas</Label>
+                    <Input type="number" min="1" value={form.total_parcelas} onChange={e => handleChange('total_parcelas', e.target.value)} placeholder="Ex: 36" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Mês Início do Desconto *</Label>
+                    <div className="flex gap-1">
+                      <Select value={form.mes_inicio_desconto} onValueChange={v => handleChange('mes_inicio_desconto', v)}>
+                        <SelectTrigger className="w-24"><SelectValue placeholder="Mês" /></SelectTrigger>
+                        <SelectContent>
+                          {MESES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={form.ano_inicio_desconto} onValueChange={v => handleChange('ano_inicio_desconto', v)}>
+                        <SelectTrigger className="w-24"><SelectValue placeholder="Ano" /></SelectTrigger>
+                        <SelectContent>
+                          {ANOS.map(a => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Início do Contrato</Label>
+                    <Input type="date" value={form.data_inicio_contrato} onChange={e => handleChange('data_inicio_contrato', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Fim do Contrato</Label>
+                    <Input type="date" value={form.data_fim_contrato} onChange={e => handleChange('data_fim_contrato', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Resumo auto-calculado */}
+                {(() => {
+                  const fim = calcularMesFim(form.mes_inicio_desconto, form.ano_inicio_desconto, form.total_parcelas);
+                  const parcela = Number(form.valor_parcela || 0);
+                  const totalParcelas = Number(form.total_parcelas || 0);
+                  if (!fim || !parcela || !totalParcelas) return null;
+                  return (
+                    <div className="bg-purple-100/50 rounded-lg px-3 py-2 text-xs space-y-0.5">
+                      <p className="font-medium text-purple-800">
+                        {totalParcelas}x de {formatCurrency(parcela)}
+                        <span className="text-purple-600"> — Total: {formatCurrency(parcela * totalParcelas)}</span>
+                      </p>
+                      <p className="text-purple-600">
+                        De {form.mes_inicio_desconto}/{form.ano_inicio_desconto} a {fim.label}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

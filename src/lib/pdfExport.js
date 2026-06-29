@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import { formatCurrency, formatDate, TIPO_LABELS, mergeTipos } from './formatters';
+import { formatCurrency, formatDate, TIPO_LABELS, mergeTipos, parseDateLocal, getMesRef } from './formatters';
 import { ref, getBytes } from '@firebase/storage';
 import { storage } from '@/firebase/config';
 import { client } from '@/api/client';
@@ -97,13 +97,10 @@ export async function exportDemonstrativoPDF(funcionario, lancamentos, fechament
   const funcLanc = lancamentos
     .filter(l => {
       if (!mesRef) return l.funcionario_id === funcionario.id;
-      const [mm, yyyy] = mesRef.split('/');
-      const d = new Date(l.data_lancamento);
       return l.funcionario_id === funcionario.id &&
-        d.getMonth() === parseInt(mm) - 1 &&
-        d.getFullYear() === parseInt(yyyy);
+        getMesRef(l.data_lancamento) === mesRef;
     })
-    .sort((a, b) => new Date(b.data_lancamento) - new Date(a.data_lancamento));
+    .sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
 
   const fechMes = fechamentos.find(f => f.funcionario_id === funcionario.id && f.mes_referencia === mesRef);
 

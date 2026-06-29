@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { User, ExternalLink, CalendarDays } from 'lucide-react';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { mergeTipos } from '@/lib/formatters';
 
 export default function DashboardRH() {
@@ -65,23 +65,21 @@ export default function DashboardRH() {
     const ativas = funcionarios.filter(f => f.ativo !== false && !f.data_demissao).length;
     const pendentes = solicitacoes?.filter(s => s.status === 'pendente').length || 0;
 
-    // Férias vencidas considerando períodos já gozados
+    // Férias vencidas: período aquisitivo (12 meses) + concessivo (12 meses) = 24 meses no total
     const feriasVencidas = funcionarios.filter(f => {
       const dataAdm = f.data_admissao ? new Date(f.data_admissao) : null;
       if (!dataAdm || f.data_demissao) return false;
-      const mesesDesdeAdmissao = (now.getTime() - dataAdm.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+      const mesesDesdeAdmissao = (now.getFullYear() * 12 + now.getMonth()) - (dataAdm.getFullYear() * 12 + dataAdm.getMonth());
       const totalPeriodos = Math.floor(mesesDesdeAdmissao / 12);
       if (totalPeriodos === 0) return false;
-      // Períodos já consumidos
       const consumidos = new Set(
         todasFerias.filter(fc => fc.funcionario_id === f.id).map(fc => fc.periodo_aquisitivo)
       );
-      // Verifica se há algum período não consumido cujo prazo CLT já venceu
       for (let p = 1; p <= totalPeriodos; p++) {
         if (!consumidos.has(p)) {
-          const fimPeriodo = new Date(dataAdm.getTime() + p * 365 * 24 * 60 * 60 * 1000);
-          const prazoLimite = new Date(fimPeriodo);
-          prazoLimite.setMonth(prazoLimite.getMonth() + 11);
+          const fimAquisitivo = new Date(dataAdm.getFullYear(), dataAdm.getMonth() + p * 12, 1);
+          const prazoLimite = new Date(fimAquisitivo);
+          prazoLimite.setMonth(prazoLimite.getMonth() + 12); // 12 meses de prazo concessivo
           if (now > prazoLimite) return true;
         }
       }
@@ -90,8 +88,7 @@ export default function DashboardRH() {
 
     const lancamentosMes = (lancamentos || []).filter(l => {
       if (!l.data_lancamento) return false;
-      const d = new Date(l.data_lancamento);
-      return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` === mesAtual;
+      return getMesRef(l.data_lancamento) === mesAtual;
     });
     const vales = lancamentosMes.filter(l => descontosList.includes(l.tipo_lancamento));
     const valesMes = vales.reduce((s, l) => s + (l.valor || 0), 0);
@@ -125,7 +122,7 @@ export default function DashboardRH() {
 
   const alerts = React.useMemo(() => {
     const result = [];
-    if (stats.feriasVencidas > 0) result.push({ type: 'warning', title: `${stats.feriasVencidas} funcionário(s) com férias vencidas`, description: `${stats.feriasVencidas} funcionário(s) estão há mais de 14 meses sem férias.`, action: 'Verificar', onAction: () => navigate('/funcionarios?tab=ferias') });
+    if (stats.feriasVencidas > 0) result.push({ type: 'warning', title: `${stats.feriasVencidas} funcionário(s) com férias vencidas`, description: `${stats.feriasVencidas} funcionário(s) com prazo concessivo de férias expirado.`, action: 'Verificar', onAction: () => navigate('/funcionarios?tab=ferias') });
     if (stats.docsVencendo > 0) result.push({ type: 'error', title: `${stats.docsVencendo} documento(s) vencendo`, description: `${stats.docsVencendo} documento(s) vencerão nos próximos 5 dias.`, action: 'Gerenciar', onAction: () => navigate('/assinaturas-digitais') });
     return result;
   }, [stats, navigate]);

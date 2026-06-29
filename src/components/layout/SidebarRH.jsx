@@ -18,6 +18,12 @@ const menuStructure = [
     ]
   },
   {
+    category: 'Relatórios', icon: FileText,
+    items: [
+      { path: '/relatorios', label: 'Relatórios', icon: FileText }
+    ]
+  },
+  {
     category: 'Folha de Pagamento', icon: Calculator,
     items: [
       { path: '/fechamento', label: 'Fechamento Mensal', icon: Calculator },

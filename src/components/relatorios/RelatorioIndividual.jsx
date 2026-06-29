@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ExternalLink, User, FileDown, Loader2 } from 'lucide-react';
-import { formatCurrency, formatDate, TIPO_LABELS, TIPO_COLORS } from '@/lib/formatters';
+import { formatCurrency, formatDate, TIPO_LABELS, TIPO_COLORS, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { exportDemonstrativoPDF } from '@/lib/pdfExport';
 import ExportHistoricoFinanceiro from './ExportHistoricoFinanceiro';
 
@@ -20,7 +20,7 @@ export default function RelatorioIndividual({ funcionario, lancamentos, fechamen
 
   const funcLanc = lancamentos
     .filter(l => l.funcionario_id === funcionario.id)
-    .sort((a, b) => new Date(b.data_lancamento) - new Date(a.data_lancamento));
+    .sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
 
   const funcFech = fechamentos
     .filter(f => f.funcionario_id === funcionario.id)

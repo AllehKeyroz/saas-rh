@@ -13,6 +13,7 @@ import { registrarAuditoria } from '@/lib/audit';
 export default function CorrigirComissaoDialog({ 
   aberto, 
   comissao, 
+  setoresComissao = [], 
   onClose, 
   onRefresh 
 }) {
@@ -25,16 +26,20 @@ export default function CorrigirComissaoDialog({
     return parseFloat(valores.valor_total_periodo) || comissao?.valor_total_periodo || 0;
   }, [valores, comissao]);
 
+  // Distribuição dinâmica baseada nos setores configurados
   const distribuicao = useMemo(() => {
     const total = totalCalculado;
-    return {
-      valor_empresa: (total * 0.2),
-      valor_salao: (total * 0.4),
-      valor_cozinha: (total * 0.24),
-      valor_copa_playground_caixa: (total * 0.14),
-      valor_limpeza_rh: (total * 0.02),
-    };
-  }, [totalCalculado]);
+    const setoresAtivos = (setoresComissao || []).filter(s => s.ativo !== false);
+    const retencaoPct = Number(comissao?.percentual_retencao || 0) / 100;
+    const dist = { valor_empresa: total * retencaoPct };
+    const valorLiquido = total - dist.valor_empresa;
+    const somaPct = setoresAtivos.reduce((s, set) => s + Number(set.percentual || 0), 0);
+    const norm = somaPct > 0 ? somaPct : 1;
+    for (const s of setoresAtivos) {
+      dist['setor_' + s.nome_do_setor] = valorLiquido * (Number(s.percentual || 0) / norm);
+    }
+    return dist;
+  }, [totalCalculado, setoresComissao, comissao]);
 
   if (!comissao) return null;
 
@@ -50,10 +55,6 @@ export default function CorrigirComissaoDialog({
       const dadosAntigos = {
         valor_total_periodo: comissao.valor_total_periodo,
         valor_empresa: comissao.valor_empresa,
-        valor_salao: comissao.valor_salao,
-        valor_cozinha: comissao.valor_cozinha,
-        valor_copa_playground_caixa: comissao.valor_copa_playground_caixa,
-        valor_limpeza_rh: comissao.valor_limpeza_rh,
       };
 
       const novoValorTotal = totalCalculado;
@@ -66,10 +67,6 @@ export default function CorrigirComissaoDialog({
       await client.entities.ComissoesGorjetas.update(comissao.id, {
         valor_total_periodo: novoValorTotal,
         valor_empresa: distribuicao.valor_empresa,
-        valor_salao: distribuicao.valor_salao,
-        valor_cozinha: distribuicao.valor_cozinha,
-        valor_copa_playground_caixa: distribuicao.valor_copa_playground_caixa,
-        valor_limpeza_rh: distribuicao.valor_limpeza_rh,
       });
 
       // Registrar no histórico de alterações

@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from 'firebase/auth'
-import { auth } from '@/firebase/config'
+import { auth, db } from '@/firebase/config'
+import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { createUserProfile, refreshCurrentUser } from '@/firebase/auth'
 import { client } from '@/api/client'
 import { useNavigate, Link } from 'react-router-dom'
@@ -32,8 +33,15 @@ export default function Register() {
           setConvite(c)
           if (c?.tenant_id) {
             try {
-              const res = await client.entities.tenants.filter({ id: c.tenant_id })
-              setTenantNome(res?.[0]?.nome || '')
+              // Tenta lookup direto pelo ID do documento (novo formato)
+              const docSnap = await getDoc(doc(db, 'tenants', c.tenant_id))
+              if (docSnap.exists()) {
+                setTenantNome(docSnap.data().nome || '')
+              } else {
+                // Fallback: busca pelo campo 'id' (legado)
+                const res = await client.entities.tenants.filter({ id: c.tenant_id })
+                setTenantNome(res?.[0]?.nome || '')
+              }
             } catch { setTenantNome('') }
           } else {
             setTenantNome('')
@@ -110,7 +118,7 @@ export default function Register() {
         }
       } else {
         tenantId = generateTenantId()
-        await client.entities.tenants.create({
+        await setDoc(doc(db, 'tenants', tenantId), {
           id: tenantId,
           nome: form.companyName.trim(),
           email,

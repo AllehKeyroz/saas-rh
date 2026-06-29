@@ -3,6 +3,30 @@ export function formatCurrency(value) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+// Converte string de data para Date no timezone LOCAL do navegador
+// "2026-01-15" ou "2026-01-15T10:30:00Z" → Date local
+export function parseDateLocal(dateStr) {
+  if (!dateStr) return new Date(NaN);
+  // Se for string ISO completa com hora, extrai só a parte da data e usa meio-dia
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts.map(Number);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m - 1, d, 12, 0, 0);
+    }
+  }
+  // Fallback
+  const d = new Date(dateStr);
+  return d;
+}
+
+// Extrai o mês/ano "MM/YYYY" de uma data string, sem erro de timezone
+export function getMesRef(dateStr) {
+  const d = parseDateLocal(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return '-';
   // Extrai partes para evitar interpretação como UTC (que desloca um dia em TZ diferente)

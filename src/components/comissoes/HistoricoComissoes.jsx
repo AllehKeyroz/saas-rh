@@ -7,7 +7,7 @@ import { formatPeriodo } from '@/lib/comissoes';
 import { Calendar, CheckCircle2, Eye } from 'lucide-react';
 import DetalhesComissao from './DetalhesComissao';
 
-export default function HistoricoComissoes({ comissoes, comissoesFuncionarios, funcionarios, onRefresh }) {
+export default function HistoricoComissoes({ comissoes, comissoesFuncionarios, funcionarios, setoresComissao, onRefresh }) {
   const [detalhes, setDetalhes] = useState(null);
   const sorted = [...comissoes].sort((a, b) => (b.periodo_inicio || '').localeCompare(a.periodo_inicio || ''));
 
@@ -59,6 +59,7 @@ export default function HistoricoComissoes({ comissoes, comissoesFuncionarios, f
         comissao={detalhes}
         comissoesFuncionarios={comissoesFuncionarios}
         funcionarios={funcionarios}
+        setoresComissao={setoresComissao}
         onClose={() => setDetalhes(null)}
         onRefresh={onRefresh}
       />

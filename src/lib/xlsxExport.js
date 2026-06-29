@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { formatDate, TIPO_LABELS, mergeTipos } from './formatters';
+import { formatDate, TIPO_LABELS, mergeTipos, parseDateLocal, getMesRef } from './formatters';
 
 function fmtNum(val) {
   return val ?? 0;
@@ -18,9 +18,7 @@ function applyCurrencyFormat(ws, colIndex, startRow, endRow) {
 export async function exportFechamentoXLSX(funcionarios, lancamentos, fechamentos, calcular, mesRef, tiposLancamento) {
   const lancMes = lancamentos.filter(l => {
     if (!l.data_lancamento) return false;
-    const [mm, yyyy] = mesRef.split('/');
-    const d = new Date(l.data_lancamento);
-    return d.getMonth() === parseInt(mm) - 1 && d.getFullYear() === parseInt(yyyy);
+    return getMesRef(l.data_lancamento) === mesRef;
   });
 
   const descontosList = mergeTipos(tiposLancamento, 'desconto');

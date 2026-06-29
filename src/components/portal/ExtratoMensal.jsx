@@ -44,7 +44,9 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
     .filter(l => !TIPOS_LIMITE.includes(l.tipo_lancamento))
     .reduce((s, l) => s + (l.valor || 0), 0);
   const totalReceitasExtras = receitasExtras.reduce((s, r) => s + (r.valor || 0), 0);
-  const saldoBase = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0);
+  const salarioBaseExibir = funcionario?.salario_base || 0;
+  const ajudaCustoExibir = funcionario?.ajuda_custo || 0;
+  const saldoBase = salarioBaseExibir + ajudaCustoExibir;
   const saldoFinal = saldoBase + totalCreditos + totalReceitasExtras - totalDebitos;
 
   const sorted = [...lancamentosMes].sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
@@ -77,22 +79,22 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
         </CardHeader>
         <CardContent>
           {/* Salário base */}
-          {saldoBase > 0 && (
+          {salarioBaseExibir > 0 && (
             <div className="flex items-center justify-between py-2.5 border-b">
               <div>
                 <span className="text-sm font-medium">Salário Base</span>
                 <p className="text-xs text-muted-foreground">Competência {mesSelecionado}</p>
               </div>
-              <span className="text-sm font-bold text-green-600">+ {formatCurrency(saldoBase)}</span>
+              <span className="text-sm font-bold text-green-600">+ {formatCurrency(salarioBaseExibir)}</span>
             </div>
           )}
-          {funcionario?.ajuda_custo > 0 && (
+          {ajudaCustoExibir > 0 && (
             <div className="flex items-center justify-between py-2.5 border-b">
               <div>
                 <span className="text-sm font-medium">Ajuda de Custo</span>
                 <p className="text-xs text-muted-foreground">Competência {mesSelecionado}</p>
               </div>
-              <span className="text-sm font-bold text-blue-600">+ {formatCurrency(funcionario.ajuda_custo)}</span>
+              <span className="text-sm font-bold text-blue-600">+ {formatCurrency(ajudaCustoExibir)}</span>
             </div>
           )}
 

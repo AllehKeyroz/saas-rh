@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router-dom';
 import { User, LogOut, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getMesReferenciaAtual, getMesesOptions, formatDate, formatCurrency } from '@/lib/formatters';
+import { getMesReferenciaAtual, getMesesOptions, formatDate, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { useRHControl } from '@/lib/rhControl';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -53,7 +53,6 @@ export default function PortalFuncionario() {
   const [comprovante, setComprovante] = useState(null);
   const mesAtual = getMesReferenciaAtual();
   const [mesSelecionado, setMesSelecionado] = useState(mesAtual);
-  const mesesDisponiveis = getMesesOptions(12);
   const { isAtiva } = useRHControl();
   const { toast } = useToast();
   const [mensagensNaoLidas, setMensagensNaoLidas] = React.useState(0);
@@ -89,6 +88,45 @@ export default function PortalFuncionario() {
   const funcionario = funcionarios.find(
     f => f.user_email_portal === meUser?.email || f.email === meUser?.email
   );
+
+  // Gera range de meses baseado na data de admissão e dados existentes
+  const mesesDisponiveis = useMemo(() => {
+    if (!funcionario) return [mesAtual];
+    const meses = [];
+    let minMes = mesAtual;
+    if (funcionario.data_admissao) {
+      const d = new Date(funcionario.data_admissao);
+      minMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+    const lancFunc = lancamentos.filter(l => l.funcionario_id === funcionario.id);
+    if (lancFunc.length > 0) {
+      const maisAntigo = lancFunc.reduce((menor, l) => {
+        if (!l.data_lancamento) return menor;
+        return l.data_lancamento < menor ? l.data_lancamento : menor;
+      }, lancFunc[0]?.data_lancamento);
+      if (maisAntigo) {
+        const d = new Date(maisAntigo);
+        const mesLanc = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        if (mesLanc < minMes) minMes = mesLanc;
+      }
+    }
+    const [mMin, aMin] = minMes.split('/').map(Number);
+    const [mAtual, aAtual] = mesAtual.split('/').map(Number);
+    let ano = aMin, mes = mMin;
+    while (ano < aAtual || (ano === aAtual && mes <= mAtual)) {
+      meses.push(`${String(mes).padStart(2, '0')}/${ano}`);
+      mes++;
+      if (mes > 12) { mes = 1; ano++; }
+    }
+    return meses.length > 0 ? meses : [mesAtual];
+  }, [funcionario, lancamentos]);
+
+  // Garante que mesSelecionado está dentro do range disponível
+  useEffect(() => {
+    if (mesesDisponiveis.length > 0 && !mesesDisponiveis.includes(mesSelecionado)) {
+      setMesSelecionado(mesesDisponiveis[mesesDisponiveis.length - 1] || mesAtual);
+    }
+  }, [mesesDisponiveis]);
 
   const { data: gastosPessoais = [] } = useQuery({
     queryKey: ['gastos_pessoais', funcionario?.id],
@@ -150,6 +188,12 @@ export default function PortalFuncionario() {
     setMensagensNaoLidas(naoLidas);
   }, [mensagensRH, funcionario]);
 
+  const { data: fechamentos = [] } = useQuery({
+    queryKey: ['fechamentos-portal'],
+    queryFn: () => client.entities.FechamentoMensal.list(),
+    enabled: !!funcionario?.id,
+  });
+
   const { data: comissoesFuncionarios = [] } = useQuery({
     queryKey: ['comissoes_funcionario_vf', funcionario?.id],
     queryFn: () => client.entities.ComissaoPorFuncionario.filter({
@@ -161,8 +205,7 @@ export default function PortalFuncionario() {
   const lancamentosFunc = lancamentos.filter(l => l.funcionario_id === funcionario?.id);
   const lancamentosMes = lancamentosFunc.filter(l => {
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const mr = getMesRef(l.data_lancamento);
     return mr === mesSelecionado;
   });
 
@@ -172,8 +215,7 @@ export default function PortalFuncionario() {
   // Receitas extras do mês selecionado
   const receitasExtrasMes = gastosPessoais.filter(g => {
     if (g.categoria_tipo !== 'receita_extra' || !g.data_lancamento) return false;
-    const d = new Date(g.data_lancamento);
-    const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const mr = getMesRef(g.data_lancamento);
     return mr === mesSelecionado;
   });
 
@@ -302,6 +344,7 @@ export default function PortalFuncionario() {
               funcionario={funcionario}
               lancamentosFuncionario={lancamentosFunc}
               comissoesFuncionarios={comissoesFuncionarios}
+              fechamentosFuncionario={fechamentos.filter(f => f.funcionario_id === funcionario?.id)}
               mesSelecionado={mesSelecionado}
             />
           )}

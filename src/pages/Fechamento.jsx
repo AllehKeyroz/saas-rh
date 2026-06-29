@@ -10,8 +10,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Calculator, Loader2, CheckCircle2, RefreshCw, FileDown, LockOpen, ChevronDown, UserCheck, FileSpreadsheet, FileType, FileArchive } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { formatDate } from '@/lib/formatters';
-import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL, mergeTipos } from '@/lib/formatters';
+import { formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL, mergeTipos, TIPOS_DESCONTO_DEFAULT, TIPOS_ADICIONAL_DEFAULT, TIPO_LABELS } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserRole } from '@/lib/useUserRole';
 import { toast } from 'sonner';
@@ -101,8 +101,54 @@ export default function Fechamento() {
     queryFn: () => client.entities.TipoLancamento.list(),
   });
 
+  const { data: consignados = [] } = useQuery({
+    queryKey: ['consignados-fechamento'],
+    queryFn: () => client.entities.Consignado.list(),
+  });
+
+  const { data: configsRH = [] } = useQuery({
+    queryKey: ['configuracoes-rh-fechamento'],
+    queryFn: () => client.entities.ConfiguracoesRH.list(),
+  });
+
   const customDescontosList = useMemo(() => mergeTipos(tiposLancamento, 'desconto'), [tiposLancamento]);
   const customAdicionaisList = useMemo(() => mergeTipos(tiposLancamento, 'adicional'), [tiposLancamento]);
+
+  // Configuração de colunas visíveis no fechamento
+  // Remove tipos que já têm coluna dedicada fixa (comissao = coluna "Comissão" dedicada)
+  const COLUNAS_FIXAS = ['comissao'];
+  const colunasFechamento = useMemo(() => {
+    const configDoc = configsRH.find(c => c.chave === 'colunas_fechamento');
+    const saved = configDoc?.valor || {};
+    const result = [];
+    const ALL_DEFAULT = [...TIPOS_DESCONTO_DEFAULT, ...TIPOS_ADICIONAL_DEFAULT];
+    const getCorDefault = (nome) => {
+      const v = saved[nome];
+      if (v === true || v === false) return null;
+      return v?.cor || null;
+    };
+    const visivelDefault = (nome) => {
+      const v = saved[nome];
+      if (v === true || v === false) return v !== false;
+      return v?.visivel !== false;
+    };
+    for (const tipo of ALL_DEFAULT) {
+      if (COLUNAS_FIXAS.includes(tipo)) continue;
+      if (visivelDefault(tipo)) {
+        result.push({ nome: TIPO_LABELS[tipo] || tipo, key: tipo, cor: getCorDefault(tipo) || null });
+      }
+    }
+    const customCor = (nome) => {
+      const c = tiposLancamento.find(t => t.nome === nome);
+      return c?.cor || null;
+    };
+    for (const t of tiposLancamento) {
+      if (t.ativo !== false && t.mostrar_coluna !== false && !ALL_DEFAULT.includes(t.nome)) {
+        result.push({ nome: t.nome, key: t.nome, cor: customCor(t.nome) || null });
+      }
+    }
+    return result;
+  }, [tiposLancamento, configsRH]);
 
   const isLoading = lf || ll || lfech;
   const [mesNum, anoStr] = mesRef.split('/');
@@ -111,13 +157,31 @@ export default function Fechamento() {
 
   const lancMes = lancamentos.filter(l => {
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    return d.getMonth() === mes && d.getFullYear() === ano;
+    return getMesRef(l.data_lancamento) === mesRef;
   });
 
   const ativos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   const fechamentosMes = fechamentos.filter(f => f.mes_referencia === mesRef);
   const fechadosIds = new Set(fechamentosMes.map(f => f.funcionario_id));
+
+  // Usa valores congelados do FechamentoMensal se existir, senão recalcula
+  // salario_base armazenado: registros antigos = base+ajuda (combinado), novos = apenas base
+  // a soma com ajuda_custo garante compatibilidade com ambos
+  const calcularComFechado = (funcId) => {
+    const fechado = fechamentosMes.find(f => f.funcionario_id === funcId);
+    if (fechado) {
+      return {
+        salarioBase: (fechado.salario_base || 0) + (fechado.ajuda_custo || 0),
+        totalDescontos: fechado.total_descontos || 0,
+        totalAdicionais: fechado.total_adicionais || 0,
+        comissaoGorjeta: fechado.comissao_gorjeta || 0,
+        salarioLiquido: fechado.salario_liquido || 0,
+        detalhes: fechado.detalhes || {},
+        lancamentos: Object.values(fechado.detalhes || {}).filter(v => v > 0).length,
+      };
+    }
+    return calcular(funcId);
+  };
 
   const calcularComissaoMes = (funcId) => {
     return comissoesFuncionarios
@@ -169,10 +233,12 @@ export default function Fechamento() {
 
     if (jafechado && reprocessMode && isAdmin) {
       await client.entities.FechamentoMensal.update(jafechado.id, {
-        salario_base: calc.salarioBase,
+        salario_base: (func?.salario_base || 0),
+        ajuda_custo: func?.ajuda_custo || 0,
         total_descontos: calc.totalDescontos,
         total_adicionais: calc.totalAdicionais,
         salario_liquido: calc.salarioLiquido,
+        comissao_gorjeta: calc.comissaoGorjeta,
         data_processamento: new Date().toISOString(),
         detalhes: calc.detalhes,
       });
@@ -181,10 +247,12 @@ export default function Fechamento() {
         funcionario_id: func.id,
         funcionario_nome: func.nome,
         mes_referencia: mesRef,
-        salario_base: calc.salarioBase,
+        salario_base: (func?.salario_base || 0),
+        ajuda_custo: func?.ajuda_custo || 0,
         total_descontos: calc.totalDescontos,
         total_adicionais: calc.totalAdicionais,
         salario_liquido: calc.salarioLiquido,
+        comissao_gorjeta: calc.comissaoGorjeta,
         data_processamento: new Date().toISOString(),
         detalhes: calc.detalhes,
       });
@@ -194,6 +262,19 @@ export default function Fechamento() {
     const funcLanc = lancMes.filter(l => l.funcionario_id === func.id && !l.consolidado);
     for (const l of funcLanc) {
       await client.entities.FichaFinanceira.update(l.id, { consolidado: true });
+    }
+
+    // Increment parcelas_pagas dos contratos consignado ativos (apenas no 1º processamento)
+    if (!jafechado) {
+      const consignadosAtivos = consignados.filter(c => c.funcionario_id === func.id && c.ativo !== false && c.valor_parcela);
+      for (const c of consignadosAtivos) {
+        const novasPagas = (c.parcelas_pagas || 0) + 1;
+        const finalizado = novasPagas >= (c.total_parcelas || 99999);
+        await client.entities.Consignado.update(c.id, {
+          parcelas_pagas: novasPagas,
+          ativo: !finalizado,
+        });
+      }
     }
   };
 
@@ -206,6 +287,7 @@ export default function Fechamento() {
     queryClient.invalidateQueries({ queryKey: ['fechamentos'] });
     queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
     queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+    queryClient.invalidateQueries({ queryKey: ['consignados-fechamento'] });
     toast.success(`Fechamento ${reprocessMode ? 'reprocessado' : 'processado'} com sucesso!`);
     setProcessing(false);
     setConfirmOpen(false);
@@ -216,6 +298,7 @@ export default function Fechamento() {
     await processarFuncionario(func);
     queryClient.invalidateQueries({ queryKey: ['fechamentos'] });
     queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
+    queryClient.invalidateQueries({ queryKey: ['consignados-fechamento'] });
     setProcessing(false);
     setConfirmFunc(null);
     toast.success(`Fechamento de ${func.nome} processado!`);
@@ -226,6 +309,7 @@ export default function Fechamento() {
     await processarFuncionario(func);
     queryClient.invalidateQueries({ queryKey: ['fechamentos'] });
     queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
+    queryClient.invalidateQueries({ queryKey: ['consignados-fechamento'] });
     setProcessing(false);
     setFechIndividualOpen(false);
     const tipoLabel = tipo === 'rescisao' ? 'Rescisão' : tipo === 'ferias' ? 'Férias' : 'Mensal';
@@ -305,7 +389,7 @@ export default function Fechamento() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => exportFechamentoPDF(ativos, calcular, mesRef)}>
+              <DropdownMenuItem onClick={() => exportFechamentoPDF(ativos, calcularComFechado, mesRef)}>
                 <FileType className="w-4 h-4 mr-2 text-blue-600" />PDF — Resumo da Folha
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => exportFechamentoXLSX(funcionarios, lancamentos, fechamentos, calcular, mesRef, tiposLancamento)}>
@@ -333,8 +417,11 @@ export default function Fechamento() {
                     <TableHead>Funcionário</TableHead>
                      <TableHead>Sal. Base</TableHead>
                      <TableHead>Comissão</TableHead>
-                     <TableHead>Adicionais</TableHead>
-                     <TableHead>Descontos</TableHead>
+                     {colunasFechamento.map(col => (
+                       <TableHead key={col.key} className="text-xs tracking-wide" style={col.cor ? { backgroundColor: col.cor + '15', color: col.cor } : {}}>
+                         {col.nome}
+                       </TableHead>
+                     ))}
                      <TableHead>Sal. Líquido</TableHead>
                      <TableHead>Lanç.</TableHead>
                      <TableHead>Status</TableHead>
@@ -343,8 +430,8 @@ export default function Fechamento() {
                 </TableHeader>
                 <TableBody>
                   {ativos.map(func => {
-                    const calc = calcular(func.id);
                     const fechado = fechamentosMes.find(f => f.funcionario_id === func.id);
+                    const dados = calcularComFechado(func.id);
                     return (
                       <TableRow key={func.id}>
                         <TableCell>
@@ -355,12 +442,19 @@ export default function Fechamento() {
                             {func.nome}
                           </button>
                         </TableCell>
-                        <TableCell>{formatCurrency(calc.salarioBase)}</TableCell>
-                        <TableCell className="text-emerald-600 font-medium">{formatCurrency(calc.comissaoGorjeta || 0)}</TableCell>
-                        <TableCell className="text-green-600">{formatCurrency(calc.totalAdicionais)}</TableCell>
-                        <TableCell className="text-destructive font-medium">{formatCurrency(calc.totalDescontos)}</TableCell>
-                        <TableCell className="font-bold">{formatCurrency(calc.salarioLiquido)}</TableCell>
-                        <TableCell>{calc.lancamentos}</TableCell>
+                        <TableCell>{formatCurrency(dados.salarioBase)}</TableCell>
+                        <TableCell className="text-emerald-600 font-medium">{formatCurrency(dados.comissaoGorjeta || 0)}</TableCell>
+                        {colunasFechamento.map(col => {
+                          const val = dados.detalhes?.[col.key] || 0;
+                          const isDesc = TIPOS_DESCONTO_DEFAULT.includes(col.key);
+                          return (
+                            <TableCell key={col.key} className={val ? (isDesc ? 'text-destructive font-medium' : 'text-green-600') : 'text-muted-foreground text-xs'}>
+                              {val ? formatCurrency(val) : '—'}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="font-bold">{formatCurrency(dados.salarioLiquido)}</TableCell>
+                        <TableCell>{dados.lancamentos}</TableCell>
                         <TableCell>
                           {fechado ? (
                             <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />Fechado</Badge>
@@ -488,6 +582,8 @@ export default function Fechamento() {
         func={detalhesFunc}
         lancamentos={lancamentos}
         mesRef={mesRef}
+        tiposLancamento={tiposLancamento}
+        fechamentosMes={fechamentosMes}
         onClose={() => setDetalhesFunc(null)}
       />
 
@@ -497,7 +593,7 @@ export default function Fechamento() {
         onClose={() => setFechIndividualOpen(false)}
         funcionarios={ativos}
         mesRef={mesRef}
-        calcular={calcular}
+        calcular={calcularComFechado}
         onProcessar={processarIndividual}
         processing={processing}
       />

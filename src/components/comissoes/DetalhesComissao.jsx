@@ -12,7 +12,7 @@ import { registrarAuditoria } from '@/lib/audit';
 import HistoricoAlteracoesComissao from './HistoricoAlteracoesComissao';
 import CorrigirComissaoDialog from './CorrigirComissaoDialog';
 
-export default function DetalhesComissao({ comissao, comissoesFuncionarios, funcionarios, onClose, onRefresh }) {
+export default function DetalhesComissao({ comissao, comissoesFuncionarios, funcionarios, setoresComissao = [], onClose, onRefresh }) {
   const [loading, setLoading] = useState(false);
   const [corrigindoAberto, setCorrigindoAberto] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -61,27 +61,41 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
       // Deletar registros existentes
       for (const r of registros) await client.entities.ComissaoPorFuncionario.delete(r.id);
 
-      // Recalcular divisão
-      const v = comissao.valor_total_periodo;
-      const setoresGrupos = { salao: [], cozinha: [], copa_playground_caixa: [], limpeza_rh: [] };
+      // Recalcular divisão usando setores dinâmicos da coleção SetoresComissao
+      const total = comissao.valor_total_periodo || 0;
+      const setoresAtivos = (setoresComissao || []).filter(s => s.ativo !== false);
+      const setoresGrupos = {};
+      for (const s of setoresAtivos) setoresGrupos[s.nome_do_setor] = [];
+      // Funcionários sem setor configurado vão para "outros"
+      setoresGrupos.outros = [];
+
       funcionarios.filter(f => f.ativo !== false).forEach(f => {
-        const sk = normalizarSetorKey(f.setor);
-        const mapped = sk === 'outros' ? null : sk;
-        if (mapped && setoresGrupos[mapped]) setoresGrupos[mapped].push(f);
+        const nomeSetor = f.setor || 'outros';
+        if (setoresGrupos[nomeSetor]) setoresGrupos[nomeSetor].push(f);
+        else setoresGrupos.outros.push(f);
       });
 
+      // Soma percentuais para distribuir proporcionalmente
+      const somaPct = setoresAtivos.reduce((s, set) => s + Number(set.percentual || 0), 0);
+      const normPct = somaPct > 0 ? somaPct : 1;
+
       const novosRegistros = [];
-      const valorMap = { salao: comissao.valor_salao, cozinha: comissao.valor_cozinha, copa_playground_caixa: comissao.valor_copa_playground_caixa, limpeza_rh: comissao.valor_limpeza_rh };
       for (const [setor, funcs] of Object.entries(setoresGrupos)) {
+        if (funcs.length === 0) continue;
+        const setorCfg = setoresAtivos.find(s => s.nome_do_setor === setor);
+        const pct = setor === 'outros' ? 0 : Number(setorCfg?.percentual || 0) / normPct;
+        const vs = total * pct;
         const aptosFuncs = funcs.filter(f => !f.faltas_no_periodo && !f.atestados_no_periodo);
         const excl = funcs.filter(f => f.faltas_no_periodo || f.atestados_no_periodo);
-        const vs = valorMap[setor] || 0;
         const vi = aptosFuncs.length > 0 ? vs / aptosFuncs.length : 0;
+        const periodoBase = comissao.periodo_inicio || '';
+        const periodoFim = comissao.periodo_fim || '';
+        const mesRef = comissao.mes_referencia || '';
         for (const f of aptosFuncs) {
-          novosRegistros.push({ funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id, setor: f.setor || setor, periodo_inicio: comissao.periodo_inicio, periodo_fim: comissao.periodo_fim, mes_referencia: comissao.mes_referencia, valor_setor: vs, valor_individual: vi, apto: true });
+          novosRegistros.push({ funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id, setor: f.setor || setor, periodo_inicio: periodoBase, periodo_fim: periodoFim, mes_referencia: mesRef, valor_setor: vs, valor_individual: vi, apto: true });
         }
         for (const f of excl) {
-          novosRegistros.push({ funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id, setor: f.setor || setor, periodo_inicio: comissao.periodo_inicio, periodo_fim: comissao.periodo_fim, mes_referencia: comissao.mes_referencia, valor_setor: vs, valor_individual: 0, apto: false, motivo_exclusao: f.faltas_no_periodo ? `${f.faltas_no_periodo} falta(s)` : `${f.atestados_no_periodo} atestado(s)` });
+          novosRegistros.push({ funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id, setor: f.setor || setor, periodo_inicio: periodoBase, periodo_fim: periodoFim, mes_referencia: mesRef, valor_setor: vs, valor_individual: 0, apto: false, motivo_exclusao: f.faltas_no_periodo ? `${f.faltas_no_periodo} falta(s)` : `${f.atestados_no_periodo} atestado(s)` });
         }
       }
       if (novosRegistros.length > 0) await client.entities.ComissaoPorFuncionario.bulkCreate(novosRegistros);
@@ -186,6 +200,7 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
     <CorrigirComissaoDialog
       aberto={corrigindoAberto}
       comissao={comissao}
+      setoresComissao={setoresComissao}
       onClose={() => setCorrigindoAberto(false)}
       onRefresh={onRefresh}
     />

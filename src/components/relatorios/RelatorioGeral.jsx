@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import DrilldownModal from './DrilldownModal';
 
 export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios, mesRef }) {
@@ -13,8 +13,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
 
   const lancMes = lancamentos.filter(l => {
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    return d.getMonth() === mes && d.getFullYear() === ano;
+    return getMesRef(l.data_lancamento) === mesRef;
   });
 
   const rows = ativos.map(func => {
@@ -28,13 +27,13 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
       fl,
       comissoes: sumTipo('comissao'),
       adicionais: sumTipo('adicional', 'ajuste'),
-      vales: sumTipo('vale'),
+      vales: sumTipo('vale', 'vale_parcelado'),
       consignados: sumTipo('credito_consignado'),
       adiantamentos: sumTipo('adiantamento'),
       convenios: sumTipo('convenio'),
       consumos: sumTipo('consumo'),
-      totalDescontos: fech?.total_descontos ?? sumTipo('vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'),
-      salarioLiquido: fech?.salario_liquido ?? ((func.salario_base || 0) + (func.ajuda_custo || 0) + sumTipo('adicional', 'ajuste', 'comissao') - sumTipo('vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado')),
+      totalDescontos: fech?.total_descontos ?? sumTipo('vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'),
+      salarioLiquido: fech?.salario_liquido ?? ((func.salario_base || 0) + (func.ajuda_custo || 0) + sumTipo('adicional', 'ajuste', 'comissao') - sumTipo('vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado')),
       salarioBase: (func.salario_base || 0) + (func.ajuda_custo || 0),
       ajudaCusto: func.ajuda_custo || 0,
       byTipo,
@@ -117,7 +116,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
                         <ClickableValue value={r.adicionais} lancamentos={r.byTipo('adicional', 'ajuste')} className="text-green-600" />
                       </TableCell>
                       <TableCell>
-                        <ClickableValue value={r.vales} lancamentos={r.byTipo('vale')} className="text-red-600" />
+                        <ClickableValue value={r.vales} lancamentos={r.byTipo('vale', 'vale_parcelado')} className="text-red-600" />
                       </TableCell>
                       <TableCell>
                         <ClickableValue value={r.consignados} lancamentos={r.byTipo('credito_consignado')} className="text-purple-600 font-medium" />
@@ -132,7 +131,7 @@ export default function RelatorioGeral({ fechamentos, lancamentos, funcionarios,
                         <ClickableValue value={r.consumos} lancamentos={r.byTipo('consumo')} className="text-red-600" />
                       </TableCell>
                       <TableCell>
-                        <ClickableValue value={r.totalDescontos} lancamentos={r.byTipo('vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado')} className="text-red-600" />
+                        <ClickableValue value={r.totalDescontos} lancamentos={r.byTipo('vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado')} className="text-red-600" />
                       </TableCell>
                       <TableCell>
                         <ClickableValue value={r.salarioLiquido} lancamentos={r.fl} className="font-bold" />

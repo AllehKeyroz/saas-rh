@@ -11,7 +11,7 @@ import {
 import { DollarSign, TrendingUp, Wallet, Building2, CreditCard } from 'lucide-react';
 import { format, subMonths, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { mergeTipos } from '@/lib/formatters';
+import { mergeTipos, parseDateLocal, getMesRef } from '@/lib/formatters';
 
 const fmt = (val) => `R$ ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtK = (val) => `R$ ${(val / 1000).toFixed(1)}k`;
@@ -109,7 +109,7 @@ export default function IndicadoresFinanceiros() {
     const fim = new Date(Number(yyyy), Number(mm), 0);
     return lancamentos.filter(l => {
       if (!l.data_lancamento) return false;
-      const d = new Date(l.data_lancamento);
+      const d = parseDateLocal(l.data_lancamento);
       return d >= inicio && d <= fim;
     });
   }, [lancamentos, mesSelecionado]);

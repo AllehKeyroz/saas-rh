@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Download, Loader2, FileJson } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { formatCurrency, formatDate } from '@/lib/formatters';
+import { formatCurrency, formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
 
 export default function ExportHistoricoFinanceiro({ funcionario, lancamentos, fechamentos }) {
   const [dialogAberto, setDialogAberto] = useState(false);
@@ -14,7 +14,7 @@ export default function ExportHistoricoFinanceiro({ funcionario, lancamentos, fe
 
   const funcLanc = lancamentos
     .filter(l => l.funcionario_id === funcionario.id)
-    .sort((a, b) => new Date(b.data_lancamento) - new Date(a.data_lancamento));
+    .sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
 
   const funcFech = fechamentos
     .filter(f => f.funcionario_id === funcionario.id)

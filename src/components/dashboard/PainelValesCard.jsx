@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { AlertTriangle, XCircle, CheckCircle, Wallet } from 'lucide-react';
 
 export default function PainelValesCard({ funcionarios, lancamentos, mesAtual }) {
@@ -12,8 +12,7 @@ export default function PainelValesCard({ funcionarios, lancamentos, mesAtual })
   const valesDoMes = lancamentos.filter(l => {
     if (!['vale', 'adiantamento'].includes(l.tipo_lancamento)) return false;
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const mr = getMesRef(l.data_lancamento);
     return mr === mesAtual;
   });
 

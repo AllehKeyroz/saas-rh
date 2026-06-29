@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, User, ChevronRight, Upload, TrendingUp, FileText, Wallet, DollarSign, Clock, List, Settings } from 'lucide-react';
-import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL } from '@/lib/formatters';
+import { Plus, Search, User, ChevronRight, Upload, TrendingUp, FileText, Wallet, DollarSign, Clock, List, Settings, Building2, Hash, Calendar } from 'lucide-react';
+import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import LancamentoForm from '@/components/lancamentos/LancamentoForm';
 import GerenciarTiposLancamento from '@/components/lancamentos/TiposLancamentoForm';
@@ -51,6 +51,11 @@ export default function Lancamentos() {
     queryFn: () => client.entities.TipoLancamento.list(),
   });
 
+  const { data: consignadosContratos = [] } = useQuery({
+    queryKey: ['consignados-contratos'],
+    queryFn: () => client.entities.Consignado.list('-created_date', 500),
+  });
+
   const customDescontos = useMemo(() => {
     return new Set(
       tiposLancamento
@@ -73,8 +78,7 @@ export default function Lancamentos() {
   // Filtra lançamentos do mês selecionado
   const lancamentosMes = lancamentos.filter(l => {
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const mr = getMesRef(l.data_lancamento);
     return mr === mesFiltro;
   });
 
@@ -103,7 +107,30 @@ export default function Lancamentos() {
              r.func.setor?.toLowerCase().includes(search.toLowerCase());
     });
 
-  const handleSaved = () => queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
+  // Filtra contratos consignado vigentes no mês selecionado
+  const MESES_ABV = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  const consignadosFiltrados = useMemo(() => {
+    const [m, a] = mesFiltro.split('/');
+    const mesAlvo = Number(m);
+    const anoAlvo = Number(a);
+    return consignadosContratos.filter(c => {
+      if (!c.mes_inicio_desconto || !c.mes_fim_desconto) return true;
+      const [mI, aI] = c.mes_inicio_desconto.split('/');
+      const [mF, aF] = c.mes_fim_desconto.split('/');
+      const idxI = MESES_ABV.indexOf(mI?.toUpperCase());
+      const idxF = MESES_ABV.indexOf(mF?.toUpperCase());
+      if (idxI === -1 || idxF === -1) return true;
+      const linearInicio = Number(aI) * 12 + idxI;
+      const linearFim = Number(aF) * 12 + idxF;
+      const linearAlvo = anoAlvo * 12 + (mesAlvo - 1);
+      return linearAlvo >= linearInicio && linearAlvo <= linearFim;
+    });
+  }, [consignadosContratos, mesFiltro]);
+
+  const handleSaved = () => {
+    queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
+    queryClient.invalidateQueries({ queryKey: ['consignados-contratos'] });
+  };
 
   const funcDetalhes = funcSelecionado ? funcionarios.find(f => f.id === funcSelecionado) : null;
   const lancDetalhes = funcSelecionado ? lancamentosMes.filter(l => l.funcionario_id === funcSelecionado) : [];
@@ -161,6 +188,84 @@ export default function Lancamentos() {
       {isLoading ? (
         <div className="space-y-3">
           {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
+        </div>
+      ) : filtroAtivo === 'consignado' ? (
+        <div className="space-y-3">
+          {consignadosFiltrados.filter(ct => {
+            if (!search) return true;
+            const func = funcionarios.find(f => f.id === ct.funcionario_id);
+            return (func?.nome || '').toLowerCase().includes(search.toLowerCase())
+              || (ct.numero_contrato || '').toLowerCase().includes(search.toLowerCase())
+              || (ct.instituicao_financeira || '').toLowerCase().includes(search.toLowerCase());
+          }).map(ct => {
+            const func = funcionarios.find(f => f.id === ct.funcionario_id);
+            // Calcula número ordinal da parcela para o mês selecionado
+            let parcelaAtual = null;
+            const totalParc = Number(ct.total_parcelas);
+            if (ct.mes_inicio_desconto && totalParc) {
+              const [mI, aI] = ct.mes_inicio_desconto.split('/');
+              const idx = MESES_ABV.indexOf(mI?.toUpperCase());
+              if (idx !== -1) {
+                const linearInicio = Number(aI) * 12 + idx;
+                const [mM, aM] = mesFiltro.split('/');
+                const linearAlvo = Number(aM) * 12 + (Number(mM) - 1);
+                const diff = linearAlvo - linearInicio;
+                if (diff >= 0 && diff < totalParc) parcelaAtual = diff + 1;
+              }
+            }
+            return (
+              <Card key={ct.id}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
+                      <Building2 className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold">{func?.nome || ct.funcionario_nome}</span>
+                        {ct.ativo === false && <Badge variant="outline" className="text-xs">Encerrado</Badge>}
+                        {ct.ativo !== false && <Badge className="bg-purple-100 text-purple-700 text-xs">Ativo</Badge>}
+                      </div>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Hash className="w-3 h-3" />{ct.numero_contrato || '—'}
+                      </p>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-6 text-sm">
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Valor Parcela</p>
+                        <p className="font-bold text-destructive">{formatCurrency(ct.valor_parcela || 0)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Parcela no mês</p>
+                        <p className="font-semibold">{parcelaAtual ? `${parcelaAtual}/${totalParc}` : '—'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Instituição</p>
+                        <p className="font-medium max-w-[180px] truncate text-xs">{ct.instituicao_financeira || '—'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Período</p>
+                        <p className="text-xs">{ct.mes_inicio_desconto || '?'} — {ct.mes_fim_desconto || '?'}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </div>
+                  {ct.instituicao_financeira && (
+                    <div className="sm:hidden flex flex-wrap gap-x-4 gap-y-1 mt-3 pt-3 border-t text-xs text-muted-foreground">
+                      <span>{ct.numero_contrato || '—'}</span>
+                      <span>{ct.instituicao_financeira}</span>
+                      <span>{parcelaAtual ? `${parcelaAtual}/${totalParc}` : `${ct.parcelas_pagas || 0}/${totalParc || '—'}`}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+          {consignadosFiltrados.length === 0 && (
+            <div className="text-center py-16 text-muted-foreground">
+              Nenhum contrato consignado registrado.
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

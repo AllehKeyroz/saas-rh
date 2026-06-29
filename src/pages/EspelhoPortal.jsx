@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
-import { getMesReferenciaAtual, getMesesOptions, formatCurrency, formatDate } from '@/lib/formatters';
+import { getMesReferenciaAtual, getMesesOptions, formatCurrency, formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { ChevronLeft, ChevronRight, Eye, User, FileText, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useRHControl } from '@/lib/rhControl';
@@ -43,7 +44,6 @@ export default function EspelhoPortal() {
   const [comprovante, setComprovante] = useState(null);
   const { isAtiva } = useRHControl();
   const mesAtual = getMesReferenciaAtual();
-  const mesesDisponiveis = getMesesOptions(12);
 
   const { data: funcionarios = [], isLoading: loadingFuncs } = useQuery({
     queryKey: ['funcionarios'],
@@ -71,11 +71,49 @@ export default function EspelhoPortal() {
   const funcionario = funcionarios.find(f => f.id === funcionarioId);
   const funcionariosAtivos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
+  // Gera range de meses baseado na data de admissão e dados existentes
+  const mesesDisponiveis = useMemo(() => {
+    if (!funcionario) return [mesAtual];
+    const meses = [];
+    let minMes = mesAtual;
+    if (funcionario.data_admissao) {
+      const d = new Date(funcionario.data_admissao);
+      minMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+    const lancFunc = lancamentos.filter(l => l.funcionario_id === funcionarioId);
+    if (lancFunc.length > 0) {
+      const maisAntigo = lancFunc.reduce((menor, l) => {
+        if (!l.data_lancamento) return menor;
+        return l.data_lancamento < menor ? l.data_lancamento : menor;
+      }, lancFunc[0]?.data_lancamento);
+      if (maisAntigo) {
+        const d = new Date(maisAntigo);
+        const mesLanc = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        if (mesLanc < minMes) minMes = mesLanc;
+      }
+    }
+    const [mMin, aMin] = minMes.split('/').map(Number);
+    const [mAtual, aAtual] = mesAtual.split('/').map(Number);
+    let ano = aMin, mes = mMin;
+    while (ano < aAtual || (ano === aAtual && mes <= mAtual)) {
+      meses.push(`${String(mes).padStart(2, '0')}/${ano}`);
+      mes++;
+      if (mes > 12) { mes = 1; ano++; }
+    }
+    return meses.length > 0 ? meses : [mesAtual];
+  }, [funcionario, lancamentos, funcionarioId]);
+
+  // Garante que mesSelecionado está dentro do range
+  useEffect(() => {
+    if (mesesDisponiveis.length > 0 && !mesesDisponiveis.includes(mesSelecionado)) {
+      setMesSelecionado(mesesDisponiveis[mesesDisponiveis.length - 1] || mesAtual);
+    }
+  }, [mesesDisponiveis]);
+
   const lancamentosFunc = lancamentos.filter(l => l.funcionario_id === funcionarioId);
   const lancamentosMes = lancamentosFunc.filter(l => {
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const mr = getMesRef(l.data_lancamento);
     return mr === mesSelecionado;
   });
   const lancamentosLimiteMes = lancamentosMes.filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento));

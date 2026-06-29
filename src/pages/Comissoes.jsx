@@ -41,6 +41,11 @@ export default function Comissoes() {
     queryFn: () => client.entities.ComissaoPorFuncionario.list('-created_date', 2000),
   });
 
+  const { data: setoresComissao = [] } = useQuery({
+    queryKey: ['setores-comissao-page'],
+    queryFn: () => client.entities.SetoresComissao.list(),
+  });
+
   const isLoading = lf || lc || lcf || loadingRH;
 
   const refresh = () => {
@@ -139,6 +144,7 @@ export default function Comissoes() {
             comissoes={comissoes.filter(c => c.mes_referencia === mesRef)}
             comissoesFuncionarios={comissoesFuncionarios}
             funcionarios={funcionarios}
+            setoresComissao={setoresComissao}
             onRefresh={refresh}
           />
         </TabsContent>

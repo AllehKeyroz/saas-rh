@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { client } from '@/api/client';
 import { DollarSign, TrendingUp, Users } from 'lucide-react';
+import { parseDateLocal, getMesRef } from '@/lib/formatters';
 
 const COLORS = ['#1A73E8', '#2ECC71', '#FF8C42', '#8E44AD', '#00B8D9', '#F1C40F'];
 
@@ -84,7 +85,7 @@ export default function ConsolidatedFinancialDashboard() {
         folha: funcionarios.reduce((sum, f) => sum + (f.salario_base || 0) + (f.ajuda_custo || 0), 0),
         adiantamentos: lancamentos
           .filter(l => {
-            const lDate = new Date(l.data_lancamento);
+            const lDate = parseDateLocal(l.data_lancamento);
             return lDate.getMonth() === date.getMonth() && 
                    lDate.getFullYear() === date.getFullYear() &&
                    (l.tipo_lancamento === 'vale' || l.tipo_lancamento === 'adiantamento');

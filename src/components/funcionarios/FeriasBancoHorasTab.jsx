@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Input } from '@/components/ui/input';
@@ -86,9 +86,18 @@ function StatusBadgeFerias({ situacao }) {
   );
 }
 
-function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved }) {
+function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved, selectedFunc }) {
   const queryClient = useQueryClient();
   const [funcId, setFuncId] = useState('');
+
+  useEffect(() => {
+    if (open && selectedFunc?.id) {
+      setFuncId(selectedFunc.id);
+    } else if (!open) {
+      setFuncId('');
+    }
+  }, [open, selectedFunc]);
+
   const [periodo, setPeriodo] = useState('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
@@ -435,6 +444,7 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
         onClose={() => { setShowDarBaixa(false); setSelectedFunc(null); }}
         funcionarios={funcionarios}
         feriasConsumidas={feriasConsumidas}
+        selectedFunc={selectedFunc}
         onSaved={() => queryClient.invalidateQueries({ queryKey: ['ferias_consumidas'] })}
       />
     </div>

@@ -1,0 +1,49 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: Carregando
+        - progressbar [ref=e8]
+      - main [ref=e15]:
+        - generic [ref=e16]:
+          - img [ref=e19]
+          - generic [ref=e24]:
+            - heading "Faça login" [level=1] [ref=e25]
+            - generic [ref=e26]: com sua Conta do Google. Essa conta ficará disponível para outros apps do Google no navegador.
+        - generic [ref=e29]:
+          - generic [ref=e34]:
+            - generic [ref=e39]:
+              - textbox "E-mail ou telefone" [active] [ref=e40]
+              - generic: E-mail ou telefone
+            - button "Esqueceu o e-mail?" [ref=e44] [cursor=pointer]
+          - generic [ref=e47]:
+            - text: Não está no seu computador? Use o modo visitante para fazer login com privacidade.
+            - link "Saiba mais sobre como usar o modo visitante (link externo, abre em uma nova janela)" [ref=e48] [cursor=pointer]:
+              - /url: https://support.google.com/chrome/answer/6130773?hl=pt-BR
+              - text: Saiba como usar o modo visitante.
+        - generic [ref=e50]:
+          - button "Avançar" [ref=e54]:
+            - generic [ref=e57]: Avançar
+          - button "Criar conta" [ref=e63]:
+            - generic [ref=e66]: Criar conta
+    - contentinfo [ref=e70]:
+      - combobox "Alterar idioma Português (Brasil)" [ref=e74] [cursor=pointer]:
+        - generic:
+          - generic: Português (Brasil)
+        - generic:
+          - img
+      - list [ref=e76]:
+        - listitem [ref=e77]:
+          - link "Abrir a Central de Ajuda da Conta do Google (link externo, abre em uma nova janela)" [ref=e78] [cursor=pointer]:
+            - /url: https://support.google.com/accounts?hl=pt-BR&p=account_iph
+            - text: Ajuda
+        - listitem [ref=e79]:
+          - link "Política de Privacidade (link externo, abre em uma nova janela)" [ref=e80] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=BR&hl=pt-BR&privacy=true
+            - text: Privacidade
+        - listitem [ref=e81]:
+          - link "Termos de Serviço do Google (link externo, abre em uma nova janela)" [ref=e82] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=BR&hl=pt-BR
+            - text: Termos
+  - iframe [ref=e83]:
+    

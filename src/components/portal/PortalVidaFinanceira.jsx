@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getMesReferenciaAtual, getMesesOptions, formatCurrency } from '@/lib/formatters';
+import { getMesReferenciaAtual, getMesesOptions, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { calcularResumoMensal, calcularAlerta, calcularProgressoMeta, filtrarGastosPorMes, TIPO_COLORS } from '@/lib/vidaFinanceira';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import { useRHControl } from '@/lib/rhControl';
@@ -161,8 +161,7 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
 
   const lancamentosMes = lancamentosFunc.filter(l => {
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const mr = getMesRef(l.data_lancamento);
     return mr === mesSelecionado;
   });
 

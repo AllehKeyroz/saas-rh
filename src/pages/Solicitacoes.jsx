@@ -215,8 +215,12 @@ function ResponderLoteModal({ selecionadas, solicitacoes, onClose, onSaved, meUs
         push_ativado: false,
         lidas_por: [],
       });
+      if (status === 'aprovado') {
+        await processarAprovacaoPix(s);
+      }
     }));
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
     toast.success(`${items.length} solicitação(ões) ${status === 'aprovado' ? 'aprovadas' : 'recusadas'}!`);
     setSaving(false);
     onSaved();

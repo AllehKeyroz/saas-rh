@@ -1,14 +1,14 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatCurrency, TIPO_LABELS } from '@/lib/formatters';
+import { formatCurrency, TIPO_LABELS, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export default function RelatorioComparativo({ lancamentos, fechamentos }) {
   const mesesSet = new Set();
   lancamentos.forEach(l => {
     if (!l.data_lancamento) return;
-    const d = new Date(l.data_lancamento);
-    mesesSet.add(`${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`);
+    const mr = getMesRef(l.data_lancamento);
+    if (mr) mesesSet.add(mr);
   });
   fechamentos.forEach(f => mesesSet.add(f.mes_referencia));
 
@@ -21,8 +21,7 @@ export default function RelatorioComparativo({ lancamentos, fechamentos }) {
 
     const lancMes = lancamentos.filter(l => {
       if (!l.data_lancamento) return false;
-      const d = new Date(l.data_lancamento);
-      return d.getMonth() === m && d.getFullYear() === a;
+      return getMesRef(l.data_lancamento) === mes;
     });
 
     const byTipo = (tipo) => lancMes.filter(l => l.tipo_lancamento === tipo).reduce((s, l) => s + (l.valor || 0), 0);

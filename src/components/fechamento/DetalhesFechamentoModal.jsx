@@ -1,54 +1,47 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, mergeTipos, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
-const TIPO_LABELS = {
-  vale: 'Vale',
-  adiantamento: 'Adiantamento',
-  convenio: 'Convênio',
-  consumo: 'Consumo',
-  adicional: 'Adicional',
-  ajuste: 'Ajuste',
-  comissao: 'Comissão',
-  credito_consignado: 'Crédito Consignado',
-};
-
-const DESCONTOS = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
-const ADICIONAIS = ['adicional', 'ajuste', 'comissao'];
-
-export default function DetalhesFechamentoModal({ func, lancamentos, mesRef, onClose }) {
+export default function DetalhesFechamentoModal({ func, lancamentos, mesRef, onClose, tiposLancamento = [], fechamentosMes = [] }) {
   if (!func) return null;
+
+  const descontosList = useMemo(() => mergeTipos(tiposLancamento, 'desconto'), [tiposLancamento]);
+  const adicionaisList = useMemo(() => mergeTipos(tiposLancamento, 'adicional'), [tiposLancamento]);
 
   const [mesNum, anoStr] = mesRef.split('/');
   const mes = parseInt(mesNum) - 1;
   const ano = parseInt(anoStr);
 
+  // Usa salario_base congelado do fechamento se existir, senão do funcionário
+  const fechado = fechamentosMes.find(f => f.funcionario_id === func.id);
+  const salarioBase = fechado?.salario_base ?? func.salario_base ?? 0;
+  const ajudaCusto = fechado?.ajuda_custo ?? func.ajuda_custo ?? 0;
+
   const funcLanc = lancamentos.filter(l => {
     if (l.funcionario_id !== func.id) return false;
     if (!l.data_lancamento) return false;
-    const d = new Date(l.data_lancamento);
-    return d.getMonth() === mes && d.getFullYear() === ano;
+    return getMesRef(l.data_lancamento) === mesRef;
   });
 
-  const descontoLanc = funcLanc.filter(l => DESCONTOS.includes(l.tipo_lancamento));
-  const adicionalLanc = funcLanc.filter(l => ADICIONAIS.includes(l.tipo_lancamento));
+  const descontoLanc = funcLanc.filter(l => descontosList.includes(l.tipo_lancamento));
+  const adicionalLanc = funcLanc.filter(l => adicionaisList.includes(l.tipo_lancamento));
 
   const totalDescontos = descontoLanc.reduce((s, l) => s + (l.valor || 0), 0);
   const totalAdicionais = adicionalLanc.reduce((s, l) => s + (l.valor || 0), 0);
-  const salarioLiquido = (func.salario_base || 0) + (func.ajuda_custo || 0) + totalAdicionais - totalDescontos;
+  const salarioLiquido = salarioBase + ajudaCusto + totalAdicionais - totalDescontos;
 
   const LancItem = ({ item }) => (
     <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
       <div className="flex flex-col">
-        <span className="text-sm font-medium">{TIPO_LABELS[item.tipo_lancamento] || item.tipo_lancamento}</span>
+        <span className="text-sm font-medium">{item.tipo_lancamento}</span>
         {item.descricao && <span className="text-xs text-muted-foreground">{item.descricao}</span>}
         <span className="text-xs text-muted-foreground">{item.data_lancamento}</span>
       </div>
-      <span className={`font-semibold text-sm ${DESCONTOS.includes(item.tipo_lancamento) ? 'text-destructive' : 'text-green-600'}`}>
-        {DESCONTOS.includes(item.tipo_lancamento) ? '–' : '+'}{formatCurrency(item.valor || 0)}
+      <span className={`font-semibold text-sm ${descontosList.includes(item.tipo_lancamento) ? 'text-destructive' : 'text-green-600'}`}>
+        {descontosList.includes(item.tipo_lancamento) ? '–' : '+'}{formatCurrency(item.valor || 0)}
       </span>
     </div>
   );
@@ -65,12 +58,12 @@ export default function DetalhesFechamentoModal({ func, lancamentos, mesRef, onC
         <div className="grid grid-cols-3 gap-3 mt-2">
           <div className="bg-muted/50 rounded-xl p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Salário Base</p>
-            <p className="font-bold text-sm">{formatCurrency(func.salario_base || 0)}</p>
+            <p className="font-bold text-sm">{formatCurrency(salarioBase)}</p>
           </div>
-          {func.ajuda_custo > 0 && (
+          {ajudaCusto > 0 && (
             <div className="bg-blue-50 rounded-xl p-3 text-center">
               <p className="text-xs text-muted-foreground mb-1">Ajuda de Custo</p>
-              <p className="font-bold text-sm text-blue-600">{formatCurrency(func.ajuda_custo)}</p>
+              <p className="font-bold text-sm text-blue-600">{formatCurrency(ajudaCusto)}</p>
             </div>
           )}
           <div className="bg-red-50 rounded-xl p-3 text-center">

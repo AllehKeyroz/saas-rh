@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatCurrency, getMesReferenciaAtual } from '@/lib/formatters';
+import { formatCurrency, getMesReferenciaAtual, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { filtrarGastosPorMes, calcularResumoMensal } from '@/lib/vidaFinanceira';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
 import { DollarSign, TrendingDown, CreditCard, Tv, Target, Wallet, Lightbulb } from 'lucide-react';
@@ -65,8 +65,7 @@ export default function DashboardFinanceiro({ funcionarioId, salarioBase = 0, la
   const descontosRH = lancamentosRH
     .filter(l => {
       if (!l.data_lancamento) return false;
-      const d = new Date(l.data_lancamento);
-      const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      const mr = getMesRef(l.data_lancamento);
       return mr === mesAtual && ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'].includes(l.tipo_lancamento);
     })
     .reduce((s, l) => s + (l.valor || 0), 0);
