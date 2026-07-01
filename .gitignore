@@ -31,3 +31,12 @@ dist-ssr
 .vite
 
 exports/*.zip
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Emulator data
+emulator-data/
+
+# Service account
+service-account.json

@@ -24,9 +24,9 @@ export const storage = getStorage(app)
 
 // Auto-detect: se tiver rodando localhost, conecta nos emuladores
 if (isLocal) {
-  connectFirestoreEmulator(db, 'localhost', 8080)
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
-  connectStorageEmulator(storage, 'localhost', 9199)
+  connectFirestoreEmulator(db, '127.0.0.1', 8080)
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectStorageEmulator(storage, '127.0.0.1', 9199)
 }
 
 export default app

@@ -80,3 +80,58 @@ export function getAlertaMetaComissao(progresso, atingida) {
   if (progresso >= 50) return { tipo: 'metade', msg: 'Você já alcançou metade da sua meta. Continue assim!' };
   return null;
 }
+
+// Calcula distribuição de comissão para funcionários considerando faltas.
+// Cada funcionário recebe bônus das PERDAS DOS DEMAIS (excluindo a própria perda).
+// Fórmula: final = base - loss + bonus, onde bonus = (pool - loss) / (N-1)
+export function calcularDistribuicaoFuncionarios(
+  valorSetor, funcionarios, mapDiasAusentes, periodoInicio, periodoFim
+) {
+  const N = funcionarios.length;
+  if (N === 0) return [];
+
+  const diasTotaisPeriodo = calcularDiasTotais(periodoInicio, periodoFim);
+  const base = valorSetor / N;
+
+  const resultados = funcionarios.map(f => {
+    const diasAus = parseInt(mapDiasAusentes[f.id] || 0);
+    const loss = base * diasAus / diasTotaisPeriodo;
+    const { diasTrabalhados, proporcao } =
+      calcularProporcionalidade(periodoInicio, periodoFim, diasAus);
+    return {
+      funcionarioId: f.id,
+      funcionarioNome: f.nome,
+      diasAusentes: diasAus,
+      diasTrabalhados,
+      diasTotais: diasTotaisPeriodo,
+      proporcao,
+      valorBase: base,
+      loss,
+    };
+  });
+
+  const pool = resultados.reduce((s, r) => s + r.loss, 0);
+
+  for (const r of resultados) {
+    const bonus = (N > 1 && pool > 0) ? (pool - r.loss) / (N - 1) : 0;
+    r.valorFinal = Math.max(0, r.valorBase - r.loss + bonus);
+    r.bonus = bonus;
+
+    // Cada pessoa recebe contribuição de cada outro funcionário que gerou perda
+    r.contribuicoes = [];
+    if (bonus > 0) {
+      for (const outro of resultados) {
+        if (outro.funcionarioId !== r.funcionarioId && outro.loss > 0) {
+          r.contribuicoes.push({
+            nome: outro.funcionarioNome,
+            diasAusentes: outro.diasAusentes,
+            perda: outro.loss,
+            bonusGeradoPorPessoa: outro.loss / (N - 1),
+          });
+        }
+      }
+    }
+  }
+
+  return resultados;
+}

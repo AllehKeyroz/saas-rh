@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/formatters';
-import { formatPeriodo } from '@/lib/comissoes';
+import { formatPeriodo, calcularDistribuicaoFuncionarios, mapearSetorDinamico } from '@/lib/comissoes';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { AlertTriangle, RefreshCw, Trash2, Users, Loader2, Edit2 } from 'lucide-react';
+import { RefreshCw, Trash2, Users, Loader2, Edit2 } from 'lucide-react';
 import { client } from '@/api/client';
 import { toast } from 'sonner';
 import { registrarAuditoria } from '@/lib/audit';
 import HistoricoAlteracoesComissao from './HistoricoAlteracoesComissao';
 import CorrigirComissaoDialog from './CorrigirComissaoDialog';
+import DetalheComissaoTooltip from './DetalheComissaoTooltip';
 
 export default function DetalhesComissao({ comissao, comissoesFuncionarios, funcionarios, setoresComissao = [], onClose, onRefresh }) {
   const [loading, setLoading] = useState(false);
@@ -61,16 +61,21 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
       // Deletar registros existentes
       for (const r of registros) await client.entities.ComissaoPorFuncionario.delete(r.id);
 
-      // Recalcular divisão usando setores dinâmicos da coleção SetoresComissao
       const total = comissao.valor_total_periodo || 0;
+      const pctRetencao = Number(comissao.percentual_retencao || 0);
+      const valorDistribuir = total * (1 - pctRetencao / 100);
+
       const setoresAtivos = (setoresComissao || []).filter(s => s.ativo !== false);
       const setoresGrupos = {};
       for (const s of setoresAtivos) setoresGrupos[s.nome_do_setor] = [];
-      // Funcionários sem setor configurado vão para "outros"
       setoresGrupos.outros = [];
 
+      // Mapeia funcionários para seus respectivos setores dinâmicos
       funcionarios.filter(f => f.ativo !== false).forEach(f => {
-        const nomeSetor = f.setor || 'outros';
+        const sid = mapearSetorDinamico(f.setor, setoresAtivos);
+        const nomeSetor = sid
+          ? (setoresAtivos.find(s => s.id === sid)?.nome_do_setor || 'outros')
+          : 'outros';
         if (setoresGrupos[nomeSetor]) setoresGrupos[nomeSetor].push(f);
         else setoresGrupos.outros.push(f);
       });
@@ -80,39 +85,68 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
       const normPct = somaPct > 0 ? somaPct : 1;
 
       const novosRegistros = [];
+      const periodoBase = comissao.periodo_inicio || '';
+      const periodoFim = comissao.periodo_fim || '';
+      const mesRef = comissao.mes_referencia || '';
+
       for (const [setor, funcs] of Object.entries(setoresGrupos)) {
         if (funcs.length === 0) continue;
         const setorCfg = setoresAtivos.find(s => s.nome_do_setor === setor);
         const pct = setor === 'outros' ? 0 : Number(setorCfg?.percentual || 0) / normPct;
-        const vs = total * pct;
-        const aptosFuncs = funcs.filter(f => !f.faltas_no_periodo && !f.atestados_no_periodo);
-        const excl = funcs.filter(f => f.faltas_no_periodo || f.atestados_no_periodo);
-        const vi = aptosFuncs.length > 0 ? vs / aptosFuncs.length : 0;
-        const periodoBase = comissao.periodo_inicio || '';
-        const periodoFim = comissao.periodo_fim || '';
-        const mesRef = comissao.mes_referencia || '';
-        for (const f of aptosFuncs) {
-          novosRegistros.push({ funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id, setor: f.setor || setor, periodo_inicio: periodoBase, periodo_fim: periodoFim, mes_referencia: mesRef, valor_setor: vs, valor_individual: vi, apto: true });
-        }
-        for (const f of excl) {
-          novosRegistros.push({ funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id, setor: f.setor || setor, periodo_inicio: periodoBase, periodo_fim: periodoFim, mes_referencia: mesRef, valor_setor: vs, valor_individual: 0, apto: false, motivo_exclusao: f.faltas_no_periodo ? `${f.faltas_no_periodo} falta(s)` : `${f.atestados_no_periodo} atestado(s)` });
+        const vs = valorDistribuir * pct;
+
+        // Monta o mapa de ausências dos funcionários baseado em suas faltas registradas no período
+        const mapDias = {};
+        funcs.forEach(f => {
+          mapDias[f.id] = f.faltas_no_periodo || 0;
+        });
+
+        // Calcula a distribuição proporcional com redistribuição para os presentes
+        const resultados = calcularDistribuicaoFuncionarios(
+          vs, funcs, mapDias, periodoBase, periodoFim
+        );
+
+        for (const r of resultados) {
+          novosRegistros.push({
+            funcionario_id: r.funcionarioId,
+            funcionario_nome: r.funcionarioNome,
+            comissao_id: comissao.id,
+            setor,
+            periodo_inicio: periodoBase,
+            periodo_fim: periodoFim,
+            mes_referencia: mesRef,
+            valor_setor: vs,
+            valor_individual: r.valorFinal,
+            valor_individual_cheio: r.valorBase,
+            valor_individual_final: r.valorFinal,
+            perda_faltas_proprias: r.loss,
+            bonus_faltas_terceiros: r.bonus,
+            dias_ausentes_no_periodo: r.diasAusentes,
+            dias_trabalhados: r.diasTrabalhados,
+            dias_totais: r.diasTotais,
+            proporcao: r.proporcao,
+            apto: true,
+          });
         }
       }
-      if (novosRegistros.length > 0) await client.entities.ComissaoPorFuncionario.bulkCreate(novosRegistros);
+
+      if (novosRegistros.length > 0) {
+        await client.entities.ComissaoPorFuncionario.bulkCreate(novosRegistros);
+      }
 
       await registrarAuditoria({
         acao: 'editar', modulo: 'comissao',
-        descricao: `Comissão recalculada: ${comissao.periodo_inicio} a ${comissao.periodo_fim}`,
+        descricao: `Comissão recalculada com nova lógica de faltas: ${comissao.periodo_inicio} a ${comissao.periodo_fim}`,
       });
       toast.success('Comissão recalculada com sucesso!');
       onClose();
       onRefresh();
-      } catch (e) {
+    } catch (e) {
       toast.error(`Erro ao recalcular: ${e.message}`);
-      } finally {
+    } finally {
       setLoading(false);
-      }
-      };
+    }
+  };
 
   return (
     <>
@@ -148,7 +182,14 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
               {a.map(r => (
                 <div key={r.id} className="flex justify-between text-sm py-1 border-b last:border-0">
                   <span>{r.funcionario_nome}</span>
-                  <span className="font-semibold text-green-600">{formatCurrency(r.valor_individual)}</span>
+                  <DetalheComissaoTooltip
+                    valorBase={r.valor_individual_cheio || r.valor_individual || 0}
+                    perda={r.perda_faltas_proprias || 0}
+                    bonus={r.bonus_faltas_terceiros || 0}
+                    diasAusentes={r.dias_ausentes_no_periodo || 0}
+                  >
+                    <span className="font-semibold text-green-600">{formatCurrency(r.valor_individual)}</span>
+                  </DetalheComissaoTooltip>
                 </div>
               ))}
               {e.length > 0 && (

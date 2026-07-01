@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency, getMesReferenciaAtual } from '@/lib/formatters';
-import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, Info, CalendarMinus } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus } from 'lucide-react';
 import { toast } from 'sonner';
-import { mapearSetorDinamico, calcularDivisaoDinamica, calcularProporcionalidade } from '@/lib/comissoes';
+import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios } from '@/lib/comissoes';
 import { registrarAuditoria } from '@/lib/audit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRHControl } from '@/lib/rhControl';
+import DetalheComissaoTooltip from './DetalheComissaoTooltip';
 
 function getMesFromDatas(inicio) {
   if (!inicio) return getMesReferenciaAtual();
@@ -102,14 +103,13 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     return grupos;
   }, [funcionariosAptos, setoresAtivos]);
 
-  // Aptos e excluídos por setor (exclusão só se funcionalidade ativa)
+  // Aptos e excluídos por setor (todos são incluídos, redução é calculada proporcionalmente)
   const aptoPorSetor = useMemo(() => {
-    const excluirPorFalta = isAtiva('exclusao_faltas_atestados');
     const result = {};
     for (const [setor, funcs] of Object.entries(porSetor)) {
       result[setor] = {
-        aptos: excluirPorFalta ? funcs.filter(f => !f.faltas_no_periodo && !f.atestados_no_periodo) : funcs,
-        excluidos: excluirPorFalta ? funcs.filter(f => f.faltas_no_periodo || f.atestados_no_periodo) : [],
+        aptos: funcs,
+        excluidos: [],
       };
     }
     return result;
@@ -163,25 +163,19 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     return result;
   }, [aptoPorSetor, divisao, valorTotal]);
 
-  const totalExcluidos = Object.values(aptoPorSetor).reduce((s, v) => s + v.excluidos.length, 0);
   const setoresSemAptosComFuncs = Object.entries(distribuicao).filter(([sid, v]) => v.semAptos && (porSetor[sid]?.length || 0) > 0 && sid !== '__outros');
   const outrosFuncs = aptoPorSetor['__outros']?.aptos || [];
 
-  // Preview em tempo real com redistribuição proporcional pelas ausências
+  // Preview em tempo real com redistribuição pelas ausências (modelo de bônus para presentes)
   const previewAptos = useMemo(() => {
     const mapa = {};
     for (const [setorId, { aptos, valorSetor }] of Object.entries(distribuicao)) {
       if (aptos.length === 0) continue;
-      const props = aptos.map(f => {
-        const diasAus = parseInt(diasAusentesPorFunc[f.id] || 0);
-        const { proporcao } = calcularProporcionalidade(periodoInicio, periodoFim, diasAus);
-        return { func: f, diasAus, proporcao };
-      });
-      const somaProp = props.reduce((s, p) => s + p.proporcao, 0);
-      for (const p of props) {
-        const valorRedistribuido = somaProp > 0 ? valorSetor * (p.proporcao / somaProp) : 0;
-        const valorSemRateio = valorSetor / aptos.length * p.proporcao;
-        mapa[p.func.id] = { ...p, valorRedistribuido, valorSemRateio };
+      const resultados = calcularDistribuicaoFuncionarios(
+        valorSetor, aptos, diasAusentesPorFunc, periodoInicio, periodoFim
+      );
+      for (const r of resultados) {
+        mapa[r.funcionarioId] = r;
       }
     }
     return mapa;
@@ -197,7 +191,6 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     setCalculado(true);
   };
 
-  const getDiasAusentes = (funcId) => parseInt(diasAusentesPorFunc[funcId] || 0);
 
   const handleConfirmar = async () => {
     setSalvando(true);
@@ -219,39 +212,27 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       const registros = [];
       for (const [setorId, { aptos, excluidos, valorSetor, valorInd, nome }] of Object.entries(distribuicao)) {
         const nomeSetor = setorId === '__outros' ? 'Outros' : (divisao[setorId]?.nome || setorId);
-        // Redistribuição proporcional: calcula a proporção de cada apto
-        // e distribui o valorSetor proporcionalmente (sobra de faltas é rateada)
-        const proporcoesAptos = aptos.map(f => {
-          const diasAusentes = getDiasAusentes(f.id);
-          const { diasTotais, diasTrabalhados, proporcao } = calcularProporcionalidade(periodoInicio, periodoFim, diasAusentes);
-          return { func: f, diasAusentes, diasTotais, diasTrabalhados, proporcao };
-        });
-        const somaProporcoes = proporcoesAptos.reduce((s, p) => s + p.proporcao, 0);
-        for (const p of proporcoesAptos) {
-          const valorFinal = somaProporcoes > 0 ? valorSetor * (p.proporcao / somaProporcoes) : 0;
+        
+        // Calcula distribuição usando a nova lógica de bônus para os presentes
+        const resultados = calcularDistribuicaoFuncionarios(
+          valorSetor, aptos, diasAusentesPorFunc, periodoInicio, periodoFim
+        );
+        
+        for (const r of resultados) {
           registros.push({
-            funcionario_id: p.func.id, funcionario_nome: p.func.nome, comissao_id: comissao.id,
+            funcionario_id: r.funcionarioId, funcionario_nome: r.funcionarioNome, comissao_id: comissao.id,
             setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
             mes_referencia: mesRef, valor_setor: valorSetor,
-            valor_individual: valorFinal, // retrocompatibilidade
-            valor_individual_cheio: valorSetor / aptos.length,
-            valor_individual_final: valorFinal,
-            dias_ausentes_no_periodo: p.diasAusentes,
-            dias_trabalhados: p.diasTrabalhados,
-            dias_totais: p.diasTotais,
-            proporcao: p.proporcao,
+            valor_individual: r.valorFinal, // retrocompatibilidade
+            valor_individual_cheio: r.valorBase,
+            valor_individual_final: r.valorFinal,
+            perda_faltas_proprias: r.loss,
+            bonus_faltas_terceiros: r.bonus,
+            dias_ausentes_no_periodo: r.diasAusentes,
+            dias_trabalhados: r.diasTrabalhados,
+            dias_totais: r.diasTotais,
+            proporcao: r.proporcao,
             apto: true,
-          });
-        }
-        for (const f of excluidos) {
-          registros.push({
-            funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id,
-            setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
-            mes_referencia: mesRef, valor_setor: valorSetor,
-            valor_individual: 0, valor_individual_cheio: valorInd, valor_individual_final: 0,
-            dias_ausentes_no_periodo: 0, dias_trabalhados: 0, dias_totais: 0, proporcao: 0,
-            apto: false,
-            motivo_exclusao: f.faltas_no_periodo ? `${f.faltas_no_periodo} falta(s)` : `${f.atestados_no_periodo} atestado(s)`,
           });
         }
       }
@@ -363,12 +344,6 @@ export default function LancarComissao({ funcionarios, onSaved }) {
               </div>
             </div>
           )}
-          {totalExcluidos > 0 && (
-            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
-              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800"><strong>{totalExcluidos} funcionário(s)</strong> não receberão comissão por falta/atestado.</p>
-            </div>
-          )}
           {Object.values(diasAusentesPorFunc).some(d => parseInt(d) > 0) && (() => {
             const comReducao = Object.entries(diasAusentesPorFunc).filter(([, d]) => parseInt(d) > 0).length;
             return (
@@ -428,40 +403,46 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                     <span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />{nome}</span>
                     <div className="flex gap-1.5">
                       <Badge variant="outline" className="text-green-700">{aptos.length} aptos</Badge>
-                      {excluidos.length > 0 && <Badge variant="outline" className="text-red-700">{excluidos.length} excluídos</Badge>}
                     </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex gap-4 text-xs text-muted-foreground">
                     <span>Setor: <strong>{formatCurrency(valorSetor)}</strong></span>
-                    <span>Por funcionário: <strong className="text-green-600">{formatCurrency(valorInd)}</strong></span>
+                    <span>Cota base: <strong className="text-green-600">{formatCurrency(valorInd)}</strong></span>
                   </div>
                   {aptos.map(f => {
-                    const diasAus = getDiasAusentes(f.id);
-                    const { diasTotais, diasTrabalhados, proporcao } = calcularProporcionalidade(periodoInicio, periodoFim, diasAus);
                     const preview = previewAptos[f.id];
-                    const valorFinal = valorInd * proporcao;
-                    const valorRedistribuido = preview?.valorRedistribuido ?? valorFinal;
-                    const temReducao = diasAus > 0;
-                    const temDiferenca = Math.abs(valorFinal - valorRedistribuido) > 0.01;
+                    if (!preview) return null;
+                    const temReducao = preview.diasAusentes > 0;
                     return (
                       <div key={f.id} className="py-2 border-b last:border-0 space-y-1.5">
                         <div className="flex items-center justify-between text-sm">
                           <span className="font-medium">{f.nome}</span>
                           <div className="flex items-center gap-3">
-                            {temDiferenca ? (
+                            {temReducao ? (
                               <div className="text-right">
-                                <p className="text-xs text-muted-foreground line-through">{formatCurrency(valorFinal)}</p>
-                                <p className="font-bold text-green-600">{formatCurrency(valorRedistribuido)} <span className="text-xs font-normal text-green-500">(c/ rateio)</span></p>
-                              </div>
-                            ) : temReducao ? (
-                              <div className="text-right">
-                                <p className="text-xs text-muted-foreground line-through">{formatCurrency(valorInd)}</p>
-                                <p className="font-bold text-amber-600">{formatCurrency(valorFinal)}</p>
+                                <p className="text-xs text-muted-foreground line-through">{formatCurrency(preview.valorBase)}</p>
+                                <DetalheComissaoTooltip
+                                  valorBase={preview.valorBase}
+                                  perda={preview.loss}
+                                  bonus={preview.bonus}
+                                  diasAusentes={preview.diasAusentes}
+                                  contribuicoes={preview.contribuicoes}
+                                >
+                                  <p className="font-bold text-green-600">{formatCurrency(preview.valorFinal)}</p>
+                                </DetalheComissaoTooltip>
                               </div>
                             ) : (
-                              <span className="font-bold text-green-600">{formatCurrency(valorFinal)}</span>
+                              <DetalheComissaoTooltip
+                                valorBase={preview.valorBase}
+                                perda={preview.loss}
+                                bonus={preview.bonus}
+                                diasAusentes={preview.diasAusentes}
+                                contribuicoes={preview.contribuicoes}
+                              >
+                                <span className="font-bold text-green-600">{formatCurrency(preview.valorFinal)}</span>
+                              </DetalheComissaoTooltip>
                             )}
                           </div>
                         </div>
@@ -469,42 +450,25 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                           <CalendarMinus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           <Label className="text-xs text-muted-foreground whitespace-nowrap">Dias ausentes:</Label>
                           <Input
-                            type="number" min="0" max={diasTotais}
+                            type="number" min="0" max={preview.diasTotais}
                             className="h-6 w-16 text-xs px-2"
                             value={diasAusentesPorFunc[f.id] ?? ''}
                             placeholder="0"
                             onChange={e => {
                               const val = parseInt(e.target.value) || 0;
-                              const capped = Math.min(val, diasTotais);
+                              const capped = Math.min(val, preview.diasTotais);
                               setDiasAusentesPorFunc(prev => ({ ...prev, [f.id]: capped }));
                             }}
                           />
                           {temReducao && (
                             <span className="text-xs text-amber-700">
-                              {diasTrabalhados}/{diasTotais} dias ({(proporcao * 100).toFixed(0)}%)
+                              {preview.diasTrabalhados}/{preview.diasTotais} dias ({(preview.proporcao * 100).toFixed(0)}%)
                             </span>
                           )}
                         </div>
                       </div>
                     );
                   })}
-                  {excluidos.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1 mt-1">
-                      <p className="text-xs font-semibold text-red-700 flex items-center gap-1 mb-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5" />Excluídos por falta/atestado
-                      </p>
-                      {excluidos.map(f => (
-                        <div key={f.id} className="flex items-center justify-between text-sm">
-                          <span className="text-red-800">{f.nome}</span>
-                          <span className="text-xs text-red-600">
-                            {f.faltas_no_periodo ? `${f.faltas_no_periodo} falta(s)` : ''}
-                            {f.faltas_no_periodo && f.atestados_no_periodo ? ' + ' : ''}
-                            {f.atestados_no_periodo ? `${f.atestados_no_periodo} atestado(s)` : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             );

@@ -107,8 +107,8 @@ export default function Register() {
     if (form.password !== form.confirmPassword) { setError('As senhas não conferem'); return }
 
     setLoading(true)
+    let tenantId
     try {
-      let tenantId
       if (convite) {
         tenantId = convite.tenant_id
         if (!tenantId) {

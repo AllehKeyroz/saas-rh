@@ -92,10 +92,14 @@ export default function CorrigirComissaoDialog({
           const fator = 1 + proporcaoDiferenca;
           const novoValorFinal = (cf.valor_individual_final || cf.valor_individual || 0) * fator;
           const novoCheio = (cf.valor_individual_cheio || cf.valor_individual || 0) * fator;
+          const novaPerda = (cf.perda_faltas_proprias || 0) * fator;
+          const novoBonus = (cf.bonus_faltas_terceiros || 0) * fator;
           await client.entities.ComissaoPorFuncionario.update(cf.id, {
             valor_individual_cheio: novoCheio,
             valor_individual: novoValorFinal,
             valor_individual_final: novoValorFinal,
+            perda_faltas_proprias: novaPerda,
+            bonus_faltas_terceiros: novoBonus,
           });
         }
       }
@@ -160,11 +164,18 @@ export default function CorrigirComissaoDialog({
           <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
             <p className="font-semibold text-xs">Distribuição Automática:</p>
             <div className="grid grid-cols-2 gap-2">
-              <div><span className="text-muted-foreground">Empresa (20%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_empresa)}</span></div>
-              <div><span className="text-muted-foreground">Salão (40%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_salao)}</span></div>
-              <div><span className="text-muted-foreground">Cozinha (24%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_cozinha)}</span></div>
-              <div><span className="text-muted-foreground">Copa/PG/Cx (14%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_copa_playground_caixa)}</span></div>
-              <div><span className="text-muted-foreground">Limpeza/RH (2%):</span><br/><span className="font-semibold">{formatCurrency(distribuicao.valor_limpeza_rh)}</span></div>
+              {comissao?.percentual_retencao > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Empresa ({comissao.percentual_retencao}%):</span><br/>
+                  <span className="font-semibold">{formatCurrency(distribuicao.valor_empresa)}</span>
+                </div>
+              )}
+              {setoresComissao.filter(s => s.ativo !== false).map(s => (
+                <div key={s.id}>
+                  <span className="text-muted-foreground">{s.nome_do_setor} ({s.percentual}%):</span><br/>
+                  <span className="font-semibold">{formatCurrency(distribuicao['setor_' + s.nome_do_setor] || 0)}</span>
+                </div>
+              ))}
             </div>
           </div>
 
