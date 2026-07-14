@@ -11,6 +11,7 @@ import { Calculator, Loader2, CheckCircle2, RefreshCw, FileDown, LockOpen, Chevr
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL, mergeTipos, TIPOS_DESCONTO_DEFAULT, TIPOS_ADICIONAL_DEFAULT, TIPO_LABELS } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserRole } from '@/lib/useUserRole';
@@ -63,7 +64,7 @@ function CelulaLancamentos({ total, lancamentos, tipo, label, colorClass }) {
 }
 
 export default function Fechamento() {
-  const [mesRef, setMesRef] = useState(getMesReferenciaAtual());
+  const [mesRef, setMesRef] = usePersistedFilter('rh_filtro_mes_fechamento', getMesReferenciaAtual());
   const [processing, setProcessing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmFunc, setConfirmFunc] = useState(null);
@@ -150,6 +151,15 @@ export default function Fechamento() {
     return result;
   }, [tiposLancamento, configsRH]);
 
+  // Separa colunas entre créditos (adicionais) e débitos (descontos)
+  const colunasAdicionais = useMemo(() => {
+    return colunasFechamento.filter(col => customAdicionaisList.includes(col.key));
+  }, [colunasFechamento, customAdicionaisList]);
+
+  const colunasDescontos = useMemo(() => {
+    return colunasFechamento.filter(col => customDescontosList.includes(col.key));
+  }, [colunasFechamento, customDescontosList]);
+
   const isLoading = lf || ll || lfech;
   const [mesNum, anoStr] = mesRef.split('/');
   const mes = parseInt(mesNum) - 1;
@@ -160,7 +170,21 @@ export default function Fechamento() {
     return getMesRef(l.data_lancamento) === mesRef;
   });
 
-  const ativos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  const ativos = funcionarios
+    .filter(f => f.ativo !== false)
+    .filter(f => {
+      if (!f.data_admissao) return true
+      const ultimoDiaMes = new Date(ano, mes + 1, 0)
+      const adm = parseDateLocal(f.data_admissao)
+      if (adm > ultimoDiaMes) return false
+      if (f.data_demissao) {
+        const primeiroDiaMes = new Date(ano, mes, 1)
+        const dem = parseDateLocal(f.data_demissao)
+        if (dem < primeiroDiaMes) return false
+      }
+      return true
+    })
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
   const fechamentosMes = fechamentos.filter(f => f.mes_referencia === mesRef);
   const fechadosIds = new Set(fechamentosMes.map(f => f.funcionario_id));
 
@@ -170,11 +194,19 @@ export default function Fechamento() {
   const calcularComFechado = (funcId) => {
     const fechado = fechamentosMes.find(f => f.funcionario_id === funcId);
     if (fechado) {
+      const base = fechado.salario_base || 0;
+      const ajuda = fechado.ajuda_custo || 0;
+      const comissao = fechado.comissao_gorjeta || 0;
+      const adicionais = fechado.total_adicionais || 0;
+      const descontos = fechado.total_descontos || 0;
       return {
-        salarioBase: (fechado.salario_base || 0) + (fechado.ajuda_custo || 0),
-        totalDescontos: fechado.total_descontos || 0,
-        totalAdicionais: fechado.total_adicionais || 0,
-        comissaoGorjeta: fechado.comissao_gorjeta || 0,
+        salarioBase: base,
+        ajudaCusto: ajuda,
+        totalDescontos: descontos,
+        totalAdicionais: adicionais,
+        comissaoGorjeta: comissao,
+        subtotalCreditos: base + ajuda + comissao + adicionais,
+        subtotalDebitos: descontos,
         salarioLiquido: fechado.salario_liquido || 0,
         detalhes: fechado.detalhes || {},
         lancamentos: Object.values(fechado.detalhes || {}).filter(v => v > 0).length,
@@ -192,7 +224,8 @@ export default function Fechamento() {
   const calcular = (funcId) => {
     const funcLanc = lancMes.filter(l => l.funcionario_id === funcId);
     const func = funcionarios.find(f => f.id === funcId);
-    const salarioBase = (func?.salario_base || 0) + (func?.ajuda_custo || 0);
+    const salarioBase = func?.salario_base || 0;
+    const ajudaCusto = func?.ajuda_custo || 0;
     const comissaoGorjeta = calcularComissaoMes(funcId);
 
     const descontos = {};
@@ -211,12 +244,18 @@ export default function Fechamento() {
       totalAdicionais += val;
     });
 
+    const subtotalCreditos = salarioBase + ajudaCusto + comissaoGorjeta + totalAdicionais;
+    const subtotalDebitos = totalDescontos;
+
     return {
       salarioBase,
-      totalDescontos,
+      ajudaCusto,
+      totalDescontos: subtotalDebitos,
       totalAdicionais,
       comissaoGorjeta,
-      salarioLiquido: salarioBase + totalAdicionais + comissaoGorjeta - totalDescontos,
+      subtotalCreditos,
+      subtotalDebitos,
+      salarioLiquido: subtotalCreditos - subtotalDebitos,
       detalhes: { ...descontos, ...adicionais },
       lancamentos: funcLanc.length
     };
@@ -351,41 +390,41 @@ export default function Fechamento() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">Fechamento Mensal</h1>
-          <span className="text-muted-foreground text-sm hidden sm:inline">— Calcule e processe a folha</span>
+          <h1 className="text-2xl font-bold tracking-tight">Fechamento Mensal</h1>
+          <span className="text-muted-foreground text-xs hidden sm:inline">— Calcule e processe a folha</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Select value={mesRef} onValueChange={setMesRef}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {getMesesOptions().map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => setFechIndividualOpen(true)} disabled={processing}>
-            <UserCheck className="w-4 h-4 mr-2" />Fechamento Individual
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setFechIndividualOpen(true)} disabled={processing}>
+            <UserCheck className="w-3.5 h-3.5 mr-1" />Individual
           </Button>
           {canProcess && (
-            <Button onClick={() => { setReprocessMode(false); setConfirmOpen(true); }} disabled={processing}>
-              <Calculator className="w-4 h-4 mr-2" />Processar Todos
+            <Button size="sm" className="h-8 text-xs" onClick={() => { setReprocessMode(false); setConfirmOpen(true); }} disabled={processing}>
+              <Calculator className="w-3.5 h-3.5 mr-1" />Processar
             </Button>
           )}
           {isAdmin && (
-            <Button variant="outline" onClick={() => { setReprocessMode(true); setConfirmOpen(true); }} disabled={processing}>
-              <RefreshCw className="w-4 h-4 mr-2" />Reprocessar
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setReprocessMode(true); setConfirmOpen(true); }} disabled={processing}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1" />Reprocessar
             </Button>
           )}
           {isAdmin && fechamentosMes.length > 0 && (
-            <Button variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => setReabrirGrupoOpen(true)} disabled={processing}>
-              <LockOpen className="w-4 h-4 mr-2" />Reabrir Todos
+            <Button variant="outline" size="sm" className="h-8 text-xs text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => setReabrirGrupoOpen(true)} disabled={processing}>
+              <LockOpen className="w-3.5 h-3.5 mr-1" />Reabrir
             </Button>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isLoading}>
-                <FileDown className="w-4 h-4 mr-2" />Exportar
+              <Button variant="outline" size="sm" className="h-8 text-xs" disabled={isLoading}>
+                <FileDown className="w-3.5 h-3.5 mr-1" />Exportar
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -405,6 +444,22 @@ export default function Fechamento() {
         </div>
       </div>
 
+      {/* Cards de resumo */}
+      <div className="grid grid-cols-3 sm:grid-cols-3 gap-3">
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground">Funcionários</p>
+          <p className="text-lg font-bold">{ativos.length}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground">Total Bruto</p>
+          <p className="text-lg font-bold">{formatCurrency(ativos.reduce((s, f) => s + calcularComFechado(f.id).subtotalCreditos, 0))}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground">Total Líquido</p>
+          <p className="text-lg font-bold">{formatCurrency(ativos.reduce((s, f) => s + calcularComFechado(f.id).salarioLiquido, 0))}</p>
+        </div>
+      </div>
+
       {isLoading ? (
         <Skeleton className="h-64" />
       ) : (
@@ -414,18 +469,26 @@ export default function Fechamento() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                     <TableHead>Sal. Base</TableHead>
-                     <TableHead>Comissão</TableHead>
-                     {colunasFechamento.map(col => (
-                       <TableHead key={col.key} className="text-xs tracking-wide" style={col.cor ? { backgroundColor: col.cor + '15', color: col.cor } : {}}>
-                         {col.nome}
-                       </TableHead>
-                     ))}
-                     <TableHead>Sal. Líquido</TableHead>
-                     <TableHead>Lanç.</TableHead>
-                     <TableHead>Status</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                  <TableHead className="sticky left-0 z-10 bg-white py-1 px-1.5 text-[11px] whitespace-nowrap">Funcionário</TableHead>
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap">Sal. Base</TableHead>
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap">Ajuda Custo</TableHead>
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap">Comissão</TableHead>
+                   {colunasAdicionais.map(col => (
+                     <TableHead key={col.key} className="py-1 px-1.5 text-[11px] whitespace-nowrap text-green-700" style={col.cor ? { backgroundColor: col.cor + '15', color: col.cor } : {}}>
+                       {col.nome}
+                     </TableHead>
+                   ))}
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap font-bold text-green-700 bg-green-50">Subtotal Créd.</TableHead>
+                   {colunasDescontos.map(col => (
+                     <TableHead key={col.key} className="py-1 px-1.5 text-[11px] whitespace-nowrap text-red-700" style={col.cor ? { backgroundColor: col.cor + '15', color: col.cor } : {}}>
+                       {col.nome}
+                     </TableHead>
+                   ))}
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap font-bold text-red-700 bg-red-50">Subtotal Déb.</TableHead>
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap">Sal. Líquido</TableHead>
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap">Lanç.</TableHead>
+                   <TableHead className="py-1 px-1.5 text-[11px] whitespace-nowrap">Status</TableHead>
+                  <TableHead className="sticky right-0 z-10 bg-white py-1 px-1.5 w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -434,36 +497,46 @@ export default function Fechamento() {
                     const dados = calcularComFechado(func.id);
                     return (
                       <TableRow key={func.id}>
-                        <TableCell>
+                        <TableCell className="sticky left-0 z-10 bg-white py-0.5 px-1.5 text-xs whitespace-nowrap">
                           <button
-                            className="font-medium text-left hover:text-primary hover:underline transition-colors"
+                            className="font-medium text-left hover:text-primary hover:underline transition-colors text-xs"
                             onClick={() => setDetalhesFunc(func)}
                           >
                             {func.nome}
                           </button>
                         </TableCell>
-                        <TableCell>{formatCurrency(dados.salarioBase)}</TableCell>
-                        <TableCell className="text-emerald-600 font-medium">{formatCurrency(dados.comissaoGorjeta || 0)}</TableCell>
-                        {colunasFechamento.map(col => {
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap">{formatCurrency(dados.salarioBase)}</TableCell>
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap">{dados.ajudaCusto > 0 ? formatCurrency(dados.ajudaCusto) : <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap text-emerald-600 font-medium">{formatCurrency(dados.comissaoGorjeta || 0)}</TableCell>
+                        {colunasAdicionais.map(col => {
                           const val = dados.detalhes?.[col.key] || 0;
-                          const isDesc = TIPOS_DESCONTO_DEFAULT.includes(col.key);
                           return (
-                            <TableCell key={col.key} className={val ? (isDesc ? 'text-destructive font-medium' : 'text-green-600') : 'text-muted-foreground text-xs'}>
-                              {val ? formatCurrency(val) : '—'}
+                            <TableCell key={col.key} className={'py-0.5 px-1.5 text-xs whitespace-nowrap' + (val ? ' text-green-600' : ' text-muted-foreground')}>
+                              {val ? <CelulaLancamentos total={val} lancamentos={lancMes.filter(l => l.funcionario_id === func.id)} tipo={col.key} label={col.nome} colorClass="text-green-600" /> : '—'}
                             </TableCell>
                           );
                         })}
-                        <TableCell className="font-bold">{formatCurrency(dados.salarioLiquido)}</TableCell>
-                        <TableCell>{dados.lancamentos}</TableCell>
-                        <TableCell>
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap font-bold text-green-700 bg-green-50/50">{formatCurrency(dados.subtotalCreditos)}</TableCell>
+                        {colunasDescontos.map(col => {
+                          const val = dados.detalhes?.[col.key] || 0;
+                          return (
+                            <TableCell key={col.key} className={'py-0.5 px-1.5 text-xs whitespace-nowrap' + (val ? ' text-destructive font-medium' : ' text-muted-foreground')}>
+                              {val ? <CelulaLancamentos total={val} lancamentos={lancMes.filter(l => l.funcionario_id === func.id)} tipo={col.key} label={col.nome} colorClass="text-destructive" /> : '—'}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap font-bold text-red-700 bg-red-50/50">{formatCurrency(dados.subtotalDebitos)}</TableCell>
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap font-bold">{formatCurrency(dados.salarioLiquido)}</TableCell>
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap">{dados.lancamentos}</TableCell>
+                        <TableCell className="py-0.5 px-1.5 text-xs whitespace-nowrap">
                           {fechado ? (
-                            <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />Fechado</Badge>
+                            <Badge className="bg-green-100 text-green-700 text-[10px] py-0 px-1.5"><CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />Fechado</Badge>
                           ) : (
-                            <Badge variant="outline">Pendente</Badge>
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5">Pendente</Badge>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                        <TableCell className="sticky right-0 z-10 bg-white py-0.5 px-1.5">
+                          <div className="flex items-center gap-0.5">
                             <Button
                               size="sm" variant="ghost"
                               onClick={() => exportDemonstrativoPDF(func, lancamentos, fechamentos, mesRef)}

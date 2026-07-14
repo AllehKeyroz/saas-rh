@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { getMesesOptions, getMesReferenciaAtual } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import RelatorioGeral from '@/components/relatorios/RelatorioGeral';
@@ -11,7 +12,7 @@ import RelatorioComparativo from '@/components/relatorios/RelatorioComparativo';
 import RelatorioLimites from '@/components/relatorios/RelatorioLimites';
 
 export default function Relatorios() {
-  const [mesRef, setMesRef] = useState(getMesReferenciaAtual());
+  const [mesRef, setMesRef] = usePersistedFilter('rh_filtro_mes_relatorios', getMesReferenciaAtual());
   const [funcSelecionado, setFuncSelecionado] = useState('');
   const [tab, setTab] = useState('geral');
 

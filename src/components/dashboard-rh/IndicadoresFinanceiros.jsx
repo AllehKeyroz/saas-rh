@@ -11,6 +11,7 @@ import {
 import { DollarSign, TrendingUp, Wallet, Building2, CreditCard } from 'lucide-react';
 import { format, subMonths, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { mergeTipos, parseDateLocal, getMesRef } from '@/lib/formatters';
 
 const fmt = (val) => `R$ ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -67,7 +68,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function IndicadoresFinanceiros() {
-  const [mesSelecionado, setMesSelecionado] = useState(format(new Date(), 'MM/yyyy'));
+  const [mesSelecionado, setMesSelecionado] = usePersistedFilter('rh_filtro_mes_dashboard', format(new Date(), 'MM/yyyy'));
   const meses = gerarMeses(12);
 
   const { data: funcionarios = [], isLoading: loadingF } = useQuery({

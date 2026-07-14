@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { getMesesOptions, getMesReferenciaAtual } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,7 +23,7 @@ export default function Comissoes() {
   const urlParams = new URLSearchParams(window.location.search);
   const tabFromUrl = urlParams.get('tab');
   const [tab, setTab] = useState(VALID_TABS_COMISSOES.includes(tabFromUrl) ? tabFromUrl : 'lancar');
-  const [mesRef, setMesRef] = useState(getMesReferenciaAtual());
+  const [mesRef, setMesRef] = usePersistedFilter('rh_filtro_mes_comissoes', getMesReferenciaAtual());
   const queryClient = useQueryClient();
   const { isAtiva, isLoading: loadingRH } = useRHControl();
 

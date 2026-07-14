@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, User, ChevronRight, Upload, TrendingUp, FileText, Wallet, DollarSign, Clock, List, Settings, Building2, Hash, Calendar } from 'lucide-react';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { formatCurrency, getMesesOptions, getMesReferenciaAtual, TIPOS_DESCONTO, TIPOS_ADICIONAL, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import LancamentoForm from '@/components/lancamentos/LancamentoForm';
@@ -29,7 +30,7 @@ export default function Lancamentos() {
   const [importOpen, setImportOpen] = useState(false);
   const [tiposOpen, setTiposOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [mesFiltro, setMesFiltro] = useState(getMesReferenciaAtual());
+  const [mesFiltro, setMesFiltro] = usePersistedFilter('rh_filtro_mes_lancamentos', getMesReferenciaAtual());
   const [funcSelecionado, setFuncSelecionado] = useState(null);
   const [filtroAtivo, setFiltroAtivo] = useState('todos');
   const queryClient = useQueryClient();

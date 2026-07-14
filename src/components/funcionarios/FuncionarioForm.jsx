@@ -8,10 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Upload, Loader2, Calculator, Info, Plus, Trash2, UserX, UserCheck } from 'lucide-react';
+import { Upload, Loader2, Calculator, Info, Plus, Trash2, UserX, UserCheck, Send } from 'lucide-react';
 import { formatCurrency, LIMITE_PERCENTUAL } from '@/lib/formatters';
 import { toast } from 'sonner';
 import { getCurrentTenantId } from '@/firebase/auth';
+import { criarOuReenviarConvite } from '@/lib/convites';
+import ReenviarAcessoModal from './ReenviarAcessoModal';
 
 const PARENTESCOS = ['filho(a)', 'cônjuge', 'companheiro(a)', 'enteado(a)', 'menor tutelado', 'outros'];
 
@@ -84,6 +86,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
   const [demitirForm, setDemitirForm] = useState({ data_demissao: hojeStr, motivo_demissao: '' });
   const [showRecontratar, setShowRecontratar] = useState(false);
   const [recontratarData, setRecontratarData] = useState(hojeStr);
+  const [conviteFuncionario, setConviteFuncionario] = useState(null);
 
   const { data: setores = [] } = useQuery({
     queryKey: ['setores'],
@@ -362,6 +365,19 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
     }
   };
 
+  const handleReenviarConvite = async () => {
+    if (!funcionario?.email) {
+      toast.error('Funcionário não possui email cadastrado');
+      return;
+    }
+    try {
+      await criarOuReenviarConvite(funcionario);
+      setConviteFuncionario(funcionario);
+    } catch (err) {
+      toast.error(err?.message || 'Erro ao criar convite');
+    }
+  };
+
   const TabNav = () => (
     <div className="flex gap-1 border-b overflow-x-auto scrollbar-hide mb-4 -mx-1 px-1">
       {TABS.map(t => (
@@ -404,6 +420,11 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         <div>
           <Label>E-mail</Label>
           <Input type="email" value={form.email || ''} onChange={e => handleChange('email', e.target.value)} placeholder="funcionario@empresa.com" />
+          {isEdit && form.email && (
+            <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs text-amber-600 mt-1" onClick={handleReenviarConvite}>
+              <Send className="w-3 h-3 mr-1" />Reenviar convite de acesso
+            </Button>
+          )}
         </div>
         <div>
           <Label>Telefone / WhatsApp</Label>
@@ -946,6 +967,12 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReenviarAcessoModal
+        open={!!conviteFuncionario}
+        onClose={() => setConviteFuncionario(null)}
+        funcionario={conviteFuncionario}
+      />
     </Dialog>
   );
 }

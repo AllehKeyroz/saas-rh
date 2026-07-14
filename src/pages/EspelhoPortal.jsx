@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { getMesReferenciaAtual, getMesesOptions, formatCurrency, formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { ChevronLeft, ChevronRight, Eye, User, FileText, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -40,7 +41,7 @@ const ABAS_COM_MES = ['meus-vales', 'extrato', 'meu-salario', 'comissoes'];
 export default function EspelhoPortal() {
   const [funcionarioId, setFuncionarioId] = useState('');
   const [aba, setAba] = useState('visao-geral');
-  const [mesSelecionado, setMesSelecionado] = useState(getMesReferenciaAtual());
+  const [mesSelecionado, setMesSelecionado] = usePersistedFilter('rh_filtro_mes_espelho', getMesReferenciaAtual());
   const [comprovante, setComprovante] = useState(null);
   const { isAtiva } = useRHControl();
   const mesAtual = getMesReferenciaAtual();

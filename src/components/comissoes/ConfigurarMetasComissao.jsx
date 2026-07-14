@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Target, Plus, Trash2, Copy, TrendingUp, Users } from 'lucide-react';
+import { usePersistedFilter } from '@/lib/usePersistedFilter';
 import { formatCurrency, getMesReferenciaAtual, getMesesOptions } from '@/lib/formatters';
 import { calcularComissaoMensal, calcularProgressoMetaComissao } from '@/lib/comissoes';
 import { Progress } from '@/components/ui/progress';
@@ -30,7 +31,7 @@ function ProgressoBar({ acumulado, meta }) {
 
 export default function ConfigurarMetasComissao({ funcionarios = [], comissoesFuncionarios = [] }) {
   const queryClient = useQueryClient();
-  const [mesRef, setMesRef] = useState(getMesReferenciaAtual());
+  const [mesRef, setMesRef] = usePersistedFilter('rh_filtro_mes_metas', getMesReferenciaAtual());
   const [form, setForm] = useState({ tipo: 'setor', setor: '', funcionario_id: '', meta_valor: '' });
   const [salvando, setSalvando] = useState(false);
 

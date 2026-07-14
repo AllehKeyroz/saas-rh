@@ -249,19 +249,21 @@ export function exportFechamentoPDF(funcionarios, calcular, mesRef) {
 
   const headers = [
     { label: 'Funcionário' },
-    { label: 'Salário Base', align: 'right' },
+    { label: 'Sal. Base', align: 'right' },
+    { label: 'Ajuda Custo', align: 'right' },
     { label: 'Descontos', align: 'right' },
     { label: 'Adicionais', align: 'right' },
     { label: 'Comissão', align: 'right' },
-    { label: 'Salário Líquido', align: 'right' },
+    { label: 'Líquido', align: 'right' },
     { label: 'Lanç.', align: 'right' },
   ];
 
-  let totalBase = 0, totalDesc = 0, totalAdi = 0, totalComissao = 0, totalLiq = 0;
+  let totalBase = 0, totalAjuda = 0, totalDesc = 0, totalAdi = 0, totalComissao = 0, totalLiq = 0;
 
   const rows = funcionarios.map(func => {
     const calc = calcular(func.id);
     totalBase += calc.salarioBase;
+    totalAjuda += calc.ajudaCusto || 0;
     totalDesc += calc.totalDescontos;
     totalAdi += calc.totalAdicionais - (calc.detalhes.comissao || 0);
     totalComissao += calc.detalhes.comissao || 0;
@@ -269,6 +271,7 @@ export function exportFechamentoPDF(funcionarios, calcular, mesRef) {
     return [
       { value: func.nome },
       { value: formatCurrency(calc.salarioBase), align: 'right' },
+      { value: formatCurrency(calc.ajudaCusto || 0), align: 'right', color: GREEN },
       { value: formatCurrency(calc.totalDescontos), align: 'right', color: RED },
       { value: formatCurrency(calc.totalAdicionais - (calc.detalhes.comissao || 0)), align: 'right', color: GREEN },
       { value: formatCurrency(calc.detalhes.comissao || 0), align: 'right', color: EMERALD },
@@ -287,13 +290,14 @@ export function exportFechamentoPDF(funcionarios, calcular, mesRef) {
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  const colW = (pageWidth - 28) / 7;
+  const colW = (pageWidth - 28) / 8;
   doc.text('TOTAIS', 16, y + 6);
-  doc.text(formatCurrency(totalBase), 16 + colW + colW - 4, y + 6, { align: 'right' });
-  doc.text(formatCurrency(totalDesc), 16 + colW * 2 + colW - 4, y + 6, { align: 'right' });
-  doc.text(formatCurrency(totalAdi), 16 + colW * 3 + colW - 4, y + 6, { align: 'right' });
-  doc.text(formatCurrency(totalComissao), 16 + colW * 4 + colW - 4, y + 6, { align: 'right' });
-  doc.text(formatCurrency(totalLiq), 16 + colW * 5 + colW - 4, y + 6, { align: 'right' });
+  doc.text(formatCurrency(totalBase), 16 + colW * 1 + colW - 4, y + 6, { align: 'right' });
+  doc.text(formatCurrency(totalAjuda), 16 + colW * 2 + colW - 4, y + 6, { align: 'right' });
+  doc.text(formatCurrency(totalDesc), 16 + colW * 3 + colW - 4, y + 6, { align: 'right' });
+  doc.text(formatCurrency(totalAdi), 16 + colW * 4 + colW - 4, y + 6, { align: 'right' });
+  doc.text(formatCurrency(totalComissao), 16 + colW * 5 + colW - 4, y + 6, { align: 'right' });
+  doc.text(formatCurrency(totalLiq), 16 + colW * 6 + colW - 4, y + 6, { align: 'right' });
 
   doc.setFontSize(7.5);
   doc.setTextColor(...GRAY);

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Pencil, User, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, User, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle, Trash2, Send } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +18,8 @@ import PermissoesPortalDialog from '@/components/funcionarios/PermissoesPortalDi
 import DocumentosFuncionarioTab from '@/components/funcionarios/DocumentosFuncionarioTab';
 import FeriasBancoHorasTab from '@/components/funcionarios/FeriasBancoHorasTab';
 import AdvertenciaForm from '@/components/advertencias/AdvertenciaForm';
+import { criarOuReenviarConvite } from '@/lib/convites';
+import ReenviarAcessoModal from '@/components/funcionarios/ReenviarAcessoModal';
 
 const ABAS = [
   { id: 'cadastro', label: 'Cadastro', icon: UsersIcon },
@@ -26,7 +28,7 @@ const ABAS = [
   { id: 'advertencias', label: 'Advertências', icon: AlertCircle },
 ];
 
-function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta, onPermissoes }) {
+function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta, onPermissoes, onReenviarConvite }) {
   const navigate = useNavigate();
   if (isLoading) return <div className="space-y-2">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>;
   if (list.length === 0) return <div className="text-center py-16 text-muted-foreground">{emptyMsg}</div>;
@@ -72,6 +74,7 @@ function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta,
                   {canEdit && <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" onClick={() => onEdit(func)}><Pencil className="w-3.5 h-3.5" /></Button>}
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Documentos" onClick={() => onPasta(func)}><FolderOpen className="w-3.5 h-3.5" /></Button>
                   {canEdit && <Button variant="ghost" size="icon" className="h-8 w-8 text-accent" title="Permissões do Portal" onClick={() => onPermissoes(func)}><ShieldCheck className="w-3.5 h-3.5" /></Button>}
+                  {func.email && <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600" title="Reenviar convite de acesso" onClick={() => onReenviarConvite(func)}><Send className="w-3.5 h-3.5" /></Button>}
                 </div>
               </td>
             </tr>
@@ -218,6 +221,7 @@ export default function Funcionarios() {
   const [pastaFunc, setPastaFunc] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [permissoesFunc, setPermissoesFunc] = useState(null);
+  const [conviteFuncionario, setConviteFuncionario] = useState(null);
   const [setorFiltro, setSetorFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState('todos');
   const [periodoDe, setPeriodoDe] = useState('');
@@ -232,6 +236,14 @@ export default function Funcionarios() {
 
   const canEdit = true;
   const handleSaved = () => queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+  const handleReenviarConvite = async (func) => {
+    try {
+      await criarOuReenviarConvite(func);
+      setConviteFuncionario(func);
+    } catch (err) {
+      toast.error(err?.message || 'Erro ao criar convite');
+    }
+  };
   const setores = useMemo(() => [...new Set(funcionarios.map(f => f.setor).filter(Boolean))].sort(), [funcionarios]);
   const isInativo = (f) => f.ativo === false || !!f.data_demissao;
 
@@ -292,10 +304,10 @@ export default function Funcionarios() {
               <TabsTrigger value="inativos">Inativos <Badge className="ml-2 bg-gray-100 text-gray-600 text-xs">{inativosL.length}</Badge></TabsTrigger>
             </TabsList>
             <TabsContent value="ativos" className="mt-4">
-              <FuncionarioTable list={ativos} isLoading={isLoading} emptyMsg="Nenhum funcionário ativo encontrado" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} />
+              <FuncionarioTable list={ativos} isLoading={isLoading} emptyMsg="Nenhum funcionário ativo encontrado" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} onReenviarConvite={handleReenviarConvite} />
             </TabsContent>
             <TabsContent value="inativos" className="mt-4">
-              <FuncionarioTable list={inativosL} isLoading={isLoading} emptyMsg="Nenhum funcionário inativo" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} />
+              <FuncionarioTable list={inativosL} isLoading={isLoading} emptyMsg="Nenhum funcionário inativo" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} onReenviarConvite={handleReenviarConvite} />
             </TabsContent>
           </Tabs>
         </TabsContent>
@@ -320,6 +332,13 @@ export default function Funcionarios() {
       {pastaFunc && <PastaDocumentos open={!!pastaFunc} onClose={() => setPastaFunc(null)} funcionario={pastaFunc} />}
       <ImportarFuncionarios open={importOpen} onClose={() => setImportOpen(false)} onSaved={handleSaved} />
       {permissoesFunc && <PermissoesPortalDialog open={!!permissoesFunc} onClose={() => setPermissoesFunc(null)} funcionario={permissoesFunc} onSaved={handleSaved} />}
+      {conviteFuncionario && (
+        <ReenviarAcessoModal
+          open={!!conviteFuncionario}
+          onClose={() => setConviteFuncionario(null)}
+          funcionario={conviteFuncionario}
+        />
+      )}
     </div>
   );
 }
