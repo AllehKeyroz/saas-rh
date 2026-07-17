@@ -4,6 +4,8 @@
  */
 import { client } from '@/api/client';
 
+const APP_VERSION = __APP_VERSION__ // eslint-disable-line no-undef
+
 /**
  * Registra um evento de auditoria de documentos.
  * @param {object} params
@@ -38,6 +40,7 @@ export async function registrarAuditoria({
     modulo,
     descricao,
     origem,
+    app_version: APP_VERSION,
     usuario_email,
     usuario_nome,
   };

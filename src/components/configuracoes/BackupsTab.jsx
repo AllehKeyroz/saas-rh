@@ -121,8 +121,10 @@ async function executarBackup(tipo, queryClient, setGerandoTipo) {
       total_arquivos: totalArquivos,
     });
 
+    const backupVersion = __APP_VERSION__ // eslint-disable-line no-undef
     client.entities.LogAuditoria.create({
       usuario_email: 'sistema',
+      app_version: backupVersion,
       acao: 'criar',
       modulo: 'backup',
       descricao: `Backup concluído: ${nomeArquivo} (${totalArquivos} arquivo(s))`,

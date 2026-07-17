@@ -6,6 +6,7 @@ import {
   DollarSign, Wallet, FileText, BarChart2, Award, Target, FolderOpen
 } from 'lucide-react';
 import { useRHControl } from '@/lib/rhControl';
+import VersionFooter from '@/components/layout/VersionFooter';
 
 const ALL_NAV_ITEMS = [
   { id: 'visao-geral',        label: 'Visão Geral',          icon: LayoutDashboard, always: true },
@@ -80,7 +81,10 @@ export default function PortalSidebar({ aba, setAba, funcionario, mobileOpen, se
       </nav>
 
       {/* Sair */}
-      <div className="px-3 pb-5 border-t border-sidebar-border pt-3">
+      <div className="px-3 pb-5 border-t border-sidebar-border pt-3 space-y-2">
+        <div className="px-4">
+          <VersionFooter />
+        </div>
         <button
           onClick={() => client.auth.logout()}
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-900/20 hover:text-red-300 transition-all"

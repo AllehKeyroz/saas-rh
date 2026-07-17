@@ -119,6 +119,7 @@ export default function Auditoria() {
             const ModuloIcon = modulo.icon || FileText;
             const isOpen = expandido === log.id;
             const temDetalhes = log.dados_anteriores || log.dados_novos;
+            const versao = log.app_version;
 
             return (
               <Card
@@ -141,6 +142,11 @@ export default function Auditoria() {
                           <ModuloIcon className="w-3 h-3" />
                           {modulo.label}
                         </Badge>
+                        {versao && (
+                          <span className="text-[10px] text-muted-foreground/60 font-mono border border-border rounded px-1.5 py-0.5 leading-none">
+                            v{versao}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm font-medium">{log.descricao}</p>
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">

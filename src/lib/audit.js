@@ -1,5 +1,7 @@
 import { client } from '@/api/client';
 
+const APP_VERSION = __APP_VERSION__ // eslint-disable-line no-undef
+
 /**
  * Registra uma entrada no log de auditoria.
  * @param {object} params
@@ -16,6 +18,7 @@ export async function registrarAuditoria({ acao, modulo, descricao, entidade_id,
     await client.entities.LogAuditoria.create({
       usuario_email: me.email,
       usuario_nome: me.full_name || me.email,
+      app_version: APP_VERSION,
       acao,
       modulo,
       descricao,

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import VersionFooter from './VersionFooter';
 import { client } from '@/api/client';
 
 const menuStructure = [
@@ -227,7 +228,8 @@ export default function SidebarRH({ collapsed, onToggle, mobileOpen, onMobileClo
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border">
+      <div className="p-3 border-t border-border space-y-2">
+        {!collapsed && <VersionFooter />}
         <button
           onClick={() => {
             client.auth.logout();
