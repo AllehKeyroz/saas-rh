@@ -54,14 +54,16 @@ export default function Register() {
   }
 
   const handleContinue = async () => {
-    if (!email || !email.includes('@')) { setError('Informe um email válido'); return }
+    const normalizedEmail = email.toLowerCase()
+    setEmail(normalizedEmail)
+    if (!normalizedEmail || !normalizedEmail.includes('@')) { setError('Informe um email válido'); return }
     setError('')
     setCheckingEmail(true)
 
     // 1. Verifica se já existe conta Firebase Auth com este email
     let authExists = false
     try {
-      const methods = await fetchSignInMethodsForEmail(auth, email)
+      const methods = await fetchSignInMethodsForEmail(auth, normalizedEmail)
       authExists = methods.length > 0
     } catch {}
     if (authExists) {
@@ -72,7 +74,7 @@ export default function Register() {
 
     // 2. Verifica se o convite já foi usado
     try {
-      const usados = await client.entities.convites.filter({ email, status: 'aceito' })
+      const usados = await client.entities.convites.filter({ email: normalizedEmail, status: 'aceito' })
       if (usados.length > 0) {
         setCheckingEmail(false)
         setError('Este convite já foi utilizado.')
@@ -81,7 +83,7 @@ export default function Register() {
     } catch {}
 
     // 3. Busca convite pendente
-    const c = await checkConvite(email)
+    const c = await checkConvite(normalizedEmail)
     setCheckingEmail(false)
     setStep('form')
   }
@@ -100,6 +102,8 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault()
     setError('')
+
+    const normalizedEmail = email.toLowerCase()
 
     if (!convite && !form.companyName.trim()) { setError('Informe o nome da empresa'); return }
     if (!form.fullName.trim()) { setError('Informe seu nome completo'); return }
@@ -121,18 +125,18 @@ export default function Register() {
         await setDoc(doc(db, 'tenants', tenantId), {
           id: tenantId,
           nome: form.companyName.trim(),
-          email,
+          email: normalizedEmail,
           created_date: new Date().toISOString(),
           ativo: true,
         })
       }
 
-      const cred = await createUserWithEmailAndPassword(auth, email, form.password)
+      const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, form.password)
       const uid = cred.user.uid
 
       await createUserProfile(uid, {
         full_name: form.fullName,
-        email,
+        email: normalizedEmail,
         role: convite ? 'funcionario' : 'admin',
         tenant_id: tenantId,
         created_date: new Date().toISOString(),
@@ -153,7 +157,7 @@ export default function Register() {
       if (convite) {
         await client.entities.convites.update(convite.id, { status: 'aceito' })
         if (convite.funcionario_id) {
-          await client.entities.Funcionarios.update(convite.funcionario_id, { user_email_portal: email })
+          await client.entities.Funcionarios.update(convite.funcionario_id, { user_email_portal: normalizedEmail })
         }
       }
       if (!convite) {
@@ -222,7 +226,7 @@ export default function Register() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Email</label>
               <input type="email" value={email}
-                onChange={e => { setEmail(e.target.value); setError('') }}
+                onChange={e => { setEmail(e.target.value.toLowerCase()); setError('') }}
                 onKeyDown={handleEmailKeyDown}
                 placeholder="seu@email.com"
                 autoFocus

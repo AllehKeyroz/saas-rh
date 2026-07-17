@@ -30,7 +30,7 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
     setSaving(true);
     await client.entities.Funcionarios.update(funcionario.id, {
       permissoes_portal: perm,
-      user_email_portal: emailPortal.trim() || null,
+      user_email_portal: emailPortal.toLowerCase().trim() || null,
     });
     toast({ title: 'Permissões salvas com sucesso!' });
     onSaved();
@@ -57,7 +57,7 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
             <Input
               type="email"
               value={emailPortal}
-              onChange={e => setEmailPortal(e.target.value)}
+              onChange={e => setEmailPortal(e.target.value.toLowerCase())}
               placeholder="funcionario@empresa.com"
             />
           </div>

@@ -69,7 +69,8 @@ export default function Usuarios() {
   };
 
   const handleCriarUsuario = async () => {
-    if (!form.email || !form.password) { toast.error('Preencha email e senha'); return; }
+    const normalizedEmail = form.email.toLowerCase()
+    if (!normalizedEmail || !form.password) { toast.error('Preencha email e senha'); return; }
     if (form.password.length < 6) { toast.error('A senha deve ter no mínimo 6 caracteres'); return; }
     setSaving(true);
     const adminTenantId = getCurrentTenantId();
@@ -85,13 +86,13 @@ export default function Usuarios() {
       tempApp = initializeApp(auth.app.options, 'tempUserCreation');
       const tempAuth = getAuth(tempApp);
 
-      const cred = await createUserWithEmailAndPassword(tempAuth, form.email, form.password);
+      const cred = await createUserWithEmailAndPassword(tempAuth, normalizedEmail, form.password);
       const uid = cred.user.uid;
 
       // Escreve no Firestore usando a sessão do admin (não foi trocada)
       await setDoc(doc(db, 'users', uid), {
-        full_name: form.fullName || form.email,
-        email: form.email,
+        full_name: form.fullName || normalizedEmail,
+        email: normalizedEmail,
         role: form.role,
         tenant_id: adminTenantId,
         created_date: new Date().toISOString(),
@@ -122,13 +123,23 @@ export default function Usuarios() {
   };
 
   const handleToggleInativo = async (u) => {
-    const novoRole = u.role === 'inativo' ? 'user' : 'inativo';
-    try {
-      await client.entities.users.update(u.id, { role: novoRole });
-      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      toast.success(`Conta ${novoRole === 'inativo' ? 'inativada' : 'reativada'} com sucesso!`);
-    } catch (err) {
-      toast.error(err?.message || 'Erro ao atualizar');
+    if (u.role === 'inativo') {
+      const originalRole = u.original_role || 'funcionario';
+      try {
+        await client.entities.users.update(u.id, { role: originalRole, original_role: null });
+        queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+        toast.success('Conta reativada com sucesso!');
+      } catch (err) {
+        toast.error(err?.message || 'Erro ao reativar');
+      }
+    } else {
+      try {
+        await client.entities.users.update(u.id, { role: 'inativo', original_role: u.role });
+        queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+        toast.success('Conta inativada com sucesso!');
+      } catch (err) {
+        toast.error(err?.message || 'Erro ao inativar');
+      }
     }
   };
 
@@ -279,7 +290,7 @@ export default function Usuarios() {
             </div>
             <div>
               <Label>E-mail *</Label>
-              <Input type="email" placeholder="colaborador@empresa.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+              <Input type="email" placeholder="colaborador@empresa.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value.toLowerCase() }))} />
             </div>
             <div>
               <Label>Senha *</Label>

@@ -27,11 +27,12 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    if (!email || !password) { setError('Preencha email e senha'); return }
+    const normalizedEmail = email.toLowerCase()
+    if (!normalizedEmail || !password) { setError('Preencha email e senha'); return }
     setLoading(true)
     setError('')
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      await signInWithEmailAndPassword(auth, normalizedEmail, password)
       // Navegação ocorre pelo useEffect acima (onAuthChange), não aqui
     } catch (err) {
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
@@ -71,7 +72,7 @@ export default function Login() {
               <input
                 type="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value.toLowerCase())}
                 placeholder="seu@email.com"
                 className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               />

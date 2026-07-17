@@ -14,7 +14,7 @@ export async function criarOuReenviarConvite(funcionario) {
   if (existentes.length > 0) return existentes[0];
 
   return await client.entities.convites.create({
-    email: funcionario.email,
+    email: funcionario.email.toLowerCase(),
     funcionario_id: funcionario.id,
     funcionario_nome: funcionario.nome,
     status: 'pendente',

@@ -145,7 +145,7 @@ function NotificacaoForm({ open, onClose, notificacao, onSaved }) {
             <Label>Destinatários adicionais (e-mails)</Label>
             <Input
               value={form.destinatarios || ''}
-              onChange={e => setForm(p => ({ ...p, destinatarios: e.target.value }))}
+              onChange={e => setForm(p => ({ ...p, destinatarios: e.target.value.toLowerCase() }))}
               placeholder="email1@ex.com, email2@ex.com"
             />
             {['limite_vale_atingido','limite_vale_80_atingido','limite_vale_50_atingido','aniversario_funcionario'].includes(form.evento) ? (

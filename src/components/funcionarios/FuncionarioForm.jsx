@@ -336,7 +336,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         if (data.email) {
           try {
             await client.entities.convites.create({
-              email: data.email,
+              email: data.email.toLowerCase(),
               funcionario_id: criado?.id,
               funcionario_nome: data.nome,
               status: 'pendente',
@@ -419,7 +419,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label>E-mail</Label>
-          <Input type="email" value={form.email || ''} onChange={e => handleChange('email', e.target.value)} placeholder="funcionario@empresa.com" />
+          <Input type="email" value={form.email || ''} onChange={e => handleChange('email', e.target.value.toLowerCase())} placeholder="funcionario@empresa.com" />
           {isEdit && form.email && (
             <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs text-amber-600 mt-1" onClick={handleReenviarConvite}>
               <Send className="w-3 h-3 mr-1" />Reenviar convite de acesso

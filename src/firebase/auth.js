@@ -26,13 +26,13 @@ export function onAuthChange(callback) {
         const userData = userDoc.exists() ? userDoc.data() : {}
         notifyListeners({
           id: user.uid,
-          email: user.email,
           uid: user.uid,
+          ...userData,
+          email: user.email,
           full_name: userData.full_name || user.displayName || user.email,
           name: userData.full_name || user.displayName || user.email,
-          role: userData.role || 'user',
+          role: userData.role || 'funcionario',
           photoURL: user.photoURL,
-          ...userData,
         })
       } else {
         notifyListeners(null)
@@ -55,13 +55,13 @@ export async function me() {
         const userData = userDoc.exists() ? userDoc.data() : {}
         const u = {
           id: user.uid,
-          email: user.email,
           uid: user.uid,
+          ...userData,
+          email: user.email,
           full_name: userData.full_name || user.displayName || user.email,
           name: userData.full_name || user.displayName || user.email,
-          role: userData.role || 'user',
+          role: userData.role || 'funcionario',
           photoURL: user.photoURL,
-          ...userData,
         }
         currentUser = u
         resolve(u)
@@ -107,9 +107,9 @@ export async function refreshCurrentUser() {
       const userData = userDoc.data()
       currentUser = {
         id: uid,
-        email: userData.email || currentUser?.email,
         uid,
         ...userData,
+        email: userData.email?.toLowerCase() || currentUser?.email,
       }
       authInitialized = true
       authStateListeners.forEach(cb => cb(currentUser))
