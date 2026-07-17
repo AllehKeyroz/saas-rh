@@ -9,10 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Upload, Loader2, AlertTriangle, TrendingUp, Layers } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TIPO_LABELS, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { toast } from 'sonner';
+
+GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const TIPOS_DESCONTO_FORM = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 const TIPOS_ADICIONAL_FORM = ['adicional', 'ajuste'];
@@ -33,15 +37,33 @@ function calcularMesFim(mesInicio, anoInicio, totalParcelas) {
   return { mes: mesFim, ano: anoFim, label: `${mesFim}/${anoFim}` };
 }
 
+async function pdfToThumbnail(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = Math.min(300 / viewport.width, 300 / viewport.height, 1);
+    const canvas = document.createElement('canvas');
+    const scaled = page.getViewport({ scale });
+    canvas.width = scaled.width;
+    canvas.height = scaled.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvas, canvasContext: ctx, viewport: scaled }).promise;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+    pdf.cleanup();
+    return dataUrl;
+  } catch (err) {
+    console.error('pdfToThumbnail falhou:', err);
+    return '';
+  }
+}
+
 function fileToBase64(file) {
+  if (!file.type.startsWith('image/')) {
+    return pdfToThumbnail(file);
+  }
   return new Promise((resolve) => {
-    if (!file.type.startsWith('image/')) {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = () => resolve('');
-      r.readAsDataURL(file);
-      return;
-    }
     const img = new Image();
     img.onload = () => {
       const maxW = 300;
@@ -115,6 +137,11 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Arquivo muito grande (máximo 10MB).');
+      e.target.value = '';
+      return;
+    }
     setUploading(true);
     try {
       const { file_url } = await client.integrations.Core.UploadFile({ file });
@@ -142,6 +169,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
       .filter(l =>
         l.funcionario_id === form.funcionario_id &&
         ['vale', 'adiantamento'].includes(l.tipo_lancamento) &&
+        !l.parcelado &&
         l.data_lancamento
       )
       .filter(l => {
@@ -253,17 +281,52 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
         dados_novos: { ...consignadoPayload, fichaFinanceiraIds: fichaIds },
       });
     } else if (parcelado && TIPOS_PARCELAVEIS.includes(form.tipo_lancamento) && numParcelas >= 2) {
-      const valorParcela = Number((Number(form.valor) / numParcelas).toFixed(2));
+      const valorTotal = Number(form.valor);
+      const valorParcela = Number((valorTotal / numParcelas).toFixed(2));
       const dataBase = parseDateLocal(form.data_lancamento);
-      for (let i = 0; i < numParcelas; i++) {
+      const idParcelamento = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+      // 1. CRÉDITO — recebimento à vista no mês atual
+      const dataRecebimento = `${dataBase.getFullYear()}-${String(dataBase.getMonth() + 1).padStart(2, '0')}-${String(dataBase.getDate()).padStart(2, '0')}`;
+      const recebimentoPayload = {
+        ...form,
+        tipo_lancamento: 'vale',
+        valor: valorTotal,
+        data_lancamento: dataRecebimento,
+        descricao: form.descricao ? `${form.descricao} — Recebimento à vista` : 'Recebimento à vista',
+        funcionario_nome: func?.nome || '',
+        parcelado: true,
+        total_parcelas: numParcelas,
+        valor_parcela: valorParcela,
+        id_parcelamento: idParcelamento,
+      };
+      const recCriado = await client.entities.FichaFinanceira.create(recebimentoPayload);
+      await registrarAuditoria({
+        acao: 'criar', modulo: 'lancamento', entidade_id: recCriado?.id,
+        descricao: `Vale parcelado — recebimento de R$ ${valorTotal.toFixed(2)} à vista para ${func?.nome || 'funcionário'}`,
+        dados_novos: recebimentoPayload,
+      });
+
+      // 2. DÉBITOS — parcelas mensais (1 por mês, a partir do mês seguinte)
+      for (let i = 1; i <= numParcelas; i++) {
         const dataParcela = new Date(dataBase.getFullYear(), dataBase.getMonth() + i, dataBase.getDate());
         const dataStr = dataParcela.toISOString().split('T')[0];
-        const descricao = `${form.descricao ? form.descricao + ' — ' : ''}Parcela ${i + 1}/${numParcelas}`;
-        const payload = { ...form, tipo_lancamento: 'vale_parcelado', valor: valorParcela, data_lancamento: dataStr, descricao, funcionario_nome: func?.nome || '' };
+        const descricao = `${form.descricao ? form.descricao + ' — ' : ''}Parcela ${i}/${numParcelas}`;
+        const payload = {
+          ...form,
+          tipo_lancamento: 'vale_parcelado',
+          valor: valorParcela,
+          data_lancamento: dataStr,
+          descricao,
+          funcionario_nome: func?.nome || '',
+          parcela_numero: i,
+          total_parcelas: numParcelas,
+          id_parcelamento: idParcelamento,
+        };
         const criado = await client.entities.FichaFinanceira.create(payload);
         await registrarAuditoria({
           acao: 'criar', modulo: 'lancamento', entidade_id: criado?.id,
-          descricao: `Vale parcelado ${i + 1}/${numParcelas} de R$ ${valorParcela.toFixed(2)} para ${func?.nome || 'funcionário'}`,
+          descricao: `Vale parcelado ${i}/${numParcelas} de R$ ${valorParcela.toFixed(2)} para ${func?.nome || 'funcionário'}`,
           dados_novos: payload,
         });
       }
@@ -417,7 +480,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
                       </div>
                     </div>
                     <p className="text-xs text-blue-700">
-                      Serão criados <strong>{numParcelas} lançamentos</strong>, um por mês a partir da data informada.
+                      Será criado <strong>1 recebimento à vista</strong> de <strong>R$ {(Number(form.valor) || 0).toFixed(2)}</strong> no mês atual + <strong>{numParcelas} parcelas</strong> de <strong>R$ {((Number(form.valor) || 0) / numParcelas).toFixed(2)}</strong> nos meses seguintes.
                     </p>
                   </div>
                 )}
