@@ -1,11 +1,14 @@
 import React from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import LimiteProgressBar from '@/components/ui/LimiteProgressBar';
 import { Wallet, Info, Eye, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatDate, LIMITE_PERCENTUAL } from '@/lib/formatters';
 
 const TIPO_LABELS = {
   vale: 'Vale',
+  vale_parcelado: 'Vale Parcelado',
   adiantamento: 'Adiantamento',
   convenio: 'Convênio',
   consumo: 'Consumo',
@@ -14,7 +17,7 @@ const TIPO_LABELS = {
 
 export default function MeusVales({ funcionario, lancamentosLimiteMes, totalValesMes, mesSelecionado, onVerComprovante }) {
   const perm = funcionario?.permissoes_portal || {};
-  const limite = funcionario?.limite_vales;
+  const limite = funcionario?.limite_vales || ((funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)) * (LIMITE_PERCENTUAL / 100);
   const percentual = limite ? Math.min((totalValesMes / limite) * 100, 100) : null;
   const disponivel = limite ? Math.max(limite - totalValesMes, 0) : null;
 
@@ -68,19 +71,8 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
       {/* Barra de progresso */}
       {percentual !== null && (
         <Card>
-          <CardContent className="pt-4 space-y-2">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Utilização do limite</span>
-              <span className={`font-bold ${percentual >= 100 ? 'text-destructive' : percentual >= 80 ? 'text-yellow-600' : 'text-green-600'}`}>
-                {percentual.toFixed(0)}%
-              </span>
-            </div>
-            <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${percentual >= 100 ? 'bg-destructive' : percentual >= 80 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                style={{ width: `${Math.min(percentual, 100)}%` }}
-              />
-            </div>
+          <CardContent className="pt-4">
+            <LimiteProgressBar percentual={percentual} />
           </CardContent>
         </Card>
       )}
@@ -110,10 +102,17 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
               </div>
             ) : (
               <div className="space-y-1">
-                {lancamentosLimiteMes.map(l => (
+                {lancamentosLimiteMes.map(l => {
+                  const isParcelado = l.tipo_lancamento === 'vale_parcelado' && l.total_parcelas;
+                  return (
                   <div key={l.id} className="flex items-center justify-between py-2.5 border-b last:border-b-0">
                     <div className="flex-1">
                       <span className="text-sm font-medium">{TIPO_LABELS[l.tipo_lancamento] || l.tipo_lancamento}</span>
+                      {isParcelado && l.parcela_numero && (
+                        <Badge variant="outline" className="ml-1.5 text-[10px] h-4 px-1.5 font-normal bg-rose-50 text-rose-700 border-rose-200">
+                          {l.parcela_numero}/{l.total_parcelas}
+                        </Badge>
+                      )}
                       {l.descricao && <span className="text-xs text-muted-foreground ml-1">— {l.descricao}</span>}
                       <p className="text-xs text-muted-foreground">{formatDate(l.data_lancamento)}</p>
                     </div>
@@ -126,7 +125,8 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
                       <span className="text-sm font-bold text-destructive">- {formatCurrency(l.valor)}</span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

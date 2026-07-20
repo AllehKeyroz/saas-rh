@@ -36,6 +36,8 @@ export default function VisaoGeral({ funcionario, totalValesMes, mesSelecionado,
         <AlertaLimiteVale
           totalValesMes={totalValesMes}
           limite={funcionario?.limite_vales}
+          salarioBase={funcionario?.salario_base}
+          ajudaCusto={funcionario?.ajuda_custo}
           onVerDetalhes={() => setAba('meus-vales')}
         />
       )}

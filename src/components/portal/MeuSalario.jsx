@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { DollarSign, TrendingUp, TrendingDown, Info, AlertTriangle, LineChart } from 'lucide-react';
+import { DollarSign, TrendingUp, Info, AlertTriangle, LineChart } from 'lucide-react';
 import { formatCurrency, getMesReferenciaAtual, LIMITE_PERCENTUAL, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import ResumoSalarioCard from '@/components/vidafinanceira/ResumoSalarioCard';
+import LimiteProgressBar from '@/components/ui/LimiteProgressBar';
 import { LineChart as RechartLineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function StatRow({ label, value, colorClass = 'text-foreground', bold = false }) {
@@ -16,40 +16,112 @@ function StatRow({ label, value, colorClass = 'text-foreground', bold = false })
   );
 }
 
-export default function MeuSalario({ funcionario, lancamentosFuncionario, comissoesFuncionarios, fechamentosFuncionario = [], mesSelecionado }) {
+export default function MeuSalario({ funcionario, lancamentosFuncionario, comissoesFuncionarios, fechamentosFuncionario = [], mesSelecionado, tiposPersonalizados = [] }) {
    const perm = funcionario?.permissoes_portal || {};
-   const TIPOS_LIMITE = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
-   const mesAtual = getMesReferenciaAtual();
+
+   const TIPOS_LIMITE = useMemo(() => {
+     const padrao = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+     const custom = tiposPersonalizados
+       .filter(t => t.ativo !== false && t.categoria === 'desconto')
+       .map(t => t.nome);
+     return [...padrao, ...custom];
+   }, [tiposPersonalizados]);
+
+   const TIPOS_ADICIONAIS = useMemo(() => {
+     const padrao = ['adicional', 'ajuste'];
+     const custom = tiposPersonalizados
+       .filter(t => t.ativo !== false && t.categoria === 'adicional')
+       .map(t => t.nome);
+     return [...padrao, ...custom];
+   }, [tiposPersonalizados]);
+
+   const mesAtual = useMemo(() => getMesReferenciaAtual(), []);
+
+   // Index de fechamentos por mes_referencia (O(1) em vez de O(n))
+   const fechamentosIndex = useMemo(() => {
+     const map = {};
+     for (const f of fechamentosFuncionario) {
+       if (f.mes_referencia) map[f.mes_referencia] = f;
+     }
+     return map;
+   }, [fechamentosFuncionario]);
+
+   // Busca salario base PURO (sem ajuda_custo) do fechamento ou do cadastro
+   function salarioBasePuro(mes) {
+     const fechado = fechamentosIndex[mes];
+     if (fechado) return fechado.salario_base || 0;
+     return funcionario?.salario_base || 0;
+   }
+
+   function ajudaCustoMes(mes) {
+     const fechado = fechamentosIndex[mes];
+     if (fechado) return fechado.ajuda_custo || 0;
+     return funcionario?.ajuda_custo || 0;
+   }
+
+   // Soma para cálculos internos (líquido, limite, etc.)
+   function salarioTotalMes(mes) {
+     return salarioBasePuro(mes) + ajudaCustoMes(mes);
+   }
 
    // Gera range de meses baseado na data de admissão + dados existentes
    const mesesOpts = useMemo(() => {
      const meses = [];
-     let minMes = mesAtual;
+     let minAno = Infinity, minMesNum = Infinity;
+
+     // Ponto de partida: data de admissão
      if (funcionario?.data_admissao) {
-       const d = new Date(funcionario.data_admissao);
-       minMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+       try {
+         const d = parseDateLocal(funcionario.data_admissao);
+         if (d && !isNaN(d.getTime())) {
+           minAno = d.getFullYear();
+           minMesNum = d.getMonth() + 1;
+         }
+       } catch { /* ignora formato inválido */ }
      }
-     if (lancamentosFuncionario.length > 0) {
+
+     // Se não tem admissão válida, começa do mês atual
+     if (minAno === Infinity) {
+       const [mAt, aAt] = mesAtual.split('/').map(Number);
+       minAno = aAt;
+       minMesNum = mAt;
+     }
+
+      // Busca o lançamento mais antigo apenas quando NÃO há data de admissão.
+      // Com data_admissao, o piso é a admissão — lançamentos pré-admissão são ignorados.
+      if (!funcionario?.data_admissao && lancamentosFuncionario.length > 0) {
        const maisAntigo = lancamentosFuncionario.reduce((menor, l) => {
          if (!l.data_lancamento) return menor;
+         // Guarda a data ISO para comparação correta
          return l.data_lancamento < menor ? l.data_lancamento : menor;
-       }, lancamentosFuncionario[0]?.data_lancamento);
-       if (maisAntigo) {
-         const d = new Date(maisAntigo);
-         const mesLanc = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-         if (mesLanc < minMes) minMes = mesLanc;
+       }, '9999-99-99');
+
+       if (maisAntigo !== '9999-99-99') {
+         try {
+           const d = parseDateLocal(maisAntigo);
+           if (d && !isNaN(d.getTime())) {
+             const anoLanc = d.getFullYear();
+             const mesLanc = d.getMonth() + 1;
+             // Comparação numérica correta: data mais antiga pode puxar minMes para trás
+             if (anoLanc < minAno || (anoLanc === minAno && mesLanc < minMesNum)) {
+               minAno = anoLanc;
+               minMesNum = mesLanc;
+             }
+           }
+         } catch { /* ignora */ }
        }
      }
-     const [mMin, aMin] = minMes.split('/').map(Number);
+
+     // Gera sequência de meses
      const [mAtual, aAtual] = mesAtual.split('/').map(Number);
-     let ano = aMin, mes = mMin;
+     let ano = minAno, mes = minMesNum;
      while (ano < aAtual || (ano === aAtual && mes <= mAtual)) {
        meses.push(`${String(mes).padStart(2, '0')}/${ano}`);
        mes++;
        if (mes > 12) { mes = 1; ano++; }
      }
      return meses.length > 0 ? meses : [mesAtual];
-   }, [funcionario, lancamentosFuncionario]);
+   }, [funcionario, lancamentosFuncionario, mesAtual]);
 
    if (!perm.ver_salario) {
      return (
@@ -62,39 +134,38 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
      );
    }
 
-   // Busca salário base congelado do FechamentoMensal se existir para o mês
-   function salarioBaseMes(mes) {
-     const fechado = fechamentosFuncionario.find(f => f.mes_referencia === mes);
-     if (fechado) return (fechado.salario_base || 0) + (fechado.ajuda_custo || 0);
-     return (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0);
-   }
-
    // Calcula por mês
    function calcMes(mes) {
      const lancs = lancamentosFuncionario.filter(l => {
        if (!l.data_lancamento) return false;
-    const mr = getMesRef(l.data_lancamento);
+       const mr = getMesRef(l.data_lancamento);
        return mr === mes;
      });
-     const salarioBase = salarioBaseMes(mes);
-     const descontos = lancs.filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
-     const adicionais = lancs.filter(l => ['adicional', 'ajuste'].includes(l.tipo_lancamento)).reduce((s, l) => s + (l.valor || 0), 0);
+     const base = salarioBasePuro(mes);
+     const ajuda = ajudaCustoMes(mes);
+     const totalSalario = base + ajuda;
+     const descontos = lancs
+       .filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento) && !l.parcelado)
+       .reduce((s, l) => s + (l.valor || 0), 0);
+     const adicionais = lancs
+       .filter(l => TIPOS_ADICIONAIS.includes(l.tipo_lancamento) || l.parcelado)
+       .reduce((s, l) => s + (l.valor || 0), 0);
      const comissao = calcularComissaoMensal(comissoesFuncionarios, funcionario?.id, mes);
-     const liquido = salarioBase + comissao + adicionais - descontos;
-     return { salarioBase, descontos, adicionais, comissao, liquido };
+     const liquido = totalSalario + comissao + adicionais - descontos;
+     return { salarioBase: base, ajudaCusto: ajuda, descontos, adicionais, comissao, liquido };
    }
 
    const dadosMes = calcMes(mesSelecionado);
-   const salarioBaseExibir = salarioBaseMes(mesSelecionado);
    const indiceAtual = mesesOpts.indexOf(mesSelecionado);
-   const mesPosterior = indiceAtual > 0 ? mesesOpts[indiceAtual - 1] : null;
-   const comissaoMesAnterior = mesPosterior ? calcularComissaoMensal(comissoesFuncionarios, funcionario?.id, mesPosterior) : 0;
+   const mesAnterior = indiceAtual > 0 ? mesesOpts[indiceAtual - 1] : null;
+   const comissaoMesAnterior = mesAnterior ? calcularComissaoMensal(comissoesFuncionarios, funcionario?.id, mesAnterior) : 0;
 
-   const limite40 = (funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0) ? ((funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)) * 0.4 : null;
+   const baseLimite = salarioBasePuro(mesSelecionado) + ajudaCustoMes(mesSelecionado);
+   const limite40 = baseLimite ? baseLimite * 0.4 : null;
    const percentualDesconto = limite40 ? (dadosMes.descontos / limite40) * 100 : null;
 
-   // Dados para gráfico de comissão evolutiva
-   const lineData = mesesOpts.slice().reverse().map(mes => {
+   // Dados para gráfico de evolução salarial (passado → presente)
+   const lineData = [...mesesOpts].map(mes => {
      const d = calcMes(mes);
      return {
        mes: mes.substring(0, 5),
@@ -110,18 +181,16 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         <>
             <ResumoSalarioCard 
               label="Salário Médio (Contrato + Última Comissão)" 
-              valor={salarioBaseExibir + comissaoMesAnterior}
-              salarioBase={salarioBaseExibir}
+              valor={dadosMes.salarioBase + dadosMes.ajudaCusto + comissaoMesAnterior}
+              salarioBase={dadosMes.salarioBase + dadosMes.ajudaCusto}
               comissao={comissaoMesAnterior}
-              ajudaCusto={0}
               tipo="medio"
             />
             <ResumoSalarioCard 
               label="Salário Referente ao Mês Corrente" 
-              valor={salarioBaseExibir + dadosMes.comissao}
-              salarioBase={salarioBaseExibir}
+              valor={dadosMes.salarioBase + dadosMes.ajudaCusto + dadosMes.comissao}
+              salarioBase={dadosMes.salarioBase + dadosMes.ajudaCusto}
               comissao={dadosMes.comissao}
-              ajudaCusto={0}
               tipo="corrente"
             />
         </>
@@ -130,11 +199,14 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <DollarSign className="w-4 h-4 text-primary" />
-            Salário Base
+            Remuneração
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <StatRow label="Salário base" value={formatCurrency(salarioBaseExibir)} colorClass="text-foreground" bold />
+          <StatRow label="Salário base" value={formatCurrency(dadosMes.salarioBase)} colorClass="text-foreground" bold />
+          {dadosMes.ajudaCusto > 0 && (
+            <StatRow label="Ajuda de custo" value={formatCurrency(dadosMes.ajudaCusto)} colorClass="text-blue-600" />
+          )}
         </CardContent>
       </Card>
       )}
@@ -148,7 +220,10 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <StatRow label="Salário base" value={formatCurrency(salarioBaseExibir)} colorClass="text-foreground" />
+          <StatRow label="Salário base" value={formatCurrency(dadosMes.salarioBase)} colorClass="text-foreground" />
+          {dadosMes.ajudaCusto > 0 && (
+            <StatRow label="Ajuda de custo" value={formatCurrency(dadosMes.ajudaCusto)} colorClass="text-blue-600" />
+          )}
           {dadosMes.comissao > 0 && (
             <StatRow label="Comissão do mês" value={formatCurrency(dadosMes.comissao)} colorClass="text-green-600" />
           )}
@@ -171,26 +246,13 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
               </p>
             </div>
             {percentualDesconto !== null && (
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Utilização do limite</span>
-                  <span className={`font-bold ${percentualDesconto >= 100 ? 'text-destructive' : percentualDesconto >= 80 ? 'text-yellow-600' : 'text-green-600'}`}>
-                    {percentualDesconto.toFixed(0)}%
-                  </span>
-                </div>
-                <div className="w-full h-2.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${percentualDesconto >= 100 ? 'bg-destructive' : percentualDesconto >= 80 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                    style={{ width: `${Math.min(percentualDesconto, 100)}%` }}
-                  />
-                </div>
-              </div>
+              <LimiteProgressBar percentual={percentualDesconto} />
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Histórico completo (apenas meses com dados) */}
+      {/* Histórico completo */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
@@ -206,7 +268,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
                 <div key={mes} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${mes === mesSelecionado ? 'bg-primary/5 border border-primary/20' : 'bg-muted/40'}`}>
                   <span className="font-medium w-14 shrink-0">{mes}</span>
                   <div className="flex items-center gap-3 text-xs">
-                    <span className="text-muted-foreground">{formatCurrency(d.salarioBase)}</span>
+                    <span className="text-muted-foreground">{formatCurrency(d.salarioBase + d.ajudaCusto)}</span>
                     {d.comissao > 0 && <span className="text-green-600 font-semibold">+{formatCurrency(d.comissao)}</span>}
                     {d.descontos > 0 && <span className="text-destructive">-{formatCurrency(d.descontos)}</span>}
                     <span className={`font-bold ${d.liquido >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatCurrency(d.liquido)}</span>

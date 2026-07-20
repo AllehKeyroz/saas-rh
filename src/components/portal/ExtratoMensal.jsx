@@ -1,30 +1,38 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, Eye, AlertTriangle } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/formatters';
+import { formatCurrency, formatDate, TIPOS_ADICIONAL_DEFAULT, TIPO_LABELS as GLOBAL_TIPO_LABELS } from '@/lib/formatters';
 
-const TIPOS_LIMITE = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+const TIPOS_LIMITE_BASE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 
-const TIPO_LABELS = {
-  vale: 'Vale',
-  adiantamento: 'Adiantamento',
-  convenio: 'Convênio',
-  consumo: 'Consumo',
-  credito_consignado: 'Crédito Consignado',
+const TIPO_LABELS_BASE = {
+  ...GLOBAL_TIPO_LABELS,
   adicional: 'Adicional',
   ajuste: 'Ajuste',
   comissao: 'Comissão',
   receita_extra: 'Receita Extra',
 };
 
-const TIPO_GRUPOS = {
-  debito: ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'],
-  credito: ['adicional', 'ajuste', 'comissao', 'receita_extra'],
-};
-
-export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecionado, onVerComprovante, receitasExtras = [] }) {
+export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecionado, onVerComprovante, receitasExtras = [], tiposPersonalizados = [] }) {
   const perm = funcionario?.permissoes_portal || {};
+
+  const tiposDesconto = useMemo(() => {
+    const extras = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'desconto')
+      .map(t => t.nome);
+    return [...TIPOS_LIMITE_BASE, ...extras];
+  }, [tiposPersonalizados]);
+
+  const labels = useMemo(() => {
+    const extra = Object.fromEntries(
+      tiposPersonalizados
+        .filter(t => t.ativo !== false)
+        .map(t => [t.nome, t.nome])
+    );
+    return { ...TIPO_LABELS_BASE, ...extra };
+  }, [tiposPersonalizados]);
 
   if (perm.ver_extrato_completo === false) {
     return (
@@ -38,10 +46,10 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
   }
 
   const totalDebitos = lancamentosMes
-    .filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento))
+    .filter(l => tiposDesconto.includes(l.tipo_lancamento) && !l.parcelado)
     .reduce((s, l) => s + (l.valor || 0), 0);
   const totalCreditos = lancamentosMes
-    .filter(l => !TIPOS_LIMITE.includes(l.tipo_lancamento))
+    .filter(l => TIPOS_ADICIONAL_DEFAULT.includes(l.tipo_lancamento) || l.parcelado)
     .reduce((s, l) => s + (l.valor || 0), 0);
   const totalReceitasExtras = receitasExtras.reduce((s, r) => s + (r.valor || 0), 0);
   const salarioBaseExibir = funcionario?.salario_base || 0;
@@ -50,6 +58,8 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
   const saldoFinal = saldoBase + totalCreditos + totalReceitasExtras - totalDebitos;
 
   const sorted = [...lancamentosMes].sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
+
+  const isDebito = (l) => tiposDesconto.includes(l.tipo_lancamento) && !l.parcelado;
 
   return (
     <div className="space-y-5">
@@ -69,7 +79,7 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
         </div>
       </div>
 
-      {/* Salário base na lista */}
+      {/* Lançamentos */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -114,11 +124,22 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
             <p className="text-sm text-muted-foreground text-center py-6">Nenhum lançamento neste mês.</p>
           ) : (
             sorted.map(l => {
-              const isDebito = TIPOS_LIMITE.includes(l.tipo_lancamento);
+              const debito = isDebito(l);
+              const isParcelado = l.tipo_lancamento === 'vale_parcelado' && l.total_parcelas;
               return (
                 <div key={l.id} className="flex items-center justify-between py-2.5 border-b last:border-b-0">
                   <div className="flex-1">
-                    <span className="text-sm font-medium">{TIPO_LABELS[l.tipo_lancamento] || l.tipo_lancamento}</span>
+                    <span className="text-sm font-medium">{labels[l.tipo_lancamento] || l.tipo_lancamento}</span>
+                    {isParcelado && l.parcela_numero && (
+                      <Badge variant="outline" className="ml-1.5 text-[10px] h-4 px-1.5 font-normal bg-rose-50 text-rose-700 border-rose-200">
+                        {l.parcela_numero}/{l.total_parcelas}
+                      </Badge>
+                    )}
+                    {l.parcelado && (
+                      <Badge variant="outline" className="ml-1.5 text-[10px] h-4 px-1.5 font-normal bg-green-50 text-green-700 border-green-200">
+                        Recebimento à vista
+                      </Badge>
+                    )}
                     {l.descricao && <span className="text-xs text-muted-foreground ml-1">— {l.descricao}</span>}
                     <p className="text-xs text-muted-foreground">{formatDate(l.data_lancamento)}</p>
                   </div>
@@ -128,8 +149,8 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
                         <Eye className="w-4 h-4" />
                       </Button>
                     )}
-                    <span className={`text-sm font-bold ${isDebito ? 'text-destructive' : 'text-green-600'}`}>
-                      {isDebito ? '-' : '+'} {formatCurrency(l.valor)}
+                    <span className={`text-sm font-bold ${debito ? 'text-destructive' : 'text-green-600'}`}>
+                      {debito ? '-' : '+'} {formatCurrency(l.valor)}
                     </span>
                   </div>
                 </div>

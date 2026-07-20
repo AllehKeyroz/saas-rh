@@ -155,9 +155,11 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     }
   };
 
+  const TODOS_TIPOS_LIMITE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+
   // Calcula o aviso de limite em tempo real
   const limiteInfo = (() => {
-    if (!['vale', 'adiantamento'].includes(form.tipo_lancamento)) return null;
+    if (!TODOS_TIPOS_LIMITE.includes(form.tipo_lancamento)) return null;
     const func = funcionarios.find(f => f.id === form.funcionario_id);
     if (!func || func.limite_vales == null) return null;
 
@@ -168,7 +170,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     const totalMes = lancamentos
       .filter(l =>
         l.funcionario_id === form.funcionario_id &&
-        ['vale', 'adiantamento'].includes(l.tipo_lancamento) &&
+        TODOS_TIPOS_LIMITE.includes(l.tipo_lancamento) &&
         !l.parcelado &&
         l.data_lancamento
       )

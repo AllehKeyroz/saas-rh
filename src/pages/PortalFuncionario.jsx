@@ -28,7 +28,7 @@ import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
 import MeusDocumentos from '@/components/portal/MeusDocumentos';
 
 
-const TIPOS_LIMITE = ['vale', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+const TIPOS_LIMITE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 
 const ABA_LABELS = {
   'visao-geral': 'Visão Geral',
@@ -95,25 +95,43 @@ export default function PortalFuncionario() {
     const meses = [];
     let minMes = mesAtual;
     if (funcionario.data_admissao) {
-      const d = new Date(funcionario.data_admissao);
+      const d = parseDateLocal(funcionario.data_admissao);
       minMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     }
     const lancFunc = lancamentos.filter(l => l.funcionario_id === funcionario.id);
-    if (lancFunc.length > 0) {
+    if (!funcionario.data_admissao && lancFunc.length > 0) {
       const maisAntigo = lancFunc.reduce((menor, l) => {
         if (!l.data_lancamento) return menor;
         return l.data_lancamento < menor ? l.data_lancamento : menor;
       }, lancFunc[0]?.data_lancamento);
       if (maisAntigo) {
-        const d = new Date(maisAntigo);
+        const d = parseDateLocal(maisAntigo);
         const mesLanc = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
         if (mesLanc < minMes) minMes = mesLanc;
       }
     }
+
+    // Busca o lançamento mais RECENTE para estender o range a meses futuros
+    let maxMes = mesAtual;
+    if (lancFunc.length > 0) {
+      const maisRecente = lancFunc.reduce((maior, l) => {
+        if (!l.data_lancamento) return maior;
+        return l.data_lancamento > maior ? l.data_lancamento : maior;
+      }, '0000-00-00');
+      if (maisRecente !== '0000-00-00') {
+        try {
+          const d = parseDateLocal(maisRecente);
+          if (d && !isNaN(d.getTime())) {
+            maxMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+          }
+        } catch { /* data inválida, mantém maxMes = mesAtual */ }
+      }
+    }
+
     const [mMin, aMin] = minMes.split('/').map(Number);
-    const [mAtual, aAtual] = mesAtual.split('/').map(Number);
+    const [mMax, aMax] = maxMes.split('/').map(Number);
     let ano = aMin, mes = mMin;
-    while (ano < aAtual || (ano === aAtual && mes <= mAtual)) {
+    while (ano < aMax || (ano === aMax && mes <= mMax)) {
       meses.push(`${String(mes).padStart(2, '0')}/${ano}`);
       mes++;
       if (mes > 12) { mes = 1; ano++; }
@@ -202,6 +220,11 @@ export default function PortalFuncionario() {
     enabled: !!meUser && funcionarios.length > 0 && !!funcionario && isAtiva('comissoes_por_periodo'),
   });
 
+  const { data: tiposPersonalizados = [] } = useQuery({
+    queryKey: ['tipos-lancamento'],
+    queryFn: () => client.entities.TipoLancamento.list(),
+  });
+
   const lancamentosFunc = lancamentos.filter(l => l.funcionario_id === funcionario?.id);
   const lancamentosMes = lancamentosFunc.filter(l => {
     if (!l.data_lancamento) return false;
@@ -209,7 +232,9 @@ export default function PortalFuncionario() {
     return mr === mesSelecionado;
   });
 
-  const lancamentosLimiteMes = lancamentosMes.filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento));
+  const lancamentosLimiteMes = lancamentosMes.filter(l =>
+    TIPOS_LIMITE.includes(l.tipo_lancamento) && !l.parcelado
+  );
   const totalValesMes = lancamentosLimiteMes.reduce((s, l) => s + (l.valor || 0), 0);
 
   // Receitas extras do mês selecionado
@@ -346,6 +371,7 @@ export default function PortalFuncionario() {
               comissoesFuncionarios={comissoesFuncionarios}
               fechamentosFuncionario={fechamentos.filter(f => f.funcionario_id === funcionario?.id)}
               mesSelecionado={mesSelecionado}
+              tiposPersonalizados={tiposPersonalizados}
             />
           )}
           {aba === 'meus-vales' && (
@@ -364,6 +390,7 @@ export default function PortalFuncionario() {
               mesSelecionado={mesSelecionado}
               onVerComprovante={setComprovante}
               receitasExtras={receitasExtrasMes}
+              tiposPersonalizados={tiposPersonalizados}
             />
           )}
           {aba === 'vida-financeira' && (
@@ -371,8 +398,10 @@ export default function PortalFuncionario() {
               funcionario={funcionario}
               lancamentosFunc={lancamentosFunc}
               comissoesFuncionarios={comissoesFuncionarios}
+              fechamentosFuncionario={fechamentos.filter(f => f.funcionario_id === funcionario?.id)}
               mesSelecionado={mesSelecionado}
               setMesSelecionado={setMesSelecionado}
+              tiposPersonalizados={tiposPersonalizados}
             />
           )}
           {aba === 'comissoes' && (

@@ -150,7 +150,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         const d = new Date(l.data_lancamento);
         return d.getMonth() === mes && d.getFullYear() === ano;
       })
-      .filter(l => ['vale', 'adiantamento'].includes(l.tipo_lancamento))
+      .filter(l => ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'].includes(l.tipo_lancamento) && !l.parcelado)
       .reduce((s, l) => s + (l.valor || 0), 0);
   }, [lancamentosUso]);
 
@@ -160,11 +160,10 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
   const limiteCalculado = baseCalculoLimite * (LIMITE_PERCENTUAL / 100);
 
   useEffect(() => {
-    if (!isEdit) return;
     if (limiteEditado) return;
     if (!limiteCalculado || limiteCalculado <= 0) return;
     setForm(prev => ({ ...prev, limite_vales: limiteCalculado.toFixed(2) }));
-  }, [limiteCalculado, isEdit]);
+  }, [limiteCalculado]);
 
   const percentualUso = (() => {
     const lim = Number(form.limite_vales) || 0;

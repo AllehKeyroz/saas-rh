@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { User, Calendar, Briefcase, Building2, Mail, Phone, Key, CheckCircle2, X, Loader2, Pencil, Clock, AlertTriangle, Send } from 'lucide-react';
+import { User, Calendar, Briefcase, Building2, Mail, Phone, Key, CheckCircle2, X, Loader2, Pencil, Clock, AlertTriangle, Send, Upload } from 'lucide-react';
 import { formatDate } from '@/lib/formatters';
 import { toast } from 'sonner';
 
@@ -28,6 +29,9 @@ function InfoRow({ icon: Icon, label, value }) {
 
 export default function MeusDados({ funcionario }) {
   const perm = funcionario?.permissoes_portal || {};
+  const fileInputRef = useRef(null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const queryClient = useQueryClient();
   const TIPOS_PIX = [
     { value: 'cpf', label: 'CPF' },
     { value: 'email', label: 'E-mail' },
@@ -42,6 +46,34 @@ export default function MeusDados({ funcionario }) {
   const [salvando, setSalvando] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [enviadoOpen, setEnviadoOpen] = useState(false);
+
+  const handleFotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !funcionario?.id) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione apenas imagens (JPG, PNG, etc.)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB');
+      return;
+    }
+
+    setUploadingFoto(true);
+    try {
+      const { file_url } = await client.integrations.Core.UploadFile({ file });
+      await client.entities.Funcionarios.update(funcionario.id, { foto: file_url });
+      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+      toast.success('Foto atualizada com sucesso!');
+    } catch (err) {
+      toast.error('Erro ao fazer upload da foto');
+    } finally {
+      setUploadingFoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleSolicitarPix = async () => {
     if (!funcionario?.id) return;
@@ -78,11 +110,43 @@ export default function MeusDados({ funcionario }) {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="w-24 h-24 rounded-2xl bg-muted flex items-center justify-center overflow-hidden">
-              {funcionario?.foto ? (
-                <img src={funcionario.foto} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-10 h-10 text-muted-foreground" />
+            <div className="relative">
+              <div className="w-24 h-24 rounded-2xl bg-muted flex items-center justify-center overflow-hidden">
+                {funcionario?.foto ? (
+                  <img src={funcionario.foto} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-10 h-10 text-muted-foreground" />
+                )}
+              </div>
+              {!funcionario?.foto && (
+                <>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    onChange={handleFotoUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 gap-1.5"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingFoto}
+                  >
+                    {uploadingFoto ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    {uploadingFoto ? 'Enviando...' : 'Adicionar Foto'}
+                  </Button>
+                </>
+              )}
+              {funcionario?.foto && (
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  Para alterar a foto, solicite ao RH
+                </p>
               )}
             </div>
             <div>

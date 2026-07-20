@@ -46,7 +46,7 @@ const TABS = [
   { id: 'educacao', label: 'Aprender', icon: BookOpen },
 ];
 
-export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, comissoesFuncionarios = [], mesSelecionado, setMesSelecionado }) {
+export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, comissoesFuncionarios = [], fechamentosFuncionario = [], mesSelecionado, setMesSelecionado, tiposPersonalizados = [] }) {
   const [tab, setTab] = useState('dashboard');
   const [salarioManual, setSalarioManual] = useState('');
   const { isAtiva, isLoading: loadingRH } = useRHControl();
@@ -235,7 +235,8 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
         investimentosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'investimento')}
         assinaturasLista={assinaturasAtivas}
         dividasLista={dividasAtivas}
-        lancamentosMes={lancamentosMes} />
+        lancamentosMes={lancamentosMes}
+        tiposPersonalizados={tiposPersonalizados} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {pieData.length > 0 && (

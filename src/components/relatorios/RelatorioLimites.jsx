@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, XCircle, TrendingUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 
-const TIPOS_DESCONTO = ['vale', 'adiantamento', 'convenio', 'consumo'];
+const TIPOS_DESCONTO = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
 
 function getStatus(pct) {
   if (pct >= 100) return { label: 'Limite atingido', color: 'destructive', icon: XCircle, barColor: 'bg-red-500' };
@@ -23,7 +23,7 @@ export default function RelatorioLimites({ funcionarios, lancamentos, mesRef }) 
         const lancs = lancamentos.filter(l =>
           l.funcionario_id === f.id &&
           l.data_lancamento?.startsWith(mesRef.split('/').reverse().join('-').substring(0, 7)) &&
-          TIPOS_DESCONTO.includes(l.tipo_lancamento)
+          TIPOS_DESCONTO.includes(l.tipo_lancamento) && !l.parcelado
         );
         const total = lancs.reduce((s, l) => s + (l.valor || 0), 0);
         const pct = Math.round((total / f.limite_vales) * 100);

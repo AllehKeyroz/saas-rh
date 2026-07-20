@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, Minus, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, TIPO_LABELS } from '@/lib/formatters';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -40,25 +40,37 @@ export default function MiniDRE({
   investimentosLista = [],
   assinaturasLista = [],
   dividasLista = [],
+  tiposPersonalizados = [],
 }) {
   const [dialogAberto, setDialogAberto] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
   const [exportando, setExportando] = useState(false);
   const { toast } = useToast();
 
+  // Tipos de desconto e adicionais (padrão + custom)
+  const TIPOS_DESCONTO_RH = useMemo(() => {
+    const padrao = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo'];
+    const custom = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'desconto')
+      .map(t => t.nome);
+    return [...padrao, ...custom];
+  }, [tiposPersonalizados]);
+
+  const TIPOS_ADICIONAIS = useMemo(() => {
+    const padrao = ['adicional', 'ajuste'];
+    const custom = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'adicional')
+      .map(t => t.nome);
+    return [...padrao, ...custom];
+  }, [tiposPersonalizados]);
+
   // Calcular entradas (receitas)
   const adicionais = lancamentosMes
-    .filter(l => ['adicional', 'ajuste'].includes(l.tipo_lancamento))
+    .filter(l => TIPOS_ADICIONAIS.includes(l.tipo_lancamento))
     .reduce((s, l) => s + (l.valor || 0), 0);
-  
+
   const totalEntradas = (salarioBase || 0) + (ajudaCusto || 0) + comissaoMes + adicionais + receitaExtra;
 
-  // Calcular despesas por categoria - listar itens individuais
-  // Gastos Fixos: consignado (automático) + gastos fixos lançados pelo funcionário
-  const consignado = lancamentosMes
-    .filter(l => l.tipo_lancamento === 'credito_consignado')
-    .reduce((s, l) => s + (l.valor || 0), 0);
-  
   // Investimentos: do GastosPessoais (recorrentes + do mês) + RH
   const investimentosRH = lancamentosMes
     .filter(l => l.tipo_lancamento === 'investimento')
@@ -80,12 +92,37 @@ export default function MiniDRE({
   const totalGastosVariaveis = todosGastosVariaveis.reduce((s, g) => s + g.valor, 0);
 
   // Itens individuais das despesas fixas
-  const itensFixos = [
-    ...gastosFixosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0, tipo: 'gasto' })),
-    ...assinaturasLista.map(a => ({ nome: a.nome, valor: a.valor || 0, tipo: 'assinatura' })),
-    ...dividasLista.map(d => ({ nome: d.descricao || 'Dívida', valor: d.valor_parcela || 0, tipo: 'divida' })),
-    ...(consignado > 0 ? [{ nome: 'Consignado (RH)', valor: consignado, tipo: 'consignado' }] : []),
-  ];
+  const itensFixos = (() => {
+    const items = [
+      ...gastosFixosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0, tipo: 'gasto' })),
+      ...assinaturasLista.map(a => ({ nome: a.nome, valor: a.valor || 0, tipo: 'assinatura' })),
+      ...dividasLista.map(d => ({ nome: d.descricao || 'Dívida', valor: d.valor_parcela || 0, tipo: 'divida' })),
+    ];
+
+    // Consignado: um item por contrato
+    const consignadoItens = lancamentosMes
+      .filter(l => l.tipo_lancamento === 'credito_consignado')
+      .map(l => ({
+        nome: l.descricao || 'Consignado',
+        valor: l.valor || 0,
+        tipo: 'consignado',
+      }));
+    items.push(...consignadoItens);
+
+    // Descontos (RH): um item por tipo_lancamento
+    const descontosAgrupados = {};
+    lancamentosMes
+      .filter(l => TIPOS_DESCONTO_RH.includes(l.tipo_lancamento))
+      .forEach(l => {
+        const label = TIPO_LABELS[l.tipo_lancamento] || l.tipo_lancamento;
+        descontosAgrupados[label] = (descontosAgrupados[label] || 0) + (l.valor || 0);
+      });
+    Object.entries(descontosAgrupados).forEach(([nome, valor]) => {
+      items.push({ nome, valor, tipo: 'desconto_rh' });
+    });
+
+    return items;
+  })();
 
   const totalDespesasFixas = itensFixos.reduce((s, i) => s + i.valor, 0);
   const totalDespesas = totalDespesasFixas + totalInvestimentos + totalGastosVariaveis;
@@ -337,6 +374,7 @@ export default function MiniDRE({
               colorClass={
                 item.tipo === 'assinatura' ? 'text-purple-600' :
                 item.tipo === 'divida' ? 'text-rose-600' :
+                item.tipo === 'desconto_rh' ? 'text-orange-600' :
                 'text-red-600'
               }
             />
