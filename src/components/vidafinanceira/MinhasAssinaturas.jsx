@@ -36,16 +36,21 @@ function AssinaturaForm({ open, onClose, onSaved, funcionarioId, assinatura }) {
   const handleSave = async () => {
     if (!form.nome || !form.valor) { toast({ title: 'Preencha nome e valor', variant: 'destructive' }); return; }
     setSaving(true);
-    const data = { ...form, funcionario_id: funcionarioId, valor: parseFloat(form.valor), dia_cobranca: parseInt(form.dia_cobranca) || null };
-    if (assinatura?.id) {
-      await client.entities.AssinaturasPessoais.update(assinatura.id, data);
-    } else {
-      await client.entities.AssinaturasPessoais.create(data);
+    try {
+      const data = { ...form, funcionario_id: funcionarioId, valor: parseFloat(form.valor), dia_cobranca: parseInt(form.dia_cobranca) || null };
+      if (assinatura?.id) {
+        await client.entities.AssinaturasPessoais.update(assinatura.id, data);
+      } else {
+        await client.entities.AssinaturasPessoais.create(data);
+      }
+      onSaved();
+      onClose();
+      toast({ title: 'Assinatura salva!' });
+    } catch {
+      toast({ title: 'Erro ao salvar assinatura', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
-    onClose();
-    toast({ title: 'Assinatura salva!' });
   };
 
   return (
@@ -134,7 +139,7 @@ export default function MinhasAssinaturas({ funcionarioId, salarioBase = 0 }) {
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
           <p className="text-xs text-orange-600 font-medium">% do Salário</p>
           <p className="text-xl font-bold text-orange-800">{pctSalario ? `${pctSalario}%` : '—'}</p>
-          <p className="text-xs text-orange-500 mt-0.5">{pctSalario > 10 ? 'Acima do recomendado' : 'Dentro do limite'}</p>
+          <p className="text-xs text-orange-500 mt-0.5">{pctSalario ? (pctSalario > 10 ? 'Acima do recomendado' : 'Dentro do limite') : 'Salário não informado'}</p>
         </div>
       </div>
 

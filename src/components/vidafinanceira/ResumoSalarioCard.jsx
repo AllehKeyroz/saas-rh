@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { DollarSign, ChevronDown } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 
-export default function ResumoSalarioCard({ label, valor, salarioBase, comissao, tipo = 'medio' }) {
+export default function ResumoSalarioCard({ label, valor, salarioBase, comissao, ajudaCusto = 0, tipo = 'medio' }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -33,12 +33,18 @@ export default function ResumoSalarioCard({ label, valor, salarioBase, comissao,
               <span className="text-muted-foreground">Salário Base (Contrato)</span>
               <span className="font-medium">{formatCurrency(salarioBase)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">
-                {tipo === 'medio' ? 'Comissão (Mês Anterior)' : 'Comissão (Mês Corrente)'}
-              </span>
-              <span className="font-medium text-green-600">{formatCurrency(comissao)}</span>
-            </div>
+            {ajudaCusto > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Ajuda de Custo</span>
+                <span className="font-medium text-blue-600">{formatCurrency(ajudaCusto)}</span>
+              </div>
+            )}
+            {comissao > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Comissão</span>
+                <span className="font-medium text-green-600">{formatCurrency(comissao)}</span>
+              </div>
+            )}
             <div className="border-t pt-3 flex justify-between text-sm font-bold">
               <span>Total</span>
               <span className="text-primary">{formatCurrency(valor)}</span>

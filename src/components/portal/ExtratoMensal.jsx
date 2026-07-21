@@ -25,6 +25,13 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
     return [...TIPOS_LIMITE_BASE, ...extras];
   }, [tiposPersonalizados]);
 
+  const tiposCredito = useMemo(() => {
+    const extras = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'adicional')
+      .map(t => t.nome);
+    return [...TIPOS_ADICIONAL_DEFAULT, ...extras];
+  }, [tiposPersonalizados]);
+
   const labels = useMemo(() => {
     const extra = Object.fromEntries(
       tiposPersonalizados
@@ -49,7 +56,7 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
     .filter(l => tiposDesconto.includes(l.tipo_lancamento) && !l.parcelado)
     .reduce((s, l) => s + (l.valor || 0), 0);
   const totalCreditos = lancamentosMes
-    .filter(l => TIPOS_ADICIONAL_DEFAULT.includes(l.tipo_lancamento) || l.parcelado)
+    .filter(l => tiposCredito.includes(l.tipo_lancamento) || l.parcelado)
     .reduce((s, l) => s + (l.valor || 0), 0);
   const totalReceitasExtras = receitasExtras.reduce((s, r) => s + (r.valor || 0), 0);
   const salarioBaseExibir = funcionario?.salario_base || 0;

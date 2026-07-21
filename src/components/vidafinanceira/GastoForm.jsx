@@ -41,9 +41,14 @@ export default function GastoForm({ open, onClose, onSaved, funcionarioId, gasto
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await client.integrations.Core.UploadFile({ file });
-    setComprovante(file_url);
-    setUploading(false);
+    try {
+      const { file_url } = await client.integrations.Core.UploadFile({ file });
+      setComprovante(file_url);
+    } catch {
+      toast({ title: 'Erro ao enviar comprovante', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -58,24 +63,29 @@ export default function GastoForm({ open, onClose, onSaved, funcionarioId, gasto
       return;
     }
     setSaving(true);
-    const payload = {
-      funcionario_id: funcionarioId,
-      categoria_tipo: categoriaTipo,
-      categoria_nome: nomeFinal,
-      descricao,
-      valor: v,
-      data_lancamento: dataLancamento,
-      comprovante,
-      recorrente: categoriaTipo === 'gasto_fixo' ? recorrente : false,
-    };
-    if (isEdit) {
-      await client.entities.GastosPessoais.update(gasto.id, payload);
-    } else {
-      await client.entities.GastosPessoais.create(payload);
+    try {
+      const payload = {
+        funcionario_id: funcionarioId,
+        categoria_tipo: categoriaTipo,
+        categoria_nome: nomeFinal,
+        descricao,
+        valor: v,
+        data_lancamento: dataLancamento,
+        comprovante,
+        recorrente: categoriaTipo === 'gasto_fixo' ? recorrente : false,
+      };
+      if (isEdit) {
+        await client.entities.GastosPessoais.update(gasto.id, payload);
+      } else {
+        await client.entities.GastosPessoais.create(payload);
+      }
+      onSaved();
+      onClose();
+    } catch {
+      toast({ title: 'Erro ao salvar gasto', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
-    onClose();
   };
 
   return (

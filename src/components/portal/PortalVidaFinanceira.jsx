@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getMesReferenciaAtual, getMesesOptions, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { getMesReferenciaAtual, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { calcularResumoMensal, calcularAlerta, calcularProgressoMeta, filtrarGastosPorMes, TIPO_COLORS } from '@/lib/vidaFinanceira';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import { useRHControl } from '@/lib/rhControl';
@@ -53,10 +53,53 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
   const { logError } = useFinancialDataLogger('PortalVidaFinanceira');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const funcionarioId = funcionario?.id;
-  const salarioBase = funcionario?.salario_base;
-  const ajudaCusto = funcionario?.ajuda_custo || 0;
+  const salarioBase = Number(funcionario?.salario_base) || 0;
+  const ajudaCusto = Number(funcionario?.ajuda_custo) || 0;
   const mesAtual = getMesReferenciaAtual();
-  const meses = getMesesOptions(12);
+
+  // Range de meses: da admissão até o mês atual + lançamentos futuros
+  const meses = useMemo(() => {
+    const mesesArr = [];
+    let minMes = mesAtual;
+    if (funcionario?.data_admissao) {
+      try {
+        const d = parseDateLocal(funcionario.data_admissao);
+        if (d && !isNaN(d.getTime())) {
+          minMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        }
+      } catch { /* data inválida */ }
+    }
+    // Estende ao futuro se houver lançamentos
+    let maxMes = mesAtual;
+    if (lancamentosFunc?.length > 0) {
+      const mRecente = lancamentosFunc.reduce((m, l) => {
+        if (!l.data_lancamento) return m;
+        return l.data_lancamento > m ? l.data_lancamento : m;
+      }, '0000-00-00');
+      if (mRecente !== '0000-00-00') {
+        try {
+          const d = parseDateLocal(mRecente);
+          if (d && !isNaN(d.getTime())) maxMes = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        } catch { /* data inválida */ }
+      }
+    }
+    const [mMin, aMin] = minMes.split('/').map(Number);
+    const [mMax, aMax] = maxMes.split('/').map(Number);
+    let ano = aMin, mes = mMin;
+    while (ano < aMax || (ano === aMax && mes <= mMax)) {
+      mesesArr.push(`${String(mes).padStart(2, '0')}/${ano}`);
+      mes++;
+      if (mes > 12) { mes = 1; ano++; }
+    }
+    return mesesArr.length > 0 ? mesesArr : [mesAtual];
+  }, [funcionario, lancamentosFunc, mesAtual]);
+
+  // Garante que mesSelecionado está no range
+  useEffect(() => {
+    if (meses.length > 0 && !meses.includes(mesSelecionado)) {
+      setMesSelecionado(meses[meses.length - 1] || mesAtual);
+    }
+  }, [meses, mesSelecionado, mesAtual, setMesSelecionado]);
 
   const handleDownloadPdf = async () => {
     setDownloadingPdf(true);
@@ -67,13 +110,13 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
       doc.text('Resumo Financeiro', 20, 20)
       doc.setFontSize(11)
       doc.text(`Mês: ${mesSelecionado}`, 20, 32)
-      doc.text(`Salário: R$ ${Number(salario || 0).toFixed(2)}`, 20, 42)
-      doc.text(`Comissão: R$ ${Number(comissaoMesAtual || 0).toFixed(2)}`, 20, 50)
-      doc.text(`Receita Extra: R$ ${Number(receitaExtra || 0).toFixed(2)}`, 20, 58)
-      doc.text(`Gastos Fixos: R$ ${Number(gastoFixo || 0).toFixed(2)}`, 20, 68)
-      doc.text(`Gastos Variáveis: R$ ${Number(gastoVariavel || 0).toFixed(2)}`, 20, 76)
-      doc.text(`Investimentos: R$ ${Number(investimento || 0).toFixed(2)}`, 20, 84)
-      doc.text(`Saldo: R$ ${Number(saldoPessoal || 0).toFixed(2)}`, 20, 94)
+      doc.text(`Salário + Ajuda: R$ ${salario.toFixed(2)}`, 20, 42)
+      doc.text(`Comissão: R$ ${comissaoMesAtual.toFixed(2)}`, 20, 50)
+      doc.text(`Receita Extra: R$ ${receitaExtra.toFixed(2)}`, 20, 58)
+      doc.text(`Gastos Fixos: R$ ${gastoFixo.toFixed(2)}`, 20, 68)
+      doc.text(`Gastos Variáveis: R$ ${gastoVariavel.toFixed(2)}`, 20, 76)
+      doc.text(`Investimentos: R$ ${investimento.toFixed(2)}`, 20, 84)
+      doc.text(`Saldo: R$ ${saldoPessoal.toFixed(2)}`, 20, 94)
       doc.save(`resumo_financeiro_${mesSelecionado.replace('/', '-')}.pdf`)
     } catch (e) {
       console.error('Erro ao gerar PDF:', e)
@@ -99,13 +142,13 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
   if (metasError) logError(metasError, 'Erro ao carregar metas financeiras');
 
   const { data: assinaturas = [] } = useQuery({
-    queryKey: ['assinaturas_pessoais_vf', funcionarioId],
+    queryKey: ['assinaturas_pessoais', funcionarioId],
     queryFn: () => client.entities.AssinaturasPessoais.filter({ funcionario_id: funcionarioId }),
     enabled: !!funcionarioId,
   });
 
   const { data: dividas = [] } = useQuery({
-    queryKey: ['dividas_pessoais_vf', funcionarioId],
+    queryKey: ['dividas_pessoais', funcionarioId],
     queryFn: () => client.entities.DividasPessoais.filter({ funcionario_id: funcionarioId }),
     enabled: !!funcionarioId,
   });
@@ -139,18 +182,24 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
   const totalParcelas = dividasAtivas.reduce((s, d) => s + (d.valor_parcela || 0), 0);
 
   const metaMes = metas.find(m => m.mes_referencia === mesSelecionado);
-  const salario = salarioBase || metaMes?.salario_pessoal || parseFloat(salarioManual) || 0;
+  const salario = salarioBase + ajudaCusto || metaMes?.salario_pessoal || parseFloat(salarioManual) || 0;
 
   const comissaoMesAtual = isAtiva('exibir_comissao_vida_financeira')
     ? calcularComissaoMensal(comissoesFuncionarios, funcionarioId, mesSelecionado) : 0;
 
-  const mesAnterior = meses.find(m => m === mesSelecionado)
-    ? meses[meses.indexOf(mesSelecionado) + 1] || null : null;
-  const comissaoMesAnterior = isAtiva('exibir_comissao_vida_financeira') && mesAnterior
-    ? calcularComissaoMensal(comissoesFuncionarios, funcionarioId, mesAnterior) : 0;
+  // Lançamentos do RH apenas para adicionais (créditos)
+  const lancamentosMes = lancamentosFunc.filter(l => {
+    if (!l.data_lancamento) return false;
+    const mr = getMesRef(l.data_lancamento);
+    return mr === mesSelecionado;
+  });
 
-  const rendaBase = isAtiva('renda_base_inicial') ? salario + comissaoMesAnterior : salario;
-  const receitaTotal = rendaBase + comissaoMesAtual;
+  // Adicionais do RH (créditos que o funcionário recebeu além do salário) — padrão + custom
+  const adicionaisRH = lancamentosMes
+    .filter(l => (['adicional', 'ajuste'].includes(l.tipo_lancamento) || tiposPersonalizados.some(t => t.ativo !== false && t.categoria === 'adicional' && t.nome === l.tipo_lancamento)) || l.parcelado)
+    .reduce((s, l) => s + (l.valor || 0), 0);
+
+  const receitaTotal = salario + comissaoMesAtual + adicionaisRH;
 
   const totalCompromissos = totalGastos + totalAssinaturas + totalParcelas;
 
@@ -158,12 +207,6 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
   const rendaTotal = receitaTotal + receitaExtra;
   const alerta = calcularAlerta(totalCompromissos, rendaTotal);
   const progresso = calcularProgressoMeta(saldoPessoal, metaMes?.meta_mensal);
-
-  const lancamentosMes = lancamentosFunc.filter(l => {
-    if (!l.data_lancamento) return false;
-    const mr = getMesRef(l.data_lancamento);
-    return mr === mesSelecionado;
-  });
 
   const pieData = [
     { name: 'Gastos Fixos', value: gastoFixo, color: TIPO_COLORS.gasto_fixo.chart },
@@ -174,7 +217,8 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
     { name: 'Receitas Extras', value: receitaExtra, color: TIPO_COLORS.receita_extra.chart },
   ].filter(d => d.value > 0);
 
-  const ultimos6 = meses.slice(0, 6).reverse();
+  const mesIdx = meses.indexOf(mesSelecionado);
+  const ultimos6 = meses.slice(Math.max(0, mesIdx - 5), mesIdx + 1).reverse();
   const lineData = ultimos6.map(mes => {
     const g = filtrarGastosPorMes(gastos, mes);
     const r = calcularResumoMensal(g, salario);
@@ -195,7 +239,7 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
       {!salarioBase && (
         <Card>
           <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground mb-2">Informe seu salário manualmente:</p>
+            <p className="text-sm text-muted-foreground mb-2">Informe seu salário {ajudaCusto > 0 ? '+ ajuda de custo' : ''} manualmente:</p>
             <div className="flex gap-2">
               <Input type="number" placeholder="R$ 0,00" value={salarioManual} onChange={e => setSalarioManual(e.target.value)} className="flex-1" />
               {metaMes?.salario_pessoal && (
@@ -210,57 +254,26 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {isAtiva('exibir_comissao_vida_financeira') ? (
-          <>
-            <ResumoSalarioCard label="Salário + Comissão (mês ant.)" valor={salario + comissaoMesAnterior} salarioBase={salario} comissao={comissaoMesAnterior} tipo="medio" />
-            <ResumoSalarioCard label="Salário + Comissão (atual)" valor={salario + comissaoMesAtual} salarioBase={salario} comissao={comissaoMesAtual} tipo="corrente" />
-          </>
+            <ResumoSalarioCard label="Salário + Comissão" valor={salario + comissaoMesAtual} salarioBase={salarioBase || salario} ajudaCusto={salarioBase > 0 ? ajudaCusto : 0} comissao={comissaoMesAtual} tipo="corrente" />
         ) : (
-          <StatCard icon={DollarSign} label="Salário (Contrato)" value={formatCurrency(salario)} />
+          <StatCard icon={DollarSign} label={ajudaCusto > 0 ? 'Salário + Ajuda de Custo' : 'Salário (Contrato)'} value={formatCurrency(salario)} />
         )}
         {isAtiva('receitas_extras_vida_financeira') && receitaExtra > 0 && (
           <StatCard icon={TrendingUp} label="Receitas Extras" value={formatCurrency(receitaExtra)} colorClass="text-blue-600" />
         )}
-        <StatCard icon={PiggyBank} label="Renda Total" value={formatCurrency(receitaTotal)} colorClass="text-primary" />
+        <StatCard icon={PiggyBank} label="Renda Total" value={formatCurrency(rendaTotal)} colorClass="text-primary" />
         {totalAssinaturas > 0 && <StatCard icon={Tv} label="Assinaturas" value={formatCurrency(totalAssinaturas)} colorClass="text-purple-600" />}
         {totalParcelas > 0 && <StatCard icon={CreditCard} label="Parcelas" value={formatCurrency(totalParcelas)} colorClass="text-rose-600" />}
         <StatCard icon={TrendingDown} label="Total Compromissos" value={formatCurrency(totalCompromissos)} colorClass="text-destructive" />
         <StatCard icon={Wallet} label="Saldo Pessoal" value={formatCurrency(saldoPessoal)} colorClass={saldoPessoal >= 0 ? 'text-green-600' : 'text-red-600'} />
       </div>
 
-      <MiniDRE mesSelecionado={mesSelecionado} salarioBase={salario} ajudaCusto={ajudaCusto} comissaoMes={comissaoMesAtual}
-        receitaExtra={isAtiva('receitas_extras_vida_financeira') ? receitaExtra : 0}
-        gastoFixo={gastoFixo} gastoVariavel={gastoVariavel} investimento={investimento}
-        gastosFixosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'gasto_fixo')}
-        gastosVariaveisLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'gasto_variavel')}
-        investimentosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'investimento')}
-        assinaturasLista={assinaturasAtivas}
-        dividasLista={dividasAtivas}
-        lancamentosMes={lancamentosMes}
-        tiposPersonalizados={tiposPersonalizados} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {pieData.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição dos Gastos</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" labelLine={false}>
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => formatCurrency(v)} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-
+      {lineData.length > 0 && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Evolução — Últimos 6 meses</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Evolução — Últimos meses</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={lineData}>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={[...lineData].reverse()}>
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v) => formatCurrency(v)} />
@@ -273,7 +286,35 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
             </ResponsiveContainer>
           </CardContent>
         </Card>
-      </div>
+      )}
+
+      {pieData.length > 1 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição dos Gastos</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" labelLine={false}>
+                  {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip formatter={(v) => formatCurrency(v)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      <MiniDRE mesSelecionado={mesSelecionado} salarioBase={salarioBase} ajudaCusto={ajudaCusto} salarioEfetivo={salario} comissaoMes={comissaoMesAtual}
+        receitaExtra={isAtiva('receitas_extras_vida_financeira') ? receitaExtra : 0}
+        gastoFixo={gastoFixo} gastoVariavel={gastoVariavel} investimento={investimento}
+        gastosFixosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'gasto_fixo')}
+        gastosVariaveisLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'gasto_variavel')}
+        investimentosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'investimento')}
+        assinaturasLista={assinaturasAtivas}
+        dividasLista={dividasAtivas}
+        lancamentosMes={lancamentosMes}
+        tiposPersonalizados={tiposPersonalizados} />
 
       {metaMes?.meta_mensal && (
         <Card>
@@ -310,21 +351,21 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
         </Button>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-1 bg-muted/50 rounded-xl p-1.5">
+      <nav className="flex flex-nowrap overflow-x-auto justify-start gap-1 bg-muted/50 rounded-xl p-1.5">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${
               tab === t.id ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}>
-            <t.icon className="w-4 h-4" />{t.label}
+            <t.icon className="w-3.5 h-3.5" />{t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {tab === 'dashboard' && renderDashboard()}
       {tab === 'gastos' && <MeusGastos funcionarioId={funcionarioId} />}
-      {tab === 'assinaturas' && <MinhasAssinaturas funcionarioId={funcionarioId} salarioBase={(funcionario?.salario_base || 0) + ajudaCusto} />}
-      {tab === 'dividas' && <MinhasDividas funcionarioId={funcionarioId} salarioBase={(funcionario?.salario_base || 0) + ajudaCusto} />}
+      {tab === 'assinaturas' && <MinhasAssinaturas funcionarioId={funcionarioId} salarioBase={salario} />}
+      {tab === 'dividas' && <MinhasDividas funcionarioId={funcionarioId} salarioBase={salario} />}
       {tab === 'metas' && <MetasObjetivos funcionarioId={funcionarioId} />}
       {tab === 'simuladores' && <SimuladoresFinanceiros />}
       {tab === 'educacao' && <EducacaoFinanceira />}

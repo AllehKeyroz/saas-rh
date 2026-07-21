@@ -37,6 +37,7 @@ exports/*.zip
 
 # Emulator data
 emulator-data/
+firebase-export-*/
 
 # Service account
 service-account.json

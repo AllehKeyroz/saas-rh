@@ -37,28 +37,33 @@ function DividaForm({ open, onClose, onSaved, funcionarioId, divida }) {
   const handleSave = async () => {
     if (!form.descricao || !form.valor_parcela) { toast({ title: 'Preencha descrição e valor da parcela', variant: 'destructive' }); return; }
     setSaving(true);
-    const parcelasTotal = ni(form.parcelas_total);
-    const parcelasPagas = ni(form.parcelas_pagas);
-    const data = {
-      ...form,
-      funcionario_id: funcionarioId,
-      valor_total: n(form.valor_total),
-      valor_parcela: n(form.valor_parcela),
-      parcelas_total: parcelasTotal,
-      parcelas_pagas: parcelasPagas,
-      taxa_juros_mensal: n(form.taxa_juros_mensal),
-      dia_vencimento: ni(form.dia_vencimento),
-      ativa: parcelasTotal > parcelasPagas,
-    };
-    if (divida?.id) {
-      await client.entities.DividasPessoais.update(divida.id, data);
-    } else {
-      await client.entities.DividasPessoais.create(data);
+    try {
+      const parcelasTotal = ni(form.parcelas_total);
+      const parcelasPagas = ni(form.parcelas_pagas);
+      const data = {
+        ...form,
+        funcionario_id: funcionarioId,
+        valor_total: n(form.valor_total),
+        valor_parcela: n(form.valor_parcela),
+        parcelas_total: parcelasTotal,
+        parcelas_pagas: parcelasPagas,
+        taxa_juros_mensal: n(form.taxa_juros_mensal),
+        dia_vencimento: ni(form.dia_vencimento),
+        ativa: parcelasTotal > parcelasPagas,
+      };
+      if (divida?.id) {
+        await client.entities.DividasPessoais.update(divida.id, data);
+      } else {
+        await client.entities.DividasPessoais.create(data);
+      }
+      onSaved();
+      onClose();
+      toast({ title: 'Dívida salva!' });
+    } catch {
+      toast({ title: 'Erro ao salvar dívida', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
-    onClose();
-    toast({ title: 'Dívida salva!' });
   };
 
   return (

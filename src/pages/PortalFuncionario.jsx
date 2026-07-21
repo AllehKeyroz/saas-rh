@@ -28,7 +28,10 @@ import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
 import MeusDocumentos from '@/components/portal/MeusDocumentos';
 
 
-const TIPOS_LIMITE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+const TIPOS_LIMITE_BASE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+
+// Note: TIPOS_LIMITE dinâmico é computado dentro do componente via useMemo
+// pois depende de tiposPersonalizados (carregado via React Query)
 
 const ABA_LABELS = {
   'visao-geral': 'Visão Geral',
@@ -224,6 +227,13 @@ export default function PortalFuncionario() {
     queryKey: ['tipos-lancamento'],
     queryFn: () => client.entities.TipoLancamento.list(),
   });
+
+  const TIPOS_LIMITE = useMemo(() => {
+    const custom = tiposPersonalizados
+      .filter(t => t.ativo !== false && t.categoria === 'desconto')
+      .map(t => t.nome);
+    return [...TIPOS_LIMITE_BASE, ...custom];
+  }, [tiposPersonalizados]);
 
   const lancamentosFunc = lancamentos.filter(l => l.funcionario_id === funcionario?.id);
   const lancamentosMes = lancamentosFunc.filter(l => {

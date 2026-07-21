@@ -31,6 +31,7 @@ export default function MiniDRE({
   ajudaCusto = 0,
   comissaoMes,
   receitaExtra = 0,
+  salarioEfetivo = 0,
   gastoFixo,
   gastoVariavel,
   investimento,
@@ -47,15 +48,7 @@ export default function MiniDRE({
   const [exportando, setExportando] = useState(false);
   const { toast } = useToast();
 
-  // Tipos de desconto e adicionais (padrão + custom)
-  const TIPOS_DESCONTO_RH = useMemo(() => {
-    const padrao = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo'];
-    const custom = tiposPersonalizados
-      .filter(t => t.ativo !== false && t.categoria === 'desconto')
-      .map(t => t.nome);
-    return [...padrao, ...custom];
-  }, [tiposPersonalizados]);
-
+  // Tipos de adicionais (padrão + custom) — créditos do RH
   const TIPOS_ADICIONAIS = useMemo(() => {
     const padrao = ['adicional', 'ajuste'];
     const custom = tiposPersonalizados
@@ -64,65 +57,43 @@ export default function MiniDRE({
     return [...padrao, ...custom];
   }, [tiposPersonalizados]);
 
-  // Calcular entradas (receitas)
+  // Calcular entradas (receitas) — adicionais + recebimentos (vale parcelado)
   const adicionais = lancamentosMes
-    .filter(l => TIPOS_ADICIONAIS.includes(l.tipo_lancamento))
+    .filter(l => TIPOS_ADICIONAIS.includes(l.tipo_lancamento) || l.parcelado)
     .reduce((s, l) => s + (l.valor || 0), 0);
 
-  const totalEntradas = (salarioBase || 0) + (ajudaCusto || 0) + comissaoMes + adicionais + receitaExtra;
+  // Breakdown de adicionais por tipo_lancamento + recebimentos
+  const adicionaisItens = (() => {
+    const grouped = {};
+    const records = {};
+    lancamentosMes
+      .filter(l => TIPOS_ADICIONAIS.includes(l.tipo_lancamento) || l.parcelado)
+      .forEach(l => {
+        const label = l.parcelado ? 'Vale Parcelado (Recebimento à vista)' : (TIPO_LABELS[l.tipo_lancamento] || l.tipo_lancamento);
+        grouped[label] = (grouped[label] || 0) + (l.valor || 0);
+        if (!records[label]) records[label] = [];
+        records[label].push({ nome: l.descricao || l.tipo_lancamento, valor: l.valor || 0 });
+      });
+    return Object.entries(grouped).map(([nome, valor]) => ({ nome, valor, itens: records[nome] || [] }));
+  })();
 
-  // Investimentos: do GastosPessoais (recorrentes + do mês) + RH
-  const investimentosRH = lancamentosMes
-    .filter(l => l.tipo_lancamento === 'investimento')
-    .map(l => ({ nome: l.descricao || 'Investimento (RH)', valor: l.valor || 0 }));
-  const todosInvestimentos = [
-    ...investimentosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 })),
-    ...investimentosRH,
-  ];
+  const baseEfetiva = (salarioBase || 0) + (ajudaCusto || 0) || salarioEfetivo || 0;
+  const totalEntradas = baseEfetiva + comissaoMes + adicionais + receitaExtra;
+
+  // Investimentos: apenas do GastosPessoais (cadastrados pelo funcionário)
+  const todosInvestimentos = investimentosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 }));
   const totalInvestimentos = todosInvestimentos.reduce((s, i) => s + i.valor, 0);
 
-  // Gastos Variáveis: do GastosPessoais (recorrentes + do mês) + RH
-  const gastosVariaveisRH = lancamentosMes
-    .filter(l => ['gasto_variavel'].includes(l.categoria_tipo) || ['alimentacao', 'transporte', 'lazer', 'compras', 'farmacia'].includes(l.categoria_nome?.toLowerCase()))
-    .map(l => ({ nome: l.descricao || l.categoria_nome || 'Gasto Variável (RH)', valor: l.valor || 0 }));
-  const todosGastosVariaveis = [
-    ...gastosVariaveisLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 })),
-    ...gastosVariaveisRH,
-  ];
+  // Gastos Variáveis: apenas do GastosPessoais (cadastrados pelo funcionário)
+  const todosGastosVariaveis = gastosVariaveisLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 }));
   const totalGastosVariaveis = todosGastosVariaveis.reduce((s, g) => s + g.valor, 0);
 
-  // Itens individuais das despesas fixas
-  const itensFixos = (() => {
-    const items = [
-      ...gastosFixosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0, tipo: 'gasto' })),
-      ...assinaturasLista.map(a => ({ nome: a.nome, valor: a.valor || 0, tipo: 'assinatura' })),
-      ...dividasLista.map(d => ({ nome: d.descricao || 'Dívida', valor: d.valor_parcela || 0, tipo: 'divida' })),
-    ];
-
-    // Consignado: um item por contrato
-    const consignadoItens = lancamentosMes
-      .filter(l => l.tipo_lancamento === 'credito_consignado')
-      .map(l => ({
-        nome: l.descricao || 'Consignado',
-        valor: l.valor || 0,
-        tipo: 'consignado',
-      }));
-    items.push(...consignadoItens);
-
-    // Descontos (RH): um item por tipo_lancamento
-    const descontosAgrupados = {};
-    lancamentosMes
-      .filter(l => TIPOS_DESCONTO_RH.includes(l.tipo_lancamento))
-      .forEach(l => {
-        const label = TIPO_LABELS[l.tipo_lancamento] || l.tipo_lancamento;
-        descontosAgrupados[label] = (descontosAgrupados[label] || 0) + (l.valor || 0);
-      });
-    Object.entries(descontosAgrupados).forEach(([nome, valor]) => {
-      items.push({ nome, valor, tipo: 'desconto_rh' });
-    });
-
-    return items;
-  })();
+  // Itens individuais das despesas fixas (apenas cadastros pessoais, sem descontos do RH)
+  const itensFixos = [
+    ...gastosFixosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0, tipo: 'gasto' })),
+    ...assinaturasLista.map(a => ({ nome: a.nome, valor: a.valor || 0, tipo: 'assinatura' })),
+    ...dividasLista.map(d => ({ nome: d.descricao || 'Dívida', valor: d.valor_parcela || 0, tipo: 'divida' })),
+  ];
 
   const totalDespesasFixas = itensFixos.reduce((s, i) => s + i.valor, 0);
   const totalDespesas = totalDespesasFixas + totalInvestimentos + totalGastosVariaveis;
@@ -180,12 +151,13 @@ export default function MiniDRE({
       };
 
       // Entradas
+      const salarioExibir = salarioBase || salarioEfetivo;
       const entradas = [
-        salarioBase > 0 ? ['Salário Fixo', formatCurrency(salarioBase), calcularPercentual(salarioBase, totalEntradas)] : null,
+        salarioExibir > 0 ? ['Salário Fixo', formatCurrency(salarioExibir), calcularPercentual(salarioExibir, totalEntradas)] : null,
         ajudaCusto > 0 ? ['Ajuda de Custo', formatCurrency(ajudaCusto), calcularPercentual(ajudaCusto, totalEntradas)] : null,
         comissaoMes > 0 ? ['Comissão', formatCurrency(comissaoMes), calcularPercentual(comissaoMes, totalEntradas)] : null,
         receitaExtra > 0 ? ['Receitas Extras', formatCurrency(receitaExtra), calcularPercentual(receitaExtra, totalEntradas)] : null,
-        adicionais > 0 ? ['Outras Receitas', formatCurrency(adicionais), calcularPercentual(adicionais, totalEntradas)] : null,
+        ...adicionaisItens.map(item => [item.nome, formatCurrency(item.valor), calcularPercentual(item.valor, totalEntradas)]),
       ].filter(Boolean);
       addSection('ENTRADAS (RECEITAS)', [...entradas, ['Total Entradas', formatCurrency(totalEntradas), null]]);
 
@@ -234,11 +206,11 @@ export default function MiniDRE({
         ['Mini DRE', mesSelecionado],
         [],
         ['ENTRADAS (RECEITAS)'],
-        salarioBase > 0 ? ['Salário Fixo', salarioBase, calcularPercentual(salarioBase, totalEntradas) + '%'] : null,
+        (salarioBase || salarioEfetivo) > 0 ? ['Salário Fixo', salarioBase || salarioEfetivo, calcularPercentual(salarioBase || salarioEfetivo, totalEntradas) + '%'] : null,
         ajudaCusto > 0 ? ['Ajuda de Custo', ajudaCusto, calcularPercentual(ajudaCusto, totalEntradas) + '%'] : null,
         comissaoMes > 0 ? ['Comissão', comissaoMes, calcularPercentual(comissaoMes, totalEntradas) + '%'] : null,
         receitaExtra > 0 ? ['Receitas Extras', receitaExtra, calcularPercentual(receitaExtra, totalEntradas) + '%'] : null,
-        adicionais > 0 ? ['Outras Receitas', adicionais, calcularPercentual(adicionais, totalEntradas) + '%'] : null,
+        ...adicionaisItens.map(item => [item.nome, item.valor, calcularPercentual(item.valor, totalEntradas) + '%']),
         ['Total Entradas', totalEntradas],
         [],
         ['DESPESAS FIXAS'],
@@ -303,11 +275,11 @@ export default function MiniDRE({
         <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-1 flex items-center gap-1">
           <TrendingUp className="w-3 h-3" /> Entradas
         </p>
-        {salarioBase > 0 && (
+        {(salarioBase > 0 || salarioEfetivo > 0) && (
           <DRERow 
             label="Salário Fixo" 
-            value={formatCurrency(salarioBase)} 
-            percentual={calcularPercentual(salarioBase, totalEntradas)}
+            value={formatCurrency(salarioBase || salarioEfetivo)} 
+            percentual={calcularPercentual(salarioBase || salarioEfetivo, totalEntradas)}
             indent 
             colorClass="text-green-600" 
           />
@@ -339,13 +311,25 @@ export default function MiniDRE({
             colorClass="text-blue-600" 
           />
         )}
-        {adicionais > 0 && (
-          <DRERow 
-            label="Outras Receitas" 
-            value={formatCurrency(adicionais)} 
+        {adicionaisItens.map((item, idx) => (
+          <DRERow
+            key={idx}
+            label={item.nome}
+            value={formatCurrency(item.valor)}
+            percentual={calcularPercentual(item.valor, totalEntradas)}
+            indent
+            colorClass="text-green-600"
+            onClick={() => item.itens.length > 0 && abrirDetalhe(item.nome, item.itens)}
+            itens={item.itens}
+          />
+        ))}
+        {adicionaisItens.length > 1 && (
+          <DRERow
+            label="Total Outras Receitas"
+            value={formatCurrency(adicionais)}
             percentual={calcularPercentual(adicionais, totalEntradas)}
-            indent 
-            colorClass="text-green-600" 
+            indent
+            colorClass="text-green-600"
           />
         )}
         <DRERow 

@@ -49,7 +49,7 @@ export function calcularProgressoMeta(economiReal, metaMensal) {
 export function filtrarGastosPorMes(gastos, mesReferencia) {
   return gastos.filter(g => {
     if (!g.data_lancamento) return false;
-    const d = new Date(g.data_lancamento);
+    const d = new Date(g.data_lancamento + 'T12:00:00');
     const mr = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     return mr === mesReferencia;
   });

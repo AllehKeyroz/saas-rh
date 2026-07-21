@@ -33,22 +33,27 @@ function MetaForm({ open, onClose, onSaved, funcionarioId, meta }) {
   const handleSave = async () => {
     if (!form.nome || !form.valor_total) { toast({ title: 'Preencha nome e valor', variant: 'destructive' }); return; }
     setSaving(true);
-    const data = {
-      ...form,
-      funcionario_id: funcionarioId,
-      valor_total: parseFloat(form.valor_total) || 0,
-      valor_guardado: parseFloat(form.valor_guardado) || 0,
-      valor_mensal: parseFloat(form.valor_mensal) || 0,
-    };
-    if (meta?.id) {
-      await client.entities.MetasObjetivos.update(meta.id, data);
-    } else {
-      await client.entities.MetasObjetivos.create(data);
+    try {
+      const data = {
+        ...form,
+        funcionario_id: funcionarioId,
+        valor_total: parseFloat(form.valor_total) || 0,
+        valor_guardado: parseFloat(form.valor_guardado) || 0,
+        valor_mensal: parseFloat(form.valor_mensal) || 0,
+      };
+      if (meta?.id) {
+        await client.entities.MetasObjetivos.update(meta.id, data);
+      } else {
+        await client.entities.MetasObjetivos.create(data);
+      }
+      onSaved();
+      onClose();
+      toast({ title: 'Meta salva!' });
+    } catch {
+      toast({ title: 'Erro ao salvar meta', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
-    onClose();
-    toast({ title: 'Meta salva!' });
   };
 
   return (
@@ -144,7 +149,7 @@ export default function MetasObjetivosPage({ funcionarioId }) {
     const valor = prompt('Quanto você guardou agora? (R$)');
     const v = parseFloat(valor);
     if (isNaN(v) || v <= 0) return;
-    const novoGuardado = (meta.valor_guardado || 0) + v;
+    const novoGuardado = Math.min((meta.valor_guardado || 0) + v, meta.valor_total);
     const concluida = novoGuardado >= meta.valor_total;
     await client.entities.MetasObjetivos.update(meta.id, { valor_guardado: novoGuardado, concluida });
     qc.invalidateQueries({ queryKey: ['metas_objetivos'] });

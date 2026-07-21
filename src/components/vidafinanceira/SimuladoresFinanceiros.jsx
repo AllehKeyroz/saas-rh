@@ -50,9 +50,9 @@ function SimuladorReserva() {
     const s = parseFloat(salario) || 0;
     const m = parseInt(meses) || 6;
     const total = s * m;
-    const por_mes_10 = total / 12;
-    const por_mes_20 = total / 6;
-    setResultado({ total, por_mes_10, por_mes_20 });
+    const contrib10 = s * 0.1;
+    const contrib20 = s * 0.2;
+    setResultado({ total, contrib10, contrib20 });
   };
 
   return (
@@ -72,8 +72,8 @@ function SimuladorReserva() {
         {resultado && (
           <div className="bg-blue-50 rounded-xl p-3 space-y-1">
             <div className="flex justify-between text-sm"><span>Meta de reserva:</span><span className="font-bold text-blue-700">{formatCurrency(resultado.total)}</span></div>
-            <div className="flex justify-between text-sm"><span>Guardando 10%/mês:</span><span className="font-medium">{Math.ceil(resultado.total / (resultado.por_mes_10 > 0 ? 1 : 1))} meses</span></div>
-            <div className="flex justify-between text-sm"><span>Poupar 10% ao mês:</span><span className="font-medium">{formatCurrency(parseFloat(salario) * 0.1)}</span></div>
+            <div className="flex justify-between text-sm"><span>Guardando 10%/mês:</span><span className="font-medium">{resultado.contrib10 > 0 ? Math.ceil(resultado.total / resultado.contrib10) : '—'} meses</span></div>
+            <div className="flex justify-between text-sm"><span>Guardando 20%/mês:</span><span className="font-medium">{resultado.contrib20 > 0 ? Math.ceil(resultado.total / resultado.contrib20) : '—'} meses</span></div>
           </div>
         )}
       </CardContent>
@@ -128,6 +128,7 @@ function SimuladorDivida() {
     const s = parseFloat(saldo) || 0;
     const t = (parseFloat(taxa) || 0) / 100;
     const p = parseFloat(pagamento) || 0;
+    if (p <= 0) { setResultado({ erro: 'Informe um valor de pagamento válido.' }); return; }
     if (p <= s * t) { setResultado({ erro: 'O pagamento não cobre nem os juros! Aumente o valor.' }); return; }
     let meses = 0, total = s;
     while (total > 0 && meses < 600) { total = total * (1 + t) - p; meses++; }
