@@ -330,6 +330,7 @@ export default function EspelhoPortal() {
                 <MinhasComissoes
                   funcionarioId={funcionario?.id}
                   funcionarioSetor={funcionario?.setor}
+                  mesSelecionado={mesSelecionado}
                 />
               )}
               {aba === 'mensagens' && (

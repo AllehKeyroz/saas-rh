@@ -27,7 +27,7 @@ function AlertaMotivacional({ progresso, meta }) {
   );
 }
 
-export default function MinhasComissoes({ funcionarioId, funcionarioSetor }) {
+export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSelecionado }) {
   const { isAtiva, isLoading: loadingRH } = useRHControl();
   const { logError } = useFinancialDataLogger('MinhasComissoes');
   const [mesExpandido, setMesExpandido] = useState(null);
@@ -102,9 +102,16 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor }) {
             Resumo do Setor: <span className="text-foreground">{funcionarioSetor}</span>
           </div>
 
-          {mesesSetor.map(mes => {
+          {mesesSetor.filter(mes => !mesSelecionado || mes === mesSelecionado).map(mes => {
             const registros = setorPorMes[mes];
-            const totalBruto = registros.reduce((s, r) => s + (r.valor_setor || 0), 0);
+            // Deduplica por período: valor_setor é o mesmo para todos do setor
+            const periodosVistos = new Set();
+            const totalBruto = registros.reduce((s, r) => {
+              const key = `${r.periodo_inicio}|${r.periodo_fim}`;
+              if (periodosVistos.has(key)) return s;
+              periodosVistos.add(key);
+              return s + (r.valor_setor || 0);
+            }, 0);
             const totalPago = registros.filter(r => r.apto).reduce((s, r) => s + (r.valor_individual_final ?? r.valor_individual ?? 0), 0);
             const excluidos = registros.filter(r => !r.apto).length;
             const funcionarios = new Set(registros.map(r => r.funcionario_nome)).size;
@@ -201,7 +208,7 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor }) {
             Minhas Comissões
           </div>
 
-          {meses.map(mes => {
+          {meses.filter(mes => !mesSelecionado || mes === mesSelecionado).map(mes => {
             const periodos = porMes[mes].sort((a, b) => (a.periodo_inicio || '').localeCompare(b.periodo_inicio || ''));
             const totalMes = periodos.filter(p => p.apto).reduce((s, p) => s + (p.valor_individual_final ?? p.valor_individual ?? 0), 0);
             const meta = getMetaMes(mes);

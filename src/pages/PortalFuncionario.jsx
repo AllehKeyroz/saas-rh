@@ -418,6 +418,7 @@ export default function PortalFuncionario() {
             <MinhasComissoes
               funcionarioId={funcionario?.id}
               funcionarioSetor={funcionario?.setor}
+              mesSelecionado={mesSelecionado}
             />
           )}
           {aba === 'metas' && (
