@@ -530,12 +530,12 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
       <div className="grid grid-cols-3 gap-4">
         <div>
           <Label>Salário Base *</Label>
-          <Input type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => { setLimiteEditado(false); handleChange('salario_base', e.target.value); }} placeholder="0,00" required />
+          <Input type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => { setLimiteEditado(false); handleChange('salario_base', e.target.value); }} placeholder="0,00" required disabled={isEdit && Number(form.salario_base) > 0} />
           {errors.salario_base && <p className="text-xs text-destructive mt-1">{errors.salario_base}</p>}
         </div>
         <div>
           <Label>Ajuda de Custo</Label>
-          <Input type="number" step="0.01" min="0" value={form.ajuda_custo || ''} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" />
+          <Input type="number" step="0.01" min="0" value={form.ajuda_custo || ''} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" disabled={isEdit && Number(form.ajuda_custo) > 0} />
         </div>
         <div>
           <Label>Limite de Vales ({LIMITE_PERCENTUAL}%)</Label>
