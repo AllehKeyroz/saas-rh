@@ -12,6 +12,7 @@ import Dashboard360 from '@/components/funcionarios360/Dashboard360';
 import DadosPessoais360 from '@/components/funcionarios360/DadosPessoais360';
 import Documentos360 from '@/components/funcionarios360/Documentos360';
 import HistoricoPagamentos360 from '@/components/funcionarios360/HistoricoPagamentos360';
+import CargoSalario360 from '@/components/funcionarios360/CargoSalario360';
 import {
   ValesAdiantamentos360,
   DescontosConsignados360,
@@ -21,8 +22,6 @@ import {
   Ferias360,
   BancoHoras360,
   Desempenho360,
-  HistoricoSalario360,
-  HistoricoFuncaoSetor360,
   LinhaTempoInteligente360,
   Auditoria360,
   AnexosGerais360
@@ -126,8 +125,7 @@ export default function Funcionarios360() {
           <TabsTrigger value="ferias">Férias</TabsTrigger>
           <TabsTrigger value="bancohoras">Banco de Horas</TabsTrigger>
           <TabsTrigger value="desempenho">Desempenho</TabsTrigger>
-          <TabsTrigger value="salario">Salário</TabsTrigger>
-          <TabsTrigger value="funcao">Função/Setor</TabsTrigger>
+          <TabsTrigger value="cargo-salario">Cargo & Salário</TabsTrigger>
           <TabsTrigger value="timeline">Linha do Tempo</TabsTrigger>
           <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
@@ -177,12 +175,8 @@ export default function Funcionarios360() {
           <Desempenho360 funcionario={funcionario} />
         </TabsContent>
 
-        <TabsContent value="salario" className="mt-6">
-          <HistoricoSalario360 funcionario={funcionario} />
-        </TabsContent>
-
-        <TabsContent value="funcao" className="mt-6">
-          <HistoricoFuncaoSetor360 funcionario={funcionario} />
+        <TabsContent value="cargo-salario" className="mt-6">
+          <CargoSalario360 funcionario={funcionario} />
         </TabsContent>
 
         <TabsContent value="timeline" className="mt-6">

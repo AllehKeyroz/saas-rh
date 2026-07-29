@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { registrarAuditoria } from '@/lib/audit';
 import { getCurrentTenantId } from '@/firebase/auth';
-import { formatCurrency, formatDate } from '@/lib/formatters';
+import { formatCurrency, formatDate, getMesReferenciaAtual } from '@/lib/formatters';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, X, Save, Clock, DollarSign, Briefcase, Building2, HelpCircle } from 'lucide-react';
+import { Pencil, X, Save, Clock, DollarSign, Briefcase, Building2, HelpCircle, AlertTriangle, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 function getHojeStr() {
@@ -45,6 +45,17 @@ export default function CargoSalario360({ funcionario }) {
       : [],
     enabled: !!funcionario?.id,
   });
+
+  const { data: fechamentos = [] } = useQuery({
+    queryKey: ['fechamentos_cargo_salario', funcionario?.id],
+    queryFn: () => funcionario?.id
+      ? client.entities.FechamentoMensal.filter({ funcionario_id: funcionario.id })
+      : [],
+    enabled: !!funcionario?.id,
+  });
+
+  const mesAtual = getMesReferenciaAtual();
+  const mesFechado = fechamentos.some(f => f.mes_referencia === mesAtual);
 
   const opcoesSetores = useMemo(() => {
     const nomes = setores.filter(s => s.ativo !== false).map(s => s.nome);
@@ -257,6 +268,24 @@ export default function CargoSalario360({ funcionario }) {
                 <Label>Motivo do Reajuste *</Label>
                 <Textarea value={form.motivo_reajuste} onChange={e => handleChange('motivo_reajuste', e.target.value)} placeholder="Ex: Aumento salarial por mérito, promoção de cargo, reajuste coletivo..." rows={3} />
               </div>
+
+              {mesFechado ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-medium">Mês já fechado</p>
+                    <p className="mt-1">O fechamento de <strong>{mesAtual}</strong> já foi processado para este funcionário. O novo salário valerá apenas a partir do <strong>próximo fechamento</strong>.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">Mês em aberto</p>
+                    <p className="mt-1">O fechamento de <strong>{mesAtual}</strong> ainda não foi processado. O novo salário será considerado no fechamento deste mês.</p>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 pt-2">
                 <Button onClick={handleSave} disabled={saving}>
