@@ -155,7 +155,7 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
     }
   };
 
-  const TODOS_TIPOS_LIMITE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+  const TODOS_TIPOS_LIMITE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo'];
 
   // Calcula o aviso de limite em tempo real
   const limiteInfo = (() => {
@@ -276,6 +276,22 @@ export default function LancamentoForm({ open, onClose, onSaved, funcionarios })
         descricao: form.descricao,
       };
       await client.entities.Consignado.create(consignadoPayload);
+
+      // Cria dívida pessoal automática (apenas parcelas restantes)
+      const parcelasRestantes = totalParc - parcelasPagasInicial;
+      if (parcelasRestantes > 0) {
+        await client.entities.DividasPessoais.create({
+          funcionario_id: form.funcionario_id,
+          tipo: 'consignado',
+          descricao: form.descricao || `Consignado — ${form.numero_contrato || ''} ${form.instituicao_financeira || ''}`.trim(),
+          instituicao: form.instituicao_financeira,
+          valor_total: valorParcela * parcelasRestantes,
+          valor_parcela: valorParcela,
+          parcelas_total: parcelasRestantes,
+          parcelas_pagas: 0,
+          ativa: true,
+        });
+      }
 
       await registrarAuditoria({
         acao: 'criar', modulo: 'consignado',

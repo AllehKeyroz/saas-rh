@@ -207,6 +207,7 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
                       <p className="font-semibold text-sm">{d.descricao}</p>
                       {d.instituicao && <p className="text-xs text-muted-foreground">{d.instituicao}</p>}
                       <Badge className={`${tipo.color} border-0 text-xs mt-1`}>{tipo.label}</Badge>
+                      {d.tipo === 'consignado' && <Badge className="text-xs bg-blue-100 text-blue-700 border-0 ml-1">Registrado pelo RH</Badge>}
                       {!d.ativa && <Badge className="text-xs bg-green-100 text-green-700 border-0 ml-1">Quitada</Badge>}
                     </div>
                     <div className="text-right shrink-0">
@@ -238,8 +239,12 @@ export default function MinhasDividas({ funcionarioId, salarioBase = 0 }) {
                         {d.parcelas_total > 0 ? `Pagar Parcela (${d.parcelas_pagas || 0}/${d.parcelas_total})` : 'Quitar'}
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" onClick={() => { setEditItem(d); setFormOpen(true); }}><Pencil className="w-3 h-3" /></Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget(d.id)}><Trash2 className="w-3 h-3" /></Button>
+                    {d.tipo !== 'consignado' && (
+                      <Button size="sm" variant="ghost" onClick={() => { setEditItem(d); setFormOpen(true); }}><Pencil className="w-3 h-3" /></Button>
+                    )}
+                    {d.tipo !== 'consignado' && (
+                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteTarget(d.id)}><Trash2 className="w-3 h-3" /></Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

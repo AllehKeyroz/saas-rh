@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getMesReferenciaAtual, getMesesOptions, formatDate, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { useRHControl } from '@/lib/rhControl';
+import { calcularComissaoMensal } from '@/lib/comissoes';
 import { useToast } from '@/components/ui/use-toast';
 
 import PortalSidebar from '@/components/portal/PortalSidebar';
@@ -229,11 +230,8 @@ export default function PortalFuncionario() {
   });
 
   const TIPOS_LIMITE = useMemo(() => {
-    const custom = tiposPersonalizados
-      .filter(t => t.ativo !== false && t.categoria === 'desconto')
-      .map(t => t.nome);
-    return [...TIPOS_LIMITE_BASE, ...custom];
-  }, [tiposPersonalizados]);
+    return ['vale', 'vale_parcelado'];
+  }, []);
 
   const lancamentosFunc = lancamentos.filter(l => l.funcionario_id === funcionario?.id);
   const lancamentosMes = lancamentosFunc.filter(l => {
@@ -246,6 +244,14 @@ export default function PortalFuncionario() {
     TIPOS_LIMITE.includes(l.tipo_lancamento) && !l.parcelado
   );
   const totalValesMes = lancamentosLimiteMes.reduce((s, l) => s + (l.valor || 0), 0);
+
+  // Limite de 40%: apenas Vale e Vale Parcelado
+  const totalValesLimite = lancamentosMes
+    .filter(l => ['vale', 'vale_parcelado'].includes(l.tipo_lancamento) && !l.parcelado)
+    .reduce((s, l) => s + (l.valor || 0), 0);
+
+  // Comissão do mês
+  const comissaoMes = calcularComissaoMensal(comissoesFuncionarios, funcionario?.id, mesSelecionado);
 
   // Receitas extras do mês selecionado
   const receitasExtrasMes = gastosPessoais.filter(g => {
@@ -363,12 +369,13 @@ export default function PortalFuncionario() {
                  mensagensRH={mensagensRH}
                  onRefresh={() => queryClient.invalidateQueries({ queryKey: ['mensagens_rh_portal'] })}
                />
-               <VisaoGeral
-                 funcionario={funcionario}
-                 totalValesMes={totalValesMes}
-                 mesSelecionado={mesSelecionado}
-                 setAba={setAba}
-               />
+                <VisaoGeral
+                  funcionario={funcionario}
+                  totalValesMes={totalValesMes}
+                  totalValesLimite={totalValesLimite}
+                  mesSelecionado={mesSelecionado}
+                  setAba={setAba}
+                />
                </>
                )}
           {aba === 'meus-dados' && (
@@ -389,6 +396,7 @@ export default function PortalFuncionario() {
               funcionario={funcionario}
               lancamentosLimiteMes={lancamentosLimiteMes}
               totalValesMes={totalValesMes}
+              totalValesLimite={totalValesLimite}
               mesSelecionado={mesSelecionado}
               onVerComprovante={setComprovante}
             />
@@ -401,6 +409,7 @@ export default function PortalFuncionario() {
               onVerComprovante={setComprovante}
               receitasExtras={receitasExtrasMes}
               tiposPersonalizados={tiposPersonalizados}
+              comissaoMes={comissaoMes}
             />
           )}
           {aba === 'vida-financeira' && (

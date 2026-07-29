@@ -152,7 +152,7 @@ export default function VidaFinanceira() {
           />
         )}
         {funcionario && tab === 'gastos' && (
-          <MeusGastos funcionarioId={funcionario.id} />
+          <MeusGastos funcionarioId={funcionario.id} lancamentosMes={lancamentosRH} />
         )}
         {funcionario && tab === 'assinaturas' && (
           <MinhasAssinaturas funcionarioId={funcionario.id} salarioBase={(funcionario.salario_base || 0) + (funcionario.ajuda_custo || 0)} />

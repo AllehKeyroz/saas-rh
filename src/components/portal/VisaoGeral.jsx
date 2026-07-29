@@ -26,7 +26,7 @@ function QuickCard({ icon: Icon, title, subtitle, color = 'bg-primary/10 text-pr
   );
 }
 
-export default function VisaoGeral({ funcionario, totalValesMes, mesSelecionado, setAba }) {
+export default function VisaoGeral({ funcionario, totalValesMes, totalValesLimite, mesSelecionado, setAba }) {
   const perm = funcionario?.permissoes_portal || {};
 
   return (
@@ -35,6 +35,7 @@ export default function VisaoGeral({ funcionario, totalValesMes, mesSelecionado,
       {(perm.ver_limite_vales || perm.ver_extrato_vales) && (
         <AlertaLimiteVale
           totalValesMes={totalValesMes}
+          totalValesLimite={totalValesLimite}
           limite={funcionario?.limite_vales}
           salarioBase={funcionario?.salario_base}
           ajudaCusto={funcionario?.ajuda_custo}

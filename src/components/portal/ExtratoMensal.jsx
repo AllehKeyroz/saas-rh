@@ -15,7 +15,7 @@ const TIPO_LABELS_BASE = {
   receita_extra: 'Receita Extra',
 };
 
-export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecionado, onVerComprovante, receitasExtras = [], tiposPersonalizados = [] }) {
+export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecionado, onVerComprovante, receitasExtras = [], tiposPersonalizados = [], comissaoMes = 0 }) {
   const perm = funcionario?.permissoes_portal || {};
 
   const tiposDesconto = useMemo(() => {
@@ -58,11 +58,12 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
   const totalCreditos = lancamentosMes
     .filter(l => tiposCredito.includes(l.tipo_lancamento) || l.parcelado)
     .reduce((s, l) => s + (l.valor || 0), 0);
+  const totalCreditosComComissao = totalCreditos + comissaoMes;
   const totalReceitasExtras = receitasExtras.reduce((s, r) => s + (r.valor || 0), 0);
   const salarioBaseExibir = funcionario?.salario_base || 0;
   const ajudaCustoExibir = funcionario?.ajuda_custo || 0;
   const saldoBase = salarioBaseExibir + ajudaCustoExibir;
-  const saldoFinal = saldoBase + totalCreditos + totalReceitasExtras - totalDebitos;
+  const saldoFinal = saldoBase + totalCreditosComComissao + totalReceitasExtras - totalDebitos;
 
   const sorted = [...lancamentosMes].sort((a, b) => (b.data_lancamento || '').localeCompare(a.data_lancamento || ''));
 
@@ -74,7 +75,7 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-card border rounded-xl p-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Créditos</p>
-          <p className="font-bold text-sm text-green-600">+ {formatCurrency(totalCreditos)}</p>
+          <p className="font-bold text-sm text-green-600">+ {formatCurrency(totalCreditosComComissao)}</p>
         </div>
         <div className="bg-card border rounded-xl p-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Débitos</p>
@@ -112,6 +113,17 @@ export default function ExtratoMensal({ funcionario, lancamentosMes, mesSelecion
                 <p className="text-xs text-muted-foreground">Competência {mesSelecionado}</p>
               </div>
               <span className="text-sm font-bold text-blue-600">+ {formatCurrency(ajudaCustoExibir)}</span>
+            </div>
+          )}
+
+          {/* Comissão */}
+          {comissaoMes > 0 && (
+            <div className="flex items-center justify-between py-2.5 border-b bg-emerald-50/30 -mx-5 px-5">
+              <div>
+                <span className="text-sm font-medium">Comissão</span>
+                <p className="text-xs text-muted-foreground">Competência {mesSelecionado}</p>
+              </div>
+              <span className="text-sm font-bold text-green-600">+ {formatCurrency(comissaoMes)}</span>
             </div>
           )}
 

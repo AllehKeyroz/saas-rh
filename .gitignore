@@ -39,5 +39,8 @@ exports/*.zip
 emulator-data/
 firebase-export-*/
 
+# Firebase local cache
+.firebase/
+
 # Service account
 service-account.json

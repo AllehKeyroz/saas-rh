@@ -12,6 +12,7 @@ import { getMesReferenciaAtual, getMesesOptions, formatCurrency, formatDate, par
 import { ChevronLeft, ChevronRight, Eye, User, FileText, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useRHControl } from '@/lib/rhControl';
+import { calcularComissaoMensal } from '@/lib/comissoes';
 import { cn } from '@/lib/utils';
 
 import VisaoGeral from '@/components/portal/VisaoGeral';
@@ -23,7 +24,7 @@ import MinhasComissoes from '@/components/portal/MinhasComissoes';
 import MensagensPortal from '@/components/portal/MensagensPortal';
 import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
 
-const TIPOS_LIMITE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
+const TIPOS_LIMITE = ['vale', 'vale_parcelado'];
 
 const ABAS = [
   { id: 'visao-geral', label: 'Visão Geral' },
@@ -67,6 +68,11 @@ export default function EspelhoPortal() {
     queryKey: ['mensagens_rh_portal'],
     queryFn: () => client.entities.MensagensRH.list('-data_envio', 200),
     enabled: isAtiva('modulo_mensagens'),
+  });
+
+  const { data: tiposPersonalizados = [] } = useQuery({
+    queryKey: ['tipos-lancamento'],
+    queryFn: () => client.entities.TipoLancamento.list(),
   });
 
   const funcionario = funcionarios.find(f => f.id === funcionarioId);
@@ -137,6 +143,14 @@ export default function EspelhoPortal() {
   });
   const lancamentosLimiteMes = lancamentosMes.filter(l => TIPOS_LIMITE.includes(l.tipo_lancamento) && !l.parcelado);
   const totalValesMes = lancamentosLimiteMes.reduce((s, l) => s + (l.valor || 0), 0);
+
+  // Limite de 40%: apenas Vale e Vale Parcelado
+  const totalValesLimite = lancamentosMes
+    .filter(l => ['vale', 'vale_parcelado'].includes(l.tipo_lancamento) && !l.parcelado)
+    .reduce((s, l) => s + (l.valor || 0), 0);
+
+  // Comissão do mês
+  const comissaoMes = calcularComissaoMensal(comissoesFuncionarios, funcionarioId, mesSelecionado);
 
   const navegarMes = (dir) => {
     const idx = mesesDisponiveis.indexOf(mesSelecionado);
@@ -295,6 +309,7 @@ export default function EspelhoPortal() {
                 <VisaoGeral
                   funcionario={funcionario}
                   totalValesMes={totalValesMes}
+                  totalValesLimite={totalValesLimite}
                   mesSelecionado={mesSelecionado}
                   setAba={setAba}
                 />
@@ -306,6 +321,7 @@ export default function EspelhoPortal() {
                   lancamentosFuncionario={lancamentosFunc}
                   comissoesFuncionarios={comissoesFuncionarios}
                   mesSelecionado={mesSelecionado}
+                  tiposPersonalizados={tiposPersonalizados}
                 />
               )}
               {aba === 'meus-vales' && (
@@ -313,6 +329,7 @@ export default function EspelhoPortal() {
                   funcionario={funcionario}
                   lancamentosLimiteMes={lancamentosLimiteMes}
                   totalValesMes={totalValesMes}
+                  totalValesLimite={totalValesLimite}
                   mesSelecionado={mesSelecionado}
                   onVerComprovante={setComprovante}
                 />
@@ -324,6 +341,8 @@ export default function EspelhoPortal() {
                   mesSelecionado={mesSelecionado}
                   onVerComprovante={setComprovante}
                   receitasExtras={[]}
+                  tiposPersonalizados={tiposPersonalizados}
+                  comissaoMes={comissaoMes}
                 />
               )}
               {aba === 'comissoes' && (
@@ -331,6 +350,7 @@ export default function EspelhoPortal() {
                   funcionarioId={funcionario?.id}
                   funcionarioSetor={funcionario?.setor}
                   mesSelecionado={mesSelecionado}
+                  exibirResumoSetor={true}
                 />
               )}
               {aba === 'mensagens' && (

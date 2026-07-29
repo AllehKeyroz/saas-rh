@@ -88,12 +88,18 @@ export default function MiniDRE({
   const todosGastosVariaveis = gastosVariaveisLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0 }));
   const totalGastosVariaveis = todosGastosVariaveis.reduce((s, g) => s + g.valor, 0);
 
-  // Itens individuais das despesas fixas (apenas cadastros pessoais, sem descontos do RH)
+  // Itens individuais das despesas fixas (cadastros pessoais + consignado do RH)
+  const consignadoMes = lancamentosMes
+    .filter(l => l.tipo_lancamento === 'credito_consignado')
+    .reduce((s, l) => s + (l.valor || 0), 0);
   const itensFixos = [
     ...gastosFixosLista.map(g => ({ nome: g.categoria_nome, valor: g.valor || 0, tipo: 'gasto' })),
     ...assinaturasLista.map(a => ({ nome: a.nome, valor: a.valor || 0, tipo: 'assinatura' })),
     ...dividasLista.map(d => ({ nome: d.descricao || 'Dívida', valor: d.valor_parcela || 0, tipo: 'divida' })),
   ];
+  if (consignadoMes > 0) {
+    itensFixos.push({ nome: 'Consignado', valor: consignadoMes, tipo: 'desconto_rh' });
+  }
 
   const totalDespesasFixas = itensFixos.reduce((s, i) => s + i.valor, 0);
   const totalDespesas = totalDespesasFixas + totalInvestimentos + totalGastosVariaveis;

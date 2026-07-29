@@ -27,7 +27,7 @@ function AlertaMotivacional({ progresso, meta }) {
   );
 }
 
-export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSelecionado }) {
+export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSelecionado, exibirResumoSetor = false }) {
   const { isAtiva, isLoading: loadingRH } = useRHControl();
   const { logError } = useFinancialDataLogger('MinhasComissoes');
   const [mesExpandido, setMesExpandido] = useState(null);
@@ -95,7 +95,7 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSe
     <div className="space-y-6">
 
       {/* ─── RESUMO DO SETOR ─── */}
-      {funcionarioSetor && comissoesSetor.length > 0 && (
+      {exibirResumoSetor && funcionarioSetor && comissoesSetor.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <Users className="w-4 h-4" />

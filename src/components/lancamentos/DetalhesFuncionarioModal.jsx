@@ -22,7 +22,16 @@ export default function DetalhesFuncionarioModal({ open, onClose, funcionario, l
 
   const handleDelete = async (lanc) => {
     if (lanc.consolidado) return;
-    await client.entities.FichaFinanceira.delete(lanc.id);
+
+    // Se for parcela de um parcelamento (vale, consignado), deleta TODOS os registros relacionados
+    if (lanc.id_parcelamento) {
+      const todos = await client.entities.FichaFinanceira.list();
+      const relacionados = todos.filter(r => r.id_parcelamento === lanc.id_parcelamento);
+      await Promise.all(relacionados.map(r => client.entities.FichaFinanceira.delete(r.id)));
+    } else {
+      await client.entities.FichaFinanceira.delete(lanc.id);
+    }
+
     queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
   };
 
@@ -115,7 +124,11 @@ export default function DetalhesFuncionarioModal({ open, onClose, funcionario, l
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
-                            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+                            <AlertDialogDescription>
+                              {l.id_parcelamento
+                                ? `Este lançamento faz parte de um parcelamento. Todos os registros vinculados (recebimento à vista + parcelas) serão excluídos permanentemente.`
+                                : 'Esta ação não pode ser desfeita.'}
+                            </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>

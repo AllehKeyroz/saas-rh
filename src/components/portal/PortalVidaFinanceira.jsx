@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { DollarSign, TrendingDown, TrendingUp, Wallet, List, LayoutDashboard, Download, Tv, CreditCard, Target, Calculator, BookOpen, PiggyBank } from 'lucide-react';
-import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function StatCard({ icon: Icon, label, value, colorClass = 'text-foreground' }) {
   return (
@@ -217,21 +217,6 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
     { name: 'Receitas Extras', value: receitaExtra, color: TIPO_COLORS.receita_extra.chart },
   ].filter(d => d.value > 0);
 
-  const mesIdx = meses.indexOf(mesSelecionado);
-  const ultimos6 = meses.slice(Math.max(0, mesIdx - 5), mesIdx + 1).reverse();
-  const lineData = ultimos6.map(mes => {
-    const g = filtrarGastosPorMes(gastos, mes);
-    const r = calcularResumoMensal(g, salario);
-    const comMs = isAtiva('exibir_comissao_vida_financeira') ? calcularComissaoMensal(comissoesFuncionarios, funcionarioId, mes) : 0;
-    return {
-      mes: mes.substring(0, 5),
-      gastos: r.totalGastos,
-      saldo: r.saldoPessoal + comMs,
-      receitas_extras: isAtiva('receitas_extras_graficos') ? (r.receitaExtra || 0) : 0,
-      comissao: isAtiva('exibir_comissao_vida_financeira') ? comMs : 0,
-    };
-  });
-
   if (loadingRH) return null;
 
   const renderDashboard = () => (
@@ -268,26 +253,6 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
         <StatCard icon={Wallet} label="Saldo Pessoal" value={formatCurrency(saldoPessoal)} colorClass={saldoPessoal >= 0 ? 'text-green-600' : 'text-red-600'} />
       </div>
 
-      {lineData.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Evolução — Últimos meses</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={[...lineData].reverse()}>
-                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v) => formatCurrency(v)} />
-                <Legend />
-                <Line type="monotone" dataKey="gastos" stroke="#ef4444" name="Gastos" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="saldo" stroke="#22c55e" name="Saldo" strokeWidth={2} dot={false} />
-                {isAtiva('exibir_comissao_vida_financeira') && <Line type="monotone" dataKey="comissao" stroke="#f59e0b" name="Comissão" strokeWidth={2} dot={false} />}
-                {isAtiva('receitas_extras_graficos') && <Line type="monotone" dataKey="receitas_extras" stroke="#3b82f6" name="Receitas Extras" strokeWidth={2} dot={false} />}
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
       {pieData.length > 1 && (
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição dos Gastos</CardTitle></CardHeader>
@@ -312,7 +277,7 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
         gastosVariaveisLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'gasto_variavel')}
         investimentosLista={gastosMesCompletos.filter(g => g.categoria_tipo === 'investimento')}
         assinaturasLista={assinaturasAtivas}
-        dividasLista={dividasAtivas}
+        dividasLista={dividasAtivas.filter(d => d.tipo !== 'consignado')}
         lancamentosMes={lancamentosMes}
         tiposPersonalizados={tiposPersonalizados} />
 
@@ -363,10 +328,10 @@ export default function PortalVidaFinanceira({ funcionario, lancamentosFunc, com
       </nav>
 
       {tab === 'dashboard' && renderDashboard()}
-      {tab === 'gastos' && <MeusGastos funcionarioId={funcionarioId} />}
+      {tab === 'gastos' && <MeusGastos funcionarioId={funcionarioId} mesSelecionado={mesSelecionado} lancamentosMes={lancamentosMes} />}
       {tab === 'assinaturas' && <MinhasAssinaturas funcionarioId={funcionarioId} salarioBase={salario} />}
       {tab === 'dividas' && <MinhasDividas funcionarioId={funcionarioId} salarioBase={salario} />}
-      {tab === 'metas' && <MetasObjetivos funcionarioId={funcionarioId} />}
+      {tab === 'metas' && <MetasObjetivos funcionarioId={funcionarioId} mesSelecionado={mesSelecionado} />}
       {tab === 'simuladores' && <SimuladoresFinanceiros />}
       {tab === 'educacao' && <EducacaoFinanceira />}
     </div>

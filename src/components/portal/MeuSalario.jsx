@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, TrendingUp, Info, AlertTriangle, LineChart } from 'lucide-react';
+import { DollarSign, TrendingUp, Info, AlertTriangle } from 'lucide-react';
 import { formatCurrency, getMesReferenciaAtual, LIMITE_PERCENTUAL, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import ResumoSalarioCard from '@/components/vidafinanceira/ResumoSalarioCard';
 import LimiteProgressBar from '@/components/ui/LimiteProgressBar';
-import { LineChart as RechartLineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function StatRow({ label, value, colorClass = 'text-foreground', bold = false }) {
   return (
@@ -26,6 +25,9 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
        .map(t => t.nome);
      return [...padrao, ...custom];
    }, [tiposPersonalizados]);
+
+   // Apenas Vale e Vale Parcelado consomem o limite de 40%
+   const TIPOS_LIMITE_VALE = useMemo(() => ['vale', 'vale_parcelado'], []);
 
    const TIPOS_ADICIONAIS = useMemo(() => {
      const padrao = ['adicional', 'ajuste'];
@@ -162,19 +164,17 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
 
    const baseLimite = salarioBasePuro(mesSelecionado) + ajudaCustoMes(mesSelecionado);
    const limite40 = baseLimite ? baseLimite * 0.4 : null;
-   const percentualDesconto = limite40 ? (dadosMes.descontos / limite40) * 100 : null;
+   const descontosLimite = lancamentosFuncionario
+     .filter(l => {
+       if (!l.data_lancamento) return false;
+       const mr = getMesRef(l.data_lancamento);
+       return mr === mesSelecionado;
+     })
+     .filter(l => TIPOS_LIMITE_VALE.includes(l.tipo_lancamento) && !l.parcelado)
+     .reduce((s, l) => s + (l.valor || 0), 0);
+   const percentualDesconto = limite40 ? (descontosLimite / limite40) * 100 : null;
 
-   // Dados para gráfico de evolução salarial (passado → presente)
-   const lineData = [...mesesOpts].map(mes => {
-     const d = calcMes(mes);
-     return {
-       mes: mes.substring(0, 5),
-       comissao: d.comissao,
-       liquido: d.liquido,
-     };
-   });
-
-  return (
+   return (
     <div className="space-y-5">
       {/* Cards de salário médio e salário corrente */}
       {dadosMes.comissao > 0 || comissaoMesAnterior > 0 ? (
@@ -262,7 +262,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {mesesOpts.map(mes => {
+            {mesesOpts.slice(-3).map(mes => {
               const d = calcMes(mes);
               return (
                 <div key={mes} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${mes === mesSelecionado ? 'bg-primary/5 border border-primary/20' : 'bg-muted/40'}`}>
@@ -280,29 +280,6 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         </CardContent>
       </Card>
 
-      {/* Comissão evolutiva */}
-      {lineData.some(d => d.comissao > 0) && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <LineChart className="w-4 h-4 text-primary" />
-              Evolução Salarial
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <RechartLineChart data={lineData}>
-                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v) => formatCurrency(v)} />
-                <Legend />
-                <Line type="monotone" dataKey="comissao" stroke="#22c55e" name="Comissão" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="liquido" stroke="#2563eb" name="Sal. Líquido" strokeWidth={2} dot={false} />
-              </RechartLineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
       </div>
       );
 }

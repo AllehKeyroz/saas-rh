@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-export default function MeusGastos({ funcionarioId }) {
+export default function MeusGastos({ funcionarioId, lancamentosMes = [] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const mesAtual = getMesReferenciaAtual();
@@ -32,10 +32,25 @@ export default function MeusGastos({ funcionarioId }) {
   });
 
   const gastosMes = filtrarGastosPorMes(gastos, mesSelecionado);
-  const gastosFiltrados = filtroTipo === 'todos' ? gastosMes : gastosMes.filter(g => g.categoria_tipo === filtroTipo);
+
+  // Consignado (FichaFinanceira) — exibido como gasto fixo, sem editar/excluir
+  const consignadoItens = lancamentosMes
+    .filter(l => l.tipo_lancamento === 'credito_consignado')
+    .map(l => ({
+      id: l.id,
+      categoria_nome: 'Consignado',
+      categoria_tipo: 'gasto_fixo',
+      descricao: l.descricao || `Consignado — ${l.instituicao_financeira || ''}`.trim(),
+      valor: l.valor || 0,
+      data_lancamento: l.data_lancamento,
+      rhItem: true,
+    }));
+
+  const todosGastos = [...gastosMes, ...consignadoItens];
+  const gastosFiltrados = filtroTipo === 'todos' ? todosGastos : todosGastos.filter(g => g.categoria_tipo === filtroTipo);
 
   const totaisPorTipo = ['gasto_fixo', 'gasto_variavel', 'investimento', 'receita_extra'].reduce((acc, tipo) => {
-    acc[tipo] = gastosMes.filter(g => g.categoria_tipo === tipo).reduce((s, g) => s + (g.valor || 0), 0);
+    acc[tipo] = todosGastos.filter(g => g.categoria_tipo === tipo).reduce((s, g) => s + (g.valor || 0), 0);
     return acc;
   }, {});
 
@@ -99,30 +114,37 @@ export default function MeusGastos({ funcionarioId }) {
             <div className="space-y-1">
               {gastosFiltrados.slice().sort((a, b) => b.data_lancamento?.localeCompare(a.data_lancamento)).map(g => {
                 const c = TIPO_COLORS[g.categoria_tipo];
+                const isRH = g.rhItem;
                 return (
-                  <div key={g.id} className="flex items-center gap-2 py-2 border-b last:border-b-0">
+                  <div key={g.id} className={`flex items-center gap-2 py-2 border-b last:border-b-0 ${isRH ? 'bg-purple-50/30 -mx-3 px-3 rounded' : ''}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm truncate">{g.categoria_nome}</span>
-                        <Badge className={`${c.bg} ${c.text} border-0 text-xs`}>{TIPO_LABELS[g.categoria_tipo]}</Badge>
+                        {isRH ? (
+                          <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Consignado RH</Badge>
+                        ) : (
+                          <Badge className={`${c.bg} ${c.text} border-0 text-xs`}>{TIPO_LABELS[g.categoria_tipo]}</Badge>
+                        )}
                       </div>
                       {g.descricao && <p className="text-xs text-muted-foreground">{g.descricao}</p>}
                       <p className="text-xs text-muted-foreground">{formatDate(g.data_lancamento)}</p>
                     </div>
                     <span className={`font-bold text-sm ${c.text} shrink-0`}>{formatCurrency(g.valor)}</span>
-                    <div className="flex gap-1 shrink-0">
-                      {g.comprovante && (
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setComprovanteUrl(g.comprovante)}>
-                          <Eye className="w-3 h-3" />
+                    {!isRH && (
+                      <div className="flex gap-1 shrink-0">
+                        {g.comprovante && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setComprovanteUrl(g.comprovante)}>
+                            <Eye className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
+                          <Pencil className="w-3 h-3" />
                         </Button>
-                      )}
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(g.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(g.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

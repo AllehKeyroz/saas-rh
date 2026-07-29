@@ -107,6 +107,11 @@ export default function Fechamento() {
     queryFn: () => client.entities.Consignado.list(),
   });
 
+  const { data: dividasPessoais = [] } = useQuery({
+    queryKey: ['dividas-pessoais-fechamento'],
+    queryFn: () => client.entities.DividasPessoais.list(),
+  });
+
   const { data: configsRH = [] } = useQuery({
     queryKey: ['configuracoes-rh-fechamento'],
     queryFn: () => client.entities.ConfiguracoesRH.list(),
@@ -312,6 +317,19 @@ export default function Fechamento() {
         await client.entities.Consignado.update(c.id, {
           parcelas_pagas: novasPagas,
           ativo: !finalizado,
+        });
+      }
+
+      // Sync DividasPessoais consignado — mesma lógica de incremento
+      const dividasConsignado = dividasPessoais.filter(d =>
+        d.funcionario_id === func.id && d.tipo === 'consignado' && d.ativa && d.valor_parcela
+      );
+      for (const d of dividasConsignado) {
+        const novasPagas = (d.parcelas_pagas || 0) + 1;
+        const finalizado = novasPagas >= (d.parcelas_total || 99999);
+        await client.entities.DividasPessoais.update(d.id, {
+          parcelas_pagas: novasPagas,
+          ativa: !finalizado,
         });
       }
     }

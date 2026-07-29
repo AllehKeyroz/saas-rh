@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,18 +23,23 @@ function dateToMes(d) {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-export default function MeusGastos({ funcionarioId }) {
+export default function MeusGastos({ funcionarioId, mesSelecionado: mesPai, lancamentosMes = [] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { logError } = useFinancialDataLogger('MeusGastos');
   const mesAtual = getMesReferenciaAtual();
   const meses = getMesesOptions(12);
-  const [mesSelecionado, setMesSelecionado] = useState(mesAtual);
+  const [mesSelecionado, setMesSelecionado] = useState(mesPai || mesAtual);
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [formOpen, setFormOpen] = useState(false);
   const [editGasto, setEditGasto] = useState(null);
   const [comprovanteUrl, setComprovanteUrl] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Sincroniza com o filtro do pai quando ele muda
+  useEffect(() => {
+    if (mesPai) setMesSelecionado(mesPai);
+  }, [mesPai]);
 
   const { data: gastos = [], isLoading, error: gastosError } = useQuery({
     queryKey: ['gastos_pessoais', funcionarioId],
@@ -74,10 +79,25 @@ export default function MeusGastos({ funcionarioId }) {
   }, [gastos, mesSelecionado, gastosMesOriginais]);
 
   const gastosMes = [...gastosMesOriginais, ...gastosRecorrentesProjetados];
-  const gastosFiltrados = filtroTipo === 'todos' ? gastosMes : gastosMes.filter(g => g.categoria_tipo === filtroTipo);
+
+  // Consignado (FichaFinanceira) — exibido como gasto fixo, sem editar/excluir
+  const consignadoItens = lancamentosMes
+    .filter(l => l.tipo_lancamento === 'credito_consignado')
+    .map(l => ({
+      id: l.id,
+      categoria_nome: 'Consignado',
+      categoria_tipo: 'gasto_fixo',
+      descricao: l.descricao || `Consignado — ${l.instituicao_financeira || ''}`.trim(),
+      valor: l.valor || 0,
+      data_lancamento: l.data_lancamento,
+      rhItem: true,
+    }));
+
+  const todosGastos = [...gastosMes, ...consignadoItens];
+  const gastosFiltrados = filtroTipo === 'todos' ? todosGastos : todosGastos.filter(g => g.categoria_tipo === filtroTipo);
 
   const totaisPorTipo = ['gasto_fixo', 'gasto_variavel', 'investimento', 'receita_extra'].reduce((acc, tipo) => {
-    acc[tipo] = gastosMes.filter(g => g.categoria_tipo === tipo).reduce((s, g) => s + (g.valor || 0), 0);
+    acc[tipo] = todosGastos.filter(g => g.categoria_tipo === tipo).reduce((s, g) => s + (g.valor || 0), 0);
     return acc;
   }, {});
 
@@ -139,35 +159,42 @@ export default function MeusGastos({ funcionarioId }) {
               {gastosFiltrados.slice().sort((a, b) => b.data_lancamento?.localeCompare(a.data_lancamento)).map(g => {
                 const c = TIPO_COLORS[g.categoria_tipo];
                 const isProjetado = g.projetado;
+                const isRH = g.rhItem;
                 return (
-                  <div key={g.id} className={`flex items-center gap-2 py-2 border-b last:border-b-0 ${isProjetado ? 'opacity-70' : ''}`}>
+                  <div key={g.id} className={`flex items-center gap-2 py-2 border-b last:border-b-0 ${isProjetado ? 'opacity-70' : ''} ${isRH ? 'bg-purple-50/30 -mx-3 px-3 rounded' : ''}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm truncate">{g.categoria_nome}</span>
-                        <Badge className={`${c.bg} ${c.text} border-0 text-xs`}>{TIPO_LABELS[g.categoria_tipo]}</Badge>
+                        {isRH ? (
+                          <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Consignado RH</Badge>
+                        ) : (
+                          <Badge className={`${c.bg} ${c.text} border-0 text-xs`}>{TIPO_LABELS[g.categoria_tipo]}</Badge>
+                        )}
                         {isProjetado && <Badge variant="outline" className="text-xs border-blue-300 text-blue-600 flex items-center gap-1"><RotateCcw className="w-2.5 h-2.5" />Recorrente</Badge>}
                       </div>
                       {g.descricao && <p className="text-xs text-muted-foreground">{g.descricao}</p>}
                       <p className="text-xs text-muted-foreground">{formatDate(g.data_lancamento)}</p>
                     </div>
                     <span className={`font-bold text-sm ${c.text} shrink-0`}>{formatCurrency(g.valor)}</span>
-                    <div className="flex gap-1 shrink-0">
-                      {g.comprovante && (
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setComprovanteUrl(g.comprovante)}>
-                          <Eye className="w-3 h-3" />
-                        </Button>
-                      )}
-                      {!isProjetado && (
-                        <>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
-                            <Pencil className="w-3 h-3" />
+                    {!isRH && (
+                      <div className="flex gap-1 shrink-0">
+                        {g.comprovante && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setComprovanteUrl(g.comprovante)}>
+                            <Eye className="w-3 h-3" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(g.id)}>
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                        )}
+                        {!isProjetado && (
+                          <>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditGasto(g); setFormOpen(true); }}>
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(g.id)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

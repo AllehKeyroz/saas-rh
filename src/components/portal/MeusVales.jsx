@@ -15,11 +15,12 @@ const TIPO_LABELS = {
   credito_consignado: 'Crédito Consignado',
 };
 
-export default function MeusVales({ funcionario, lancamentosLimiteMes, totalValesMes, mesSelecionado, onVerComprovante }) {
+export default function MeusVales({ funcionario, lancamentosLimiteMes, totalValesMes, totalValesLimite, mesSelecionado, onVerComprovante }) {
   const perm = funcionario?.permissoes_portal || {};
   const limite = funcionario?.limite_vales || ((funcionario?.salario_base || 0) + (funcionario?.ajuda_custo || 0)) * (LIMITE_PERCENTUAL / 100);
-  const percentual = limite ? Math.min((totalValesMes / limite) * 100, 100) : null;
-  const disponivel = limite ? Math.max(limite - totalValesMes, 0) : null;
+  const valesLimite = totalValesLimite ?? totalValesMes;
+  const percentual = limite ? Math.min((valesLimite / limite) * 100, 100) : null;
+  const disponivel = limite ? Math.max(limite - valesLimite, 0) : null;
 
   if (!perm.ver_limite_vales && !perm.ver_extrato_vales) {
     return (
@@ -60,7 +61,7 @@ export default function MeusVales({ funcionario, lancamentosLimiteMes, totalVale
         </div>
         <div className="bg-card border rounded-xl p-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Utilizado</p>
-          <p className="font-bold text-sm text-destructive">{formatCurrency(totalValesMes)}</p>
+          <p className="font-bold text-sm text-destructive">{formatCurrency(valesLimite)}</p>
         </div>
         <div className="bg-card border rounded-xl p-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Disponível</p>
