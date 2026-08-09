@@ -42,6 +42,21 @@ async function processarAprovacaoPix(solicitacao) {
   });
 }
 
+// Ao aprovar uma solicitação de atestado médico, cria automaticamente o afastamento
+async function processarAprovacaoAtestado(solicitacao) {
+  if (solicitacao.tipo_solicitacao !== 'atestado') return;
+  await client.entities.Afastamento.create({
+    funcionario_id: solicitacao.funcionario_id,
+    tipo: 'atestado_medico',
+    data_inicio: solicitacao.periodo_inicio || solicitacao.data_solicitada || new Date().toISOString().split('T')[0],
+    data_fim: solicitacao.periodo_fim || null,
+    motivo: solicitacao.descricao || 'Atestado médico (via solicitação)',
+    anexos_urls: solicitacao.anexos_urls || [],
+    status: 'ativo',
+    origem: 'solicitacao',
+  });
+}
+
 // Exibe os anexos de uma solicitação
 function AnexosView({ solicitacao }) {
   const anexos = solicitacao.anexos_urls || [];
@@ -99,6 +114,7 @@ function ResponderModal({ solicitacao, onClose, onSaved, meUser }) {
 
     if (status === 'aprovado') {
       await processarAprovacaoPix(solicitacao);
+      await processarAprovacaoAtestado(solicitacao);
     }
 
     await registrarAuditoria({
@@ -217,6 +233,7 @@ function ResponderLoteModal({ selecionadas, solicitacoes, onClose, onSaved, meUs
       });
       if (status === 'aprovado') {
         await processarAprovacaoPix(s);
+        await processarAprovacaoAtestado(s);
       }
     }));
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
@@ -413,6 +430,7 @@ export default function Solicitacoes() {
     });
     if (novoStatus === 'aprovado') {
       await processarAprovacaoPix(s);
+      await processarAprovacaoAtestado(s);
     }
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
     queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
@@ -443,6 +461,7 @@ export default function Solicitacoes() {
     });
     if (novoStatus === 'aprovado') {
       await processarAprovacaoPix(s);
+      await processarAprovacaoAtestado(s);
     }
     queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
     queryClient.invalidateQueries({ queryKey: ['funcionarios'] });

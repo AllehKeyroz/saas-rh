@@ -87,5 +87,6 @@ service cloud.firestore {
     match /MetaFinanceira/{docId}      { allow read, write: if isAuthenticated(); }
     match /Consignado/{docId}           { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /HistoricoSalario/{docId}     { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); }
+    match /Afastamento/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
   }
 }

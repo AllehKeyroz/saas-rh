@@ -1,22 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/formatters';
-import { formatPeriodo, calcularDistribuicaoFuncionarios, mapearSetorDinamico } from '@/lib/comissoes';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { RefreshCw, Trash2, Users, Loader2, Edit2 } from 'lucide-react';
-import { client } from '@/api/client';
-import { toast } from 'sonner';
-import { registrarAuditoria } from '@/lib/audit';
-import HistoricoAlteracoesComissao from './HistoricoAlteracoesComissao';
-import CorrigirComissaoDialog from './CorrigirComissaoDialog';
+import { formatPeriodo } from '@/lib/comissoes';
+import { Users } from 'lucide-react';
 import DetalheComissaoTooltip from './DetalheComissaoTooltip';
+import HistoricoAlteracoesComissao from './HistoricoAlteracoesComissao';
 
-export default function DetalhesComissao({ comissao, comissoesFuncionarios, funcionarios, setoresComissao = [], onClose, onRefresh }) {
-  const [loading, setLoading] = useState(false);
-  const [corrigindoAberto, setCorrigindoAberto] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-
+export default function DetalhesComissao({ comissao, comissoesFuncionarios, setoresComissao = [], onClose }) {
   if (!comissao) return null;
 
   const registros = comissoesFuncionarios.filter(c => c.comissao_id === comissao.id);
@@ -32,124 +22,7 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
     else porSetor[sk].excluidos.push(r);
   });
 
-  const handleExcluir = async () => {
-    if (!deleteTarget) return;
-    setLoading(true);
-    try {
-      for (const r of registros) await client.entities.ComissaoPorFuncionario.delete(r.id);
-      await client.entities.ComissoesGorjetas.delete(comissao.id);
-      await registrarAuditoria({
-        acao: 'excluir', modulo: 'comissao',
-        descricao: `Comissão excluída: ${comissao.periodo_inicio} a ${comissao.periodo_fim} — ${formatCurrency(comissao.valor_total_periodo)}`,
-        dados_anteriores: { valor_total: comissao.valor_total_periodo },
-      });
-      toast.success('Comissão excluída com sucesso');
-      onClose();
-      onRefresh();
-      } catch (e) {
-      toast.error(`Erro ao excluir: ${e.message}`);
-      } finally {
-      setLoading(false);
-      setDeleteTarget(null);
-      }
-      };
-
-  const handleRecalcular = async () => {
-    if (!funcionarios || funcionarios.length === 0) return;
-    setLoading(true);
-    try {
-      // Deletar registros existentes
-      for (const r of registros) await client.entities.ComissaoPorFuncionario.delete(r.id);
-
-      const total = comissao.valor_total_periodo || 0;
-      const pctRetencao = Number(comissao.percentual_retencao || 0);
-      const valorDistribuir = total * (1 - pctRetencao / 100);
-
-      const setoresAtivos = (setoresComissao || []).filter(s => s.ativo !== false);
-      const setoresGrupos = {};
-      for (const s of setoresAtivos) setoresGrupos[s.nome_do_setor] = [];
-      setoresGrupos.outros = [];
-
-      // Mapeia funcionários para seus respectivos setores dinâmicos
-      funcionarios.filter(f => f.ativo !== false).forEach(f => {
-        const sid = mapearSetorDinamico(f.setor, setoresAtivos);
-        const nomeSetor = sid
-          ? (setoresAtivos.find(s => s.id === sid)?.nome_do_setor || 'outros')
-          : 'outros';
-        if (setoresGrupos[nomeSetor]) setoresGrupos[nomeSetor].push(f);
-        else setoresGrupos.outros.push(f);
-      });
-
-      // Soma percentuais para distribuir proporcionalmente
-      const somaPct = setoresAtivos.reduce((s, set) => s + Number(set.percentual || 0), 0);
-      const normPct = somaPct > 0 ? somaPct : 1;
-
-      const novosRegistros = [];
-      const periodoBase = comissao.periodo_inicio || '';
-      const periodoFim = comissao.periodo_fim || '';
-      const mesRef = comissao.mes_referencia || '';
-
-      for (const [setor, funcs] of Object.entries(setoresGrupos)) {
-        if (funcs.length === 0) continue;
-        const setorCfg = setoresAtivos.find(s => s.nome_do_setor === setor);
-        const pct = setor === 'outros' ? 0 : Number(setorCfg?.percentual || 0) / normPct;
-        const vs = valorDistribuir * pct;
-
-        // Monta o mapa de ausências dos funcionários baseado em suas faltas registradas no período
-        const mapDias = {};
-        funcs.forEach(f => {
-          mapDias[f.id] = f.faltas_no_periodo || 0;
-        });
-
-        // Calcula a distribuição proporcional com redistribuição para os presentes
-        const resultados = calcularDistribuicaoFuncionarios(
-          vs, funcs, mapDias, periodoBase, periodoFim
-        );
-
-        for (const r of resultados) {
-          novosRegistros.push({
-            funcionario_id: r.funcionarioId,
-            funcionario_nome: r.funcionarioNome,
-            comissao_id: comissao.id,
-            setor,
-            periodo_inicio: periodoBase,
-            periodo_fim: periodoFim,
-            mes_referencia: mesRef,
-            valor_setor: vs,
-            valor_individual: r.valorFinal,
-            valor_individual_cheio: r.valorBase,
-            valor_individual_final: r.valorFinal,
-            perda_faltas_proprias: r.loss,
-            bonus_faltas_terceiros: r.bonus,
-            dias_ausentes_no_periodo: r.diasAusentes,
-            dias_trabalhados: r.diasTrabalhados,
-            dias_totais: r.diasTotais,
-            proporcao: r.proporcao,
-            apto: true,
-          });
-        }
-      }
-
-      if (novosRegistros.length > 0) {
-        await client.entities.ComissaoPorFuncionario.bulkCreate(novosRegistros);
-      }
-
-      await registrarAuditoria({
-        acao: 'editar', modulo: 'comissao',
-        descricao: `Comissão recalculada com nova lógica de faltas: ${comissao.periodo_inicio} a ${comissao.periodo_fim}`,
-      });
-      toast.success('Comissão recalculada com sucesso!');
-      onClose();
-      onRefresh();
-    } catch (e) {
-      toast.error(`Erro ao recalcular: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <>
     <Dialog open={!!comissao} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -207,45 +80,10 @@ export default function DetalhesComissao({ comissao, comissoesFuncionarios, func
 
           {comissao.observacao && <p className="text-sm text-muted-foreground italic">"{comissao.observacao}"</p>}
 
-          {/* Histórico de alterações */}
           <HistoricoAlteracoesComissao comissaoId={comissao.id} />
-
-          <div className="flex gap-3 pt-2">
-           <Button onClick={() => setCorrigindoAberto(true)} variant="secondary">
-             <Edit2 className="w-4 h-4 mr-2" />Corrigir Valores
-           </Button>
-           <Button variant="outline" onClick={handleRecalcular} disabled={loading}>
-             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}Recalcular
-           </Button>
-           <Button variant="destructive" onClick={() => setDeleteTarget(true)} disabled={loading}>
-             <Trash2 className="w-4 h-4 mr-2" />Excluir Comissão
-           </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
-
-    <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Excluir comissão?</AlertDialogTitle>
-          <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={handleExcluir}>Excluir</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-
-    <CorrigirComissaoDialog
-      aberto={corrigindoAberto}
-      comissao={comissao}
-      setoresComissao={setoresComissao}
-      onClose={() => setCorrigindoAberto(false)}
-      onRefresh={onRefresh}
-    />
-    </>
   );
 }
 

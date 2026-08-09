@@ -7,16 +7,18 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Pencil, User, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Clock, Users as UsersIcon, AlertCircle, Trash2, Send } from 'lucide-react';
+import { Plus, Search, Pencil, User, Building2, FolderOpen, ArrowUpDown, Upload, ShieldCheck, Calendar, FileText, Users as UsersIcon, AlertCircle, Trash2, Send, UserMinus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
+import { isAfastamentoAtivo, getHojeISO } from '@/lib/afastamento';
 import FuncionarioForm from '@/components/funcionarios/FuncionarioForm';
 import PastaDocumentos from '@/components/funcionarios/PastaDocumentos';
 import ImportarFuncionarios from '@/components/importacao/ImportarFuncionarios';
 import PermissoesPortalDialog from '@/components/funcionarios/PermissoesPortalDialog';
 import DocumentosFuncionarioTab from '@/components/funcionarios/DocumentosFuncionarioTab';
 import FeriasBancoHorasTab from '@/components/funcionarios/FeriasBancoHorasTab';
+import AfastamentoTab from '@/components/funcionarios/AfastamentoTab';
 import AdvertenciaForm from '@/components/advertencias/AdvertenciaForm';
 import { criarOuReenviarConvite } from '@/lib/convites';
 import ReenviarAcessoModal from '@/components/funcionarios/ReenviarAcessoModal';
@@ -25,10 +27,11 @@ const ABAS = [
   { id: 'cadastro', label: 'Cadastro', icon: UsersIcon },
   { id: 'documentos', label: 'Documentos', icon: FileText },
   { id: 'ferias', label: 'Férias e BH', icon: Calendar },
+  { id: 'afastamentos', label: 'Afastamentos', icon: UserMinus },
   { id: 'advertencias', label: 'Advertências', icon: AlertCircle },
 ];
 
-function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta, onPermissoes, onReenviarConvite }) {
+function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta, onPermissoes, onReenviarConvite, afastadosSet }) {
   const navigate = useNavigate();
   if (isLoading) return <div className="space-y-2">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>;
   if (list.length === 0) return <div className="text-center py-16 text-muted-foreground">{emptyMsg}</div>;
@@ -61,6 +64,9 @@ function FuncionarioTable({ list, isLoading, emptyMsg, canEdit, onEdit, onPasta,
               <td className="py-2 px-4">
                 <span className="font-medium cursor-pointer hover:text-primary transition-colors" onClick={() => navigate(`/funcionarios/${func.id}/360`)}>{func.nome}</span>
                 {func.funcao && <span className="block text-xs text-muted-foreground">{func.funcao}</span>}
+                {afastadosSet?.has(func.id) && (
+                  <Badge className="mt-1 bg-red-100 text-red-700 border-0 text-xs">Em afastamento</Badge>
+                )}
               </td>
               <td className="py-2 px-4 text-muted-foreground hidden md:table-cell">{func.setor || '—'}</td>
               <td className="py-2 px-4 text-muted-foreground hidden lg:table-cell">{func.data_admissao ? formatDate(func.data_admissao) : '—'}</td>
@@ -234,6 +240,16 @@ export default function Funcionarios() {
     queryFn: () => client.entities.Funcionarios.list(),
   });
 
+  const { data: afastamentos = [] } = useQuery({
+    queryKey: ['afastamentos'],
+    queryFn: () => client.entities.Afastamento.list(),
+  });
+
+  const afastadosSet = useMemo(() => {
+    const hoje = getHojeISO();
+    return new Set(afastamentos.filter(a => isAfastamentoAtivo(a, hoje)).map(a => a.funcionario_id));
+  }, [afastamentos]);
+
   const canEdit = true;
   const handleSaved = () => queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
   const handleReenviarConvite = async (func) => {
@@ -304,10 +320,10 @@ export default function Funcionarios() {
               <TabsTrigger value="inativos">Inativos <Badge className="ml-2 bg-gray-100 text-gray-600 text-xs">{inativosL.length}</Badge></TabsTrigger>
             </TabsList>
             <TabsContent value="ativos" className="mt-4">
-              <FuncionarioTable list={ativos} isLoading={isLoading} emptyMsg="Nenhum funcionário ativo encontrado" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} onReenviarConvite={handleReenviarConvite} />
+              <FuncionarioTable list={ativos} isLoading={isLoading} emptyMsg="Nenhum funcionário ativo encontrado" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} onReenviarConvite={handleReenviarConvite} afastadosSet={afastadosSet} />
             </TabsContent>
             <TabsContent value="inativos" className="mt-4">
-              <FuncionarioTable list={inativosL} isLoading={isLoading} emptyMsg="Nenhum funcionário inativo" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} onReenviarConvite={handleReenviarConvite} />
+              <FuncionarioTable list={inativosL} isLoading={isLoading} emptyMsg="Nenhum funcionário inativo" canEdit={canEdit} onEdit={(f) => { setEditing(f); setFormOpen(true); }} onPasta={setPastaFunc} onPermissoes={setPermissoesFunc} onReenviarConvite={handleReenviarConvite} afastadosSet={afastadosSet} />
             </TabsContent>
           </Tabs>
         </TabsContent>
@@ -320,6 +336,11 @@ export default function Funcionarios() {
         {/* Aba: Férias e Banco de Horas */}
         <TabsContent value="ferias" className="mt-6">
           <FeriasBancoHorasTab funcionarios={funcionarios} />
+        </TabsContent>
+
+        {/* Aba: Afastamentos */}
+        <TabsContent value="afastamentos" className="mt-6">
+          <AfastamentoTab funcionarios={funcionarios} />
         </TabsContent>
 
         {/* Aba: Advertências */}

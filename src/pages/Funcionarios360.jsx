@@ -1,18 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Download } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, Calendar, DollarSign, HelpCircle, Umbrella } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatCurrency, formatDate } from '@/lib/formatters';
+import { getTipoAfastamento, getHojeISO, isAfastamentoAtivo } from '@/lib/afastamento';
 
 import Dashboard360 from '@/components/funcionarios360/Dashboard360';
 import DadosPessoais360 from '@/components/funcionarios360/DadosPessoais360';
 import Documentos360 from '@/components/funcionarios360/Documentos360';
 import HistoricoPagamentos360 from '@/components/funcionarios360/HistoricoPagamentos360';
 import CargoSalario360 from '@/components/funcionarios360/CargoSalario360';
+import Afastamento360 from '@/components/funcionarios360/Afastamento360';
+import AfastamentoFormModal from '@/components/funcionarios/AfastamentoFormModal';
 import {
   ValesAdiantamentos360,
   DescontosConsignados360,
@@ -26,6 +31,24 @@ import {
   Auditoria360,
   AnexosGerais360
 } from '@/components/funcionarios360/stub-components';
+
+function getSituacaoFerias(ferias) {
+  if (!ferias || ferias.length === 0) return null;
+  const hoje = new Date();
+  const ativas = ferias.filter(f => {
+    if (!f.data_inicio || !f.data_fim) return false;
+    const inicio = new Date(f.data_inicio + 'T12:00:00');
+    const fim = new Date(f.data_fim + 'T12:00:00');
+    return inicio <= hoje && fim >= hoje;
+  });
+  if (ativas.length > 0) return { tipo: 'em_ferias', label: 'Em férias', data: ativas[0] };
+  const futuras = ferias.filter(f => {
+    if (!f.data_inicio) return false;
+    return new Date(f.data_inicio + 'T12:00:00') > hoje;
+  }).sort((a, b) => new Date(a.data_inicio) - new Date(b.data_inicio));
+  if (futuras.length > 0) return { tipo: 'programada', label: 'Férias programadas', data: futuras[0] };
+  return { tipo: 'sem_ferias', label: 'Sem férias ativas' };
+}
 
 export default function Funcionarios360() {
   const { funcId } = useParams();
@@ -67,10 +90,24 @@ export default function Funcionarios360() {
     queryFn: () => funcId ? client.entities.FechamentoMensal.filter({ funcionario_id: funcId }) : [],
   });
 
+  const { data: ferias = [] } = useQuery({
+    queryKey: ['ferias360', funcId],
+    queryFn: () => funcId ? client.entities.Ferias.filter({ funcionario_id: funcId }) : [],
+    enabled: !!funcId,
+  });
+
+  const { data: afastamentos = [] } = useQuery({
+    queryKey: ['afastamentos_360', funcId],
+    queryFn: () => funcId ? client.entities.Afastamento.filter({ funcionario_id: funcId }) : [],
+    enabled: !!funcId,
+  });
+
+  const [registrarAfastamentoOpen, setRegistrarAfastamentoOpen] = useState(false);
+
   if (isLoading) {
     return (
-      <div className="space-y-6 p-6">
-        <Skeleton className="h-20 w-full" />
+      <div className="space-y-6">
+        <Skeleton className="h-48 w-full" />
         <Skeleton className="h-96 w-full" />
       </div>
     );
@@ -84,20 +121,101 @@ export default function Funcionarios360() {
     );
   }
 
+  const situacaoFerias = getSituacaoFerias(ferias);
+  const afastamentoAtivo = afastamentos.find(a => isAfastamentoAtivo(a, getHojeISO())) || null;
+  const afastamentoCfg = afastamentoAtivo ? getTipoAfastamento(afastamentoAtivo.tipo) : null;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/funcionarios')}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Visão 360° do Funcionário</h1>
-            <p className="text-muted-foreground mt-1">{funcionario.nome}</p>
-          </div>
-        </div>
+      {/* Back button */}
+      <div>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/funcionarios')}>
+          <ArrowLeft className="w-4 h-4 mr-1.5" />
+          Voltar
+        </Button>
       </div>
+
+      {/* Header: Foto + Informações */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex flex-col sm:flex-row">
+            {/* Foto — lado esquerdo (1/3 da largura) */}
+            <div className="w-full sm:w-1/3 shrink-0 bg-muted flex items-center justify-center">
+              {funcionario.foto ? (
+                <img
+                  src={funcionario.foto}
+                  alt={funcionario.nome}
+                  className="w-full h-72 sm:h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-72 sm:min-h-[280px] flex items-center justify-center text-muted-foreground text-sm">
+                  Sem foto
+                </div>
+              )}
+            </div>
+
+            {/* Informações — lado direito (vertical) */}
+            <div className="flex-1 p-6 flex flex-col gap-5">
+              {/* Nome + Status */}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold">{funcionario.nome}</h1>
+                  <p className="text-base text-muted-foreground mt-0.5">{funcionario.funcao || ''}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5">
+                  {afastamentoAtivo ? (
+                    <Badge className="bg-red-100 text-red-700 border-0">
+                      Em afastamento{afastamentoCfg ? ` — ${afastamentoCfg.label}` : ''}
+                    </Badge>
+                  ) : (
+                    <Badge variant={funcionario.ativo !== false ? 'default' : 'destructive'}>
+                      {funcionario.ativo !== false ? 'Ativo' : 'Inativo'}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Info cards — Lista vertical simples */}
+              <div className="flex flex-col gap-4">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Admissão
+                  </div>
+                  <p className="text-sm font-semibold">{funcionario.data_admissao ? formatDate(funcionario.data_admissao) : '-'}</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    Salário Base
+                  </div>
+                  <p className="text-sm font-semibold">{formatCurrency(funcionario.salario_base || 0)}</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    Ajuda de Custo
+                  </div>
+                  <p className="text-sm font-semibold">{formatCurrency(funcionario.ajuda_custo || 0)}</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                    <Umbrella className="w-3.5 h-3.5" />
+                    Situação de Férias
+                  </div>
+                  <p className="text-sm font-semibold">
+                    {situacaoFerias ? (
+                      <span className={situacaoFerias.tipo === 'em_ferias' ? 'text-amber-600' : ''}>
+                        {situacaoFerias.label}
+                      </span>
+                    ) : '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Dashboard de Indicadores */}
       <Dashboard360 
@@ -123,6 +241,7 @@ export default function Funcionarios360() {
           <TabsTrigger value="solicitacoes">Solicitações</TabsTrigger>
           <TabsTrigger value="advertencias">Advertências</TabsTrigger>
           <TabsTrigger value="ferias">Férias</TabsTrigger>
+          <TabsTrigger value="afastamentos">Afastamentos</TabsTrigger>
           <TabsTrigger value="bancohoras">Banco de Horas</TabsTrigger>
           <TabsTrigger value="desempenho">Desempenho</TabsTrigger>
           <TabsTrigger value="cargo-salario">Cargo & Salário</TabsTrigger>
@@ -140,7 +259,7 @@ export default function Funcionarios360() {
         </TabsContent>
 
         <TabsContent value="pagamentos" className="mt-6">
-          <HistoricoPagamentos360 funcionario={funcionario} fechamentos={fechamentos} lancamentos={lancamentos} />
+          <HistoricoPagamentos360 funcionario={funcionario} fechamentos={fechamentos} lancamentos={lancamentos} comissoes={comissoes} />
         </TabsContent>
 
         <TabsContent value="vales" className="mt-6">
@@ -165,6 +284,10 @@ export default function Funcionarios360() {
 
         <TabsContent value="ferias" className="mt-6">
           <Ferias360 funcionario={funcionario} />
+        </TabsContent>
+
+        <TabsContent value="afastamentos" className="mt-6">
+          <Afastamento360 funcionario={funcionario} onRegistrar={() => setRegistrarAfastamentoOpen(true)} />
         </TabsContent>
 
         <TabsContent value="bancohoras" className="mt-6">
@@ -198,6 +321,13 @@ export default function Funcionarios360() {
           <AnexosGerais360 funcionario={funcionario} />
         </TabsContent>
       </Tabs>
+
+      <AfastamentoFormModal
+        open={registrarAfastamentoOpen}
+        onClose={() => setRegistrarAfastamentoOpen(false)}
+        funcionarios={funcionario ? [funcionario] : []}
+        selectedFunc={funcionario}
+      />
     </div>
   );
 }

@@ -10,9 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Pencil, X, Save, Clock, DollarSign, Briefcase, Building2, HelpCircle, AlertTriangle, Info } from 'lucide-react';
+import { Pencil, Save, X, Clock, DollarSign, Briefcase, Building2, HelpCircle, AlertTriangle, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 function getHojeStr() {
@@ -81,7 +81,7 @@ export default function CargoSalario360({ funcionario }) {
     });
   }, [historico]);
 
-  function iniciarEdicao() {
+  function abrirEdicao() {
     setForm({
       funcao: funcionario.funcao || '',
       setor: funcionario.setor || '',
@@ -93,7 +93,7 @@ export default function CargoSalario360({ funcionario }) {
     setEditando(true);
   }
 
-  function cancelarEdicao() {
+  function fecharEdicao() {
     setEditando(false);
     setForm(null);
   }
@@ -136,7 +136,6 @@ export default function CargoSalario360({ funcionario }) {
     try {
       const tenantId = getCurrentTenantId();
 
-      // 1. Atualiza o funcionário
       await client.entities.Funcionarios.update(funcionario.id, {
         funcao: funcaoNova,
         setor: setorNovo,
@@ -144,7 +143,6 @@ export default function CargoSalario360({ funcionario }) {
         ajuda_custo: ajudaNova,
       });
 
-      // 2. Registra histórico de alteração
       await client.entities.HistoricoSalario.create({
         funcionario_id: funcionario.id,
         funcao_anterior: funcaoAntiga || null,
@@ -160,7 +158,6 @@ export default function CargoSalario360({ funcionario }) {
         tenant_id: tenantId || '',
       });
 
-      // 3. Auditoria
       const descricaoParts = [];
       if (funcaoMudou) descricaoParts.push(`função: "${funcaoAntiga}" → "${funcaoNova}"`);
       if (setorMudou) descricaoParts.push(`setor: "${setorAntigo}" → "${setorNovo}"`);
@@ -181,13 +178,11 @@ export default function CargoSalario360({ funcionario }) {
         },
       });
 
-      // 4. Invalida queries
       queryClient.invalidateQueries({ queryKey: ['funcionario360', funcionario.id] });
       queryClient.invalidateQueries({ queryKey: ['historico_salario', funcionario.id] });
 
       toast.success('Cargo e salário atualizados com sucesso!');
-      setEditando(false);
-      setForm(null);
+      fecharEdicao();
     } catch (err) {
       toast.error(err?.message || 'Erro ao salvar alterações');
     } finally {
@@ -203,134 +198,139 @@ export default function CargoSalario360({ funcionario }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Cargo & Salário — Situação Atual</CardTitle>
-          {!editando && (
-            <Button variant="outline" size="sm" onClick={iniciarEdicao}>
-              <Pencil className="w-3.5 h-3.5 mr-1.5" />
-              Editar
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={abrirEdicao}>
+            <Pencil className="w-3.5 h-3.5 mr-1.5" />
+            Editar
+          </Button>
         </CardHeader>
         <CardContent>
-          {editando ? (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Função</Label>
-                  {opcoesFuncoes.length > 0 ? (
-                    <Select value={form.funcao} onValueChange={v => handleChange('funcao', v)}>
-                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                      <SelectContent>
-                        {opcoesFuncoes.map(nome => (
-                          <SelectItem key={nome} value={nome}>{nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input value={form.funcao} onChange={e => handleChange('funcao', e.target.value)} placeholder="Ex: Operador" />
-                  )}
-                </div>
-                <div>
-                  <Label>Setor</Label>
-                  {opcoesSetores.length > 0 ? (
-                    <Select value={form.setor} onValueChange={v => handleChange('setor', v)}>
-                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                      <SelectContent>
-                        {opcoesSetores.map(nome => (
-                          <SelectItem key={nome} value={nome}>{nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input value={form.setor} onChange={e => handleChange('setor', e.target.value)} placeholder="Ex: Produção" />
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Novo Salário Base *</Label>
-                  <Input type="number" step="0.01" min="0" value={form.salario_base} onChange={e => handleChange('salario_base', e.target.value)} placeholder="0,00" required />
-                </div>
-                <div>
-                  <Label>Nova Ajuda de Custo</Label>
-                  <Input type="number" step="0.01" min="0" value={form.ajuda_custo} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Data da Alteração</Label>
-                  <Input type="date" value={form.data_alteracao} onChange={e => handleChange('data_alteracao', e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <Label>Motivo do Reajuste *</Label>
-                <Textarea value={form.motivo_reajuste} onChange={e => handleChange('motivo_reajuste', e.target.value)} placeholder="Ex: Aumento salarial por mérito, promoção de cargo, reajuste coletivo..." rows={3} />
-              </div>
-
-              {mesFechado ? (
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800">
-                    <p className="font-medium">Mês já fechado</p>
-                    <p className="mt-1">O fechamento de <strong>{mesAtual}</strong> já foi processado para este funcionário. O novo salário valerá apenas a partir do <strong>próximo fechamento</strong>.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium">Mês em aberto</p>
-                    <p className="mt-1">O fechamento de <strong>{mesAtual}</strong> ainda não foi processado. O novo salário será considerado no fechamento deste mês.</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-2">
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving ? (
-                    <>Salvando...</>
-                  ) : (
-                    <><Save className="w-3.5 h-3.5 mr-1.5" />Salvar Alterações</>
-                  )}
-                </Button>
-                <Button variant="ghost" onClick={cancelarEdicao} disabled={saving}>
-                  <X className="w-3.5 h-3.5 mr-1.5" />
-                  Cancelar
-                </Button>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Briefcase className="w-3 h-3" /> Função
+              </label>
+              <p className="text-sm font-medium mt-1">{funcionario.funcao || '-'}</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <Briefcase className="w-3 h-3" /> Função
-                </label>
-                <p className="text-sm font-medium mt-1">{funcionario.funcao || '-'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <Building2 className="w-3 h-3" /> Setor
-                </label>
-                <p className="text-sm font-medium mt-1">{funcionario.setor || '-'}</p>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <DollarSign className="w-3 h-3" /> Salário Base
-                </label>
-                <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.salario_base || 0)}</p>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <HelpCircle className="w-3 h-3" /> Ajuda de Custo
-                </label>
-                <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.ajuda_custo || 0)}</p>
-              </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Building2 className="w-3 h-3" /> Setor
+              </label>
+              <p className="text-sm font-medium mt-1">{funcionario.setor || '-'}</p>
             </div>
-          )}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <DollarSign className="w-3 h-3" /> Salário Base
+              </label>
+              <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.salario_base || 0)}</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <HelpCircle className="w-3 h-3" /> Ajuda de Custo
+              </label>
+              <p className="text-sm font-medium mt-1">{formatCurrency(funcionario.ajuda_custo || 0)}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Modal de Edição */}
+      <Dialog open={editando} onOpenChange={open => { if (!open) fecharEdicao(); }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Editar Cargo & Salário</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Função</Label>
+                {opcoesFuncoes.length > 0 ? (
+                  <Select value={form?.funcao || ''} onValueChange={v => handleChange('funcao', v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {opcoesFuncoes.map(nome => (
+                        <SelectItem key={nome} value={nome}>{nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={form?.funcao || ''} onChange={e => handleChange('funcao', e.target.value)} placeholder="Ex: Operador" />
+                )}
+              </div>
+              <div>
+                <Label>Setor</Label>
+                {opcoesSetores.length > 0 ? (
+                  <Select value={form?.setor || ''} onValueChange={v => handleChange('setor', v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {opcoesSetores.map(nome => (
+                        <SelectItem key={nome} value={nome}>{nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={form?.setor || ''} onChange={e => handleChange('setor', e.target.value)} placeholder="Ex: Produção" />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Novo Salário Base *</Label>
+                <Input type="number" step="0.01" min="0" value={form?.salario_base || ''} onChange={e => handleChange('salario_base', e.target.value)} placeholder="0,00" required />
+              </div>
+              <div>
+                <Label>Nova Ajuda de Custo</Label>
+                <Input type="number" step="0.01" min="0" value={form?.ajuda_custo || ''} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Data da Alteração</Label>
+                <Input type="date" value={form?.data_alteracao || hojeStr} onChange={e => handleChange('data_alteracao', e.target.value)} />
+              </div>
+            </div>
+
+            <div>
+              <Label>Motivo do Reajuste *</Label>
+              <Textarea value={form?.motivo_reajuste || ''} onChange={e => handleChange('motivo_reajuste', e.target.value)} placeholder="Ex: Aumento salarial por mérito, promoção de cargo, reajuste coletivo..." rows={3} />
+            </div>
+
+            {mesFechado ? (
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-800">
+                  <p className="font-medium">Mês já fechado</p>
+                  <p className="mt-1">O fechamento de <strong>{mesAtual}</strong> já foi processado para este funcionário. O novo salário valerá apenas a partir do <strong>próximo fechamento</strong>.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium">Mês em aberto</p>
+                  <p className="mt-1">O fechamento de <strong>{mesAtual}</strong> ainda não foi processado. O novo salário será considerado no fechamento deste mês.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t">
+            <Button variant="ghost" onClick={fecharEdicao} disabled={saving}>
+              <X className="w-3.5 h-3.5 mr-1.5" />
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>Salvando...</>
+              ) : (
+                <><Save className="w-3.5 h-3.5 mr-1.5" />Salvar Alterações</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Card: Histórico de Alterações */}
       <Card>

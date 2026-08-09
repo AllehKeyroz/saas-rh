@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { formatCurrency, getMesReferenciaAtual } from '@/lib/formatters';
+import { formatCurrency, formatDate, getMesReferenciaAtual } from '@/lib/formatters';
 import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus } from 'lucide-react';
 import { toast } from 'sonner';
-import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios } from '@/lib/comissoes';
+import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios, calcularDiasSobrepostos, sobrepoeAfastamento } from '@/lib/comissoes';
 import { registrarAuditoria } from '@/lib/audit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRHControl } from '@/lib/rhControl';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import DetalheComissaoTooltip from './DetalheComissaoTooltip';
 
 function getMesFromDatas(inicio) {
@@ -32,12 +33,19 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   const [retencao, setRetencao] = useState('0');
   // diasAusentes por funcionário: { [funcId]: número }
   const [diasAusentesPorFunc, setDiasAusentesPorFunc] = useState({});
+  // decisão de rateio por funcionário com afastamento no período: { [funcId]: 'recebe' | 'nao_recebe' }
+  const [decisoesAfast, setDecisoesAfast] = useState({});
 
   const mesRef = getMesFromDatas(periodoInicio);
 
   const { data: setoresDB = [], isLoading: loadingSetores } = useQuery({
     queryKey: ['setores_comissao'],
     queryFn: () => client.entities.SetoresComissao.list('ordem_exibicao', 50),
+  });
+
+  const { data: afastamentos = [] } = useQuery({
+    queryKey: ['afastamentos_comissao'],
+    queryFn: () => client.entities.Afastamento.list(),
   });
 
   // Carrega retenção padrão da configuração
@@ -166,10 +174,61 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   const setoresSemAptosComFuncs = Object.entries(distribuicao).filter(([sid, v]) => v.semAptos && (porSetor[sid]?.length || 0) > 0 && sid !== '__outros');
   const outrosFuncs = aptoPorSetor['__outros']?.aptos || [];
 
-  // Preview em tempo real com redistribuição pelas ausências (modelo de bônus para presentes)
+  // Funcionários aptos com afastamento que sobrepõe o período da comissão
+  const afastamentosNoPeriodo = useMemo(() => {
+    if (!calculado || !periodoInicio || !periodoFim) return {};
+    const mapa = {};
+    for (const [sid, { aptos }] of Object.entries(distribuicao)) {
+      for (const f of aptos) {
+        const afs = (afastamentos || []).filter(a => a.funcionario_id === f.id && sobrepoeAfastamento(a, periodoInicio, periodoFim));
+        if (afs.length === 0) continue;
+        const totalDias = afs.reduce((s, a) => s + calcularDiasSobrepostos(a.data_inicio, a.data_fim, periodoInicio, periodoFim), 0);
+        mapa[f.id] = {
+          funcionario: f,
+          afastamentos: afs,
+          totalDias,
+        };
+      }
+    }
+    return mapa;
+  }, [calculado, periodoInicio, periodoFim, distribuicao, afastamentos]);
+
+  // Distribuição efetiva: exclui quem "não recebe" o rateio por afastamento
+  const distribuicaoEfetiva = useMemo(() => {
+    if (Object.keys(afastamentosNoPeriodo).length === 0) return distribuicao;
+
+    const result = {};
+    let totalComAptos = 0;
+    let totalSemAptos = 0;
+
+    for (const [setorId, data] of Object.entries(distribuicao)) {
+      const aptosEfetivos = data.aptos.filter(f => decisoesAfast[f.id] !== 'nao_recebe');
+      const excluidos = [...(data.excluidos || []), ...data.aptos.filter(f => decisoesAfast[f.id] === 'nao_recebe')];
+      const semAptos = aptosEfetivos.length === 0;
+      if (setorId !== '__outros') {
+        if (semAptos) totalSemAptos += data.valorSetor;
+        else totalComAptos += data.valorSetor;
+      }
+      result[setorId] = { ...data, aptos: aptosEfetivos, excluidos, semAptos };
+    }
+
+    // Redistribui valor de setores que ficaram sem aptos efetivos
+    for (const [setorId, data] of Object.entries(result)) {
+      if (setorId === '__outros') continue;
+      if (data.semAptos) {
+        data.valorSetor = 0;
+      } else if (totalComAptos > 0 && totalSemAptos > 0) {
+        data.valorSetor += totalSemAptos * (data.valorSetor / totalComAptos);
+      }
+    }
+
+    return result;
+  }, [distribuicao, afastamentosNoPeriodo, decisoesAfast]);
+
+  // Preview em tempo real usa a distribuição efetiva
   const previewAptos = useMemo(() => {
     const mapa = {};
-    for (const [setorId, { aptos, valorSetor }] of Object.entries(distribuicao)) {
+    for (const [setorId, { aptos, valorSetor }] of Object.entries(distribuicaoEfetiva)) {
       if (aptos.length === 0) continue;
       const resultados = calcularDistribuicaoFuncionarios(
         valorSetor, aptos, diasAusentesPorFunc, periodoInicio, periodoFim
@@ -179,7 +238,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       }
     }
     return mapa;
-  }, [distribuicao, diasAusentesPorFunc, periodoInicio, periodoFim]);
+  }, [distribuicaoEfetiva, diasAusentesPorFunc, periodoInicio, periodoFim]);
 
   const handleCalcular = () => {
     if (!periodoInicio || !periodoFim) { toast.error('Informe o período'); return; }
@@ -189,6 +248,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     if (!setoresValidos) { toast.error('Os percentuais dos setores não somam 100%. Verifique a aba "Setores".'); return; }
     if (pctRetencao >= 100) { toast.error('Retenção não pode ser 100%. Deixe espaço para distribuir aos funcionários.'); return; }
     setCalculado(true);
+    setDecisoesAfast({});
   };
 
 
@@ -210,7 +270,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       const comissao = await client.entities.ComissoesGorjetas.create(comissaoData);
 
       const registros = [];
-      for (const [setorId, { aptos, excluidos, valorSetor, valorInd, nome }] of Object.entries(distribuicao)) {
+      for (const [setorId, { aptos, excluidos, valorSetor, valorInd, nome }] of Object.entries(distribuicaoEfetiva)) {
         const nomeSetor = setorId === '__outros' ? 'Outros' : (divisao[setorId]?.nome || setorId);
         
         // Calcula distribuição usando a nova lógica de bônus para os presentes
@@ -235,6 +295,26 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             apto: true,
           });
         }
+
+        // Registra excluídos por afastamento (não recebem rateio)
+        for (const f of excluidos) {
+          registros.push({
+            funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id,
+            setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
+            mes_referencia: mesRef, valor_setor: valorSetor,
+            valor_individual: 0,
+            valor_individual_cheio: 0,
+            valor_individual_final: 0,
+            perda_faltas_proprias: 0,
+            bonus_faltas_terceiros: 0,
+            dias_ausentes_no_periodo: afastamentosNoPeriodo[f.id]?.totalDias || 0,
+            dias_trabalhados: 0,
+            dias_totais: 0,
+            proporcao: 0,
+            apto: false,
+            motivo_exclusao: 'Afastamento no período',
+          });
+        }
       }
 
       if (registros.length > 0) await client.entities.ComissaoPorFuncionario.bulkCreate(registros);
@@ -246,7 +326,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       });
 
       toast.success('Comissão lançada com sucesso!');
-      setPeriodoInicio(''); setPeriodoFim(''); setValorTotal(''); setObservacao(''); setCalculado(false); setDiasAusentesPorFunc({});
+      setPeriodoInicio(''); setPeriodoFim(''); setValorTotal(''); setObservacao(''); setCalculado(false); setDiasAusentesPorFunc({}); setDecisoesAfast({});
       onSaved();
       } catch (e) {
       toast.error(`Erro ao salvar: ${e.message}`);
@@ -370,6 +450,56 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             </div>
           ))}
 
+          {/* Questionamento de afastamento no período */}
+          {Object.keys(afastamentosNoPeriodo).length > 0 && (
+            <div className="flex items-start gap-3 bg-purple-50 border border-purple-200 rounded-xl p-4">
+              <AlertCircle className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+              <div className="w-full text-sm text-purple-900">
+                <p className="font-semibold mb-2">
+                  {Object.keys(afastamentosNoPeriodo).length} funcionário(s) com afastamento no período da comissão
+                </p>
+                <div className="space-y-2">
+                  {Object.values(afastamentosNoPeriodo).map(({ funcionario, afastamentos: afs, totalDias }) => {
+                    const decisao = decisoesAfast[funcionario.id] || 'nao_recebe';
+                    return (
+                      <div key={funcionario.id} className="bg-white/60 rounded-lg px-3 py-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm">{funcionario.nome}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {afs.map(a => `afastado de ${a.data_inicio ? formatDate(a.data_inicio) : '—'} a ${a.data_fim ? formatDate(a.data_fim) : 'em aberto'}`).join('; ')}
+                              {' · '}{totalDias} dia(s) no período
+                            </p>
+                          </div>
+                          <RadioGroup
+                            value={decisao}
+                            onValueChange={v => {
+                              setDecisoesAfast(prev => ({ ...prev, [funcionario.id]: v }));
+                              if (v === 'recebe') {
+                                // Pré-preenche os dias ausentes com os dias de afastamento sobrepostos
+                                setDiasAusentesPorFunc(prev => ({ ...prev, [funcionario.id]: totalDias }));
+                              }
+                            }}
+                            className="flex gap-4"
+                          >
+                            <label className="flex items-center gap-1.5 text-xs font-medium">
+                              <RadioGroupItem value="nao_recebe" className="h-3.5 w-3.5" />
+                              Não recebe
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs font-medium">
+                              <RadioGroupItem value="recebe" className="h-3.5 w-3.5" />
+                              Recebe
+                            </label>
+                          </RadioGroup>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Divisão por setor */}
           <Card>
             <CardHeader><CardTitle className="text-sm">Divisão por Setor</CardTitle></CardHeader>
@@ -394,7 +524,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
           </Card>
 
           {/* Por funcionário */}
-          {Object.entries(distribuicao).map(([sid, { aptos, excluidos, valorSetor, valorInd, nome }]) => {
+          {Object.entries(distribuicaoEfetiva).map(([sid, { aptos, excluidos, valorSetor, valorInd, nome }]) => {
             if (aptos.length === 0 && excluidos.length === 0) return null;
             return (
               <Card key={sid}>
@@ -403,14 +533,27 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                     <span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />{nome}</span>
                     <div className="flex gap-1.5">
                       <Badge variant="outline" className="text-green-700">{aptos.length} aptos</Badge>
+                      {excluidos.length > 0 && (
+                        <Badge variant="outline" className="text-red-700">{excluidos.length} excluídos</Badge>
+                      )}
                     </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex gap-4 text-xs text-muted-foreground">
                     <span>Setor: <strong>{formatCurrency(valorSetor)}</strong></span>
-                    <span>Cota base: <strong className="text-green-600">{formatCurrency(valorInd)}</strong></span>
+                    {aptos.length > 0 && <span>Cota base: <strong className="text-green-600">{formatCurrency(valorSetor / aptos.length)}</strong></span>}
                   </div>
+                  {excluidos.length > 0 && (
+                    <div className="bg-red-50 border border-red-100 rounded-lg p-2 space-y-1">
+                      {excluidos.map(f => (
+                        <div key={f.id} className="flex items-center justify-between text-xs">
+                          <span className="text-red-800 font-medium">{f.nome}</span>
+                          <span className="text-red-600">Excluído — afastamento no período</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {aptos.map(f => {
                     const preview = previewAptos[f.id];
                     if (!preview) return null;

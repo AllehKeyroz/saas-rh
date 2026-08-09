@@ -137,7 +137,7 @@ const ENTITY_NAMES = [
   'DocumentoFuncionario', 'Ferias', 'SolicitacoesFuncionario', 'MensagensRH',
   'GastosPessoais', 'DividasPessoais', 'AssinaturasPessoais',
   'MetasObjetivos', 'MetaFinanceira', 'users', 'convites',
-  'Consignado', 'HistoricoSalario',
+  'Consignado', 'HistoricoSalario', 'Afastamento',
 ]
 
 ENTITY_NAMES.forEach(registerEntity)

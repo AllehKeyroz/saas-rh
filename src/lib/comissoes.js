@@ -37,6 +37,24 @@ export function calcularDiasTotais(periodoInicio, periodoFim) {
   return Math.round((fim - inicio) / (1000 * 60 * 60 * 24)) + 1;
 }
 
+// Dias sobrepostos entre um afastamento e o período da comissão (inclusivo)
+export function calcularDiasSobrepostos(afastInicio, afastFim, periodoInicio, periodoFim) {
+  if (!afastInicio || !periodoInicio || !periodoFim) return 0;
+  const inicio = new Date(afastInicio + 'T00:00:00');
+  const fim = afastFim ? new Date(afastFim + 'T00:00:00') : new Date(periodoFim + 'T00:00:00');
+  const pInicio = new Date(periodoInicio + 'T00:00:00');
+  const pFim = new Date(periodoFim + 'T00:00:00');
+  const a = inicio > pInicio ? inicio : pInicio;
+  const b = fim < pFim ? fim : pFim;
+  if (a > b) return 0;
+  return Math.round((b - a) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+// Afastamento "em aberto" (data_fim null) é tratado como vigente até o fim do período
+export function sobrepoeAfastamento(afast, periodoInicio, periodoFim) {
+  return calcularDiasSobrepostos(afast.data_inicio, afast.data_fim, periodoInicio, periodoFim) > 0;
+}
+
 // Calcula proporcionalidade por dias trabalhados
 // diasAusentes: número de dias ausentes no período
 // Retorna { diasTotais, diasTrabalhados, proporcao }
