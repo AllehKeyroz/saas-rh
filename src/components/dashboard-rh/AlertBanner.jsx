@@ -1,7 +1,5 @@
 import React from 'react';
 import { AlertCircle, X, ChevronRight } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export default function AlertBanner({ alerts = [] }) {
@@ -26,32 +24,36 @@ export default function AlertBanner({ alerts = [] }) {
   if (activeAlerts.length === 0) return null;
 
   return (
-    <div className="space-y-3 mb-6">
+    <div className="flex flex-col gap-1.5 mb-4">
       {activeAlerts.map(({ alert, originalIdx }) => (
-        <Card key={originalIdx} className={cn("border-l-4 p-4 flex items-start gap-4", getAlertColor(alert.type))}>
-          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm mb-1">{alert.title}</h3>
-            <p className="text-sm opacity-90 mb-2">{alert.description}</p>
-            {alert.action && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-auto p-0 text-xs font-semibold hover:underline"
-                onClick={() => { dismiss(originalIdx); alert.onAction?.(); }}
-              >
-                {alert.action}
-                <ChevronRight className="w-3 h-3 ml-1" />
-              </Button>
-            )}
-          </div>
+        <div
+          key={originalIdx}
+          className={cn(
+            "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs leading-none",
+            getAlertColor(alert.type)
+          )}
+        >
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="font-semibold whitespace-nowrap">{alert.title}</span>
+          {alert.description && (
+            <span className="opacity-80 truncate min-w-0">{alert.description}</span>
+          )}
+          {alert.action && (
+            <button
+              className="font-semibold hover:underline shrink-0 whitespace-nowrap"
+              onClick={() => { dismiss(originalIdx); alert.onAction?.(); }}
+            >
+              {alert.action} <ChevronRight className="w-3 h-3 inline" />
+            </button>
+          )}
           <button
             onClick={() => dismiss(originalIdx)}
-            className="text-current opacity-50 hover:opacity-100 transition-opacity"
+            className="ml-auto opacity-50 hover:opacity-100 transition-opacity shrink-0"
+            title="Dispensar"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
-        </Card>
+        </div>
       ))}
     </div>
   );

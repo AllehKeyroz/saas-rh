@@ -29,6 +29,12 @@ function wrapEntity(entityName) {
       if (!tid) throw new Error('Usuário sem tenant vinculado')
       return base.create({ ...data, tenant_id: tid })
     },
+    createWithId: async (id, data) => {
+      if (skipTenant) return base.createWithId(id, data)
+      const tid = auth.getCurrentTenantId()
+      if (!tid) throw new Error('Usuário sem tenant vinculado')
+      return base.createWithId(id, { ...data, tenant_id: data.tenant_id || tid })
+    },
     update: (id, data) => base.update(id, data),
     delete: (id) => base.delete(id),
     filter: async (filters, orderByField, limitCount) => {

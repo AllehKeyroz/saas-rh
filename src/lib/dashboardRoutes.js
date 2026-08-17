@@ -11,8 +11,8 @@ export const DASHBOARD_CARD_ROUTES = {
     description: 'Solicitações Pendentes'
   },
   feriasVencidas: {
-    path: '/funcionarios?tab=ferias',
-    label: 'Ver férias e banco de horas',
+    path: '/ferias',
+    label: 'Ver calendário e escala de férias',
     description: 'Férias Vencidas'
   },
   docsVencendo: {

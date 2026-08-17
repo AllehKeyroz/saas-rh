@@ -17,6 +17,7 @@ import Documentos360 from '@/components/funcionarios360/Documentos360';
 import HistoricoPagamentos360 from '@/components/funcionarios360/HistoricoPagamentos360';
 import CargoSalario360 from '@/components/funcionarios360/CargoSalario360';
 import Afastamento360 from '@/components/funcionarios360/Afastamento360';
+import Ferias360 from '@/components/funcionarios360/Ferias360';
 import AfastamentoFormModal from '@/components/funcionarios/AfastamentoFormModal';
 import {
   ValesAdiantamentos360,
@@ -24,7 +25,6 @@ import {
   Comissoes360,
   Solicitacoes360,
   Advertencias360,
-  Ferias360,
   BancoHoras360,
   Desempenho360,
   LinhaTempoInteligente360,

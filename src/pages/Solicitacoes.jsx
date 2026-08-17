@@ -11,8 +11,10 @@ import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, ClipboardList, CheckCircle2, XCircle, Clock, MessageSquare, Bell, AlertTriangle, FileText, X, Paperclip, ExternalLink, SquareCheck, Key } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, differenceInDays, parseISO } from 'date-fns';
 import { registrarAuditoria } from '@/lib/audit';
+import { calcularSituacaoFerias } from '@/lib/ferias';
+import { gerarAvisoFerias } from '@/lib/avisoFerias';
 import FiltrosAvancados from '@/components/solicitacoes/FiltrosAvancados';
 import ExportarSolicitacoes from '@/components/solicitacoes/ExportarSolicitacoes';
 
@@ -57,6 +59,105 @@ async function processarAprovacaoAtestado(solicitacao) {
   });
 }
 
+// Ao aprovar uma solicitação de férias, cria o registro de gozo na coleção Ferias.
+// ID determinístico = solicitacao_id → idempotente contra duplo clique / dupla aprovação.
+// Ao recusar (inclusive aprovado → recusado), cancela o registro correspondente.
+async function processarAprovacaoFerias(solicitacao, status = 'aprovado') {
+  if (solicitacao.tipo_solicitacao !== 'ferias') return;
+
+  if (status === 'aprovado') {
+    if (!solicitacao.periodo_inicio || !solicitacao.periodo_fim) return;
+    let funcionario = null;
+    let periodoAquisitivo = null;
+    try {
+      funcionario = await client.entities.Funcionarios.get(solicitacao.funcionario_id);
+      const feriasFunc = await client.entities.Ferias.filter({ funcionario_id: solicitacao.funcionario_id });
+      const situacao = calcularSituacaoFerias(funcionario?.data_admissao, feriasFunc);
+      periodoAquisitivo = situacao?.periodoAquisitivo ?? null;
+    } catch (e) {
+      console.error('[Ferias] Não foi possível calcular o período aquisitivo:', e?.message);
+    }
+    const diasGozados = differenceInDays(parseISO(solicitacao.periodo_fim), parseISO(solicitacao.periodo_inicio)) + 1;
+    const feriasCriada = await client.entities.Ferias.createWithId(solicitacao.id, {
+      funcionario_id: solicitacao.funcionario_id,
+      funcionario_nome: solicitacao.funcionario_nome || '',
+      periodo_aquisitivo: periodoAquisitivo,
+      data_inicio: solicitacao.periodo_inicio,
+      data_fim: solicitacao.periodo_fim,
+      dias_gozados: Math.max(diasGozados, 1),
+      dias_abono: 0,
+      observacao: solicitacao.descricao || '',
+      origem: 'solicitacao',
+      solicitacao_id: solicitacao.id,
+    });
+
+    // Gera o Aviso de Férias em segundo plano (não bloqueia a aprovação)
+    if (funcionario && feriasCriada) {
+      gerarAvisoFerias(funcionario, feriasCriada);
+    }
+  } else if (status === 'recusado') {
+    try {
+      const existente = await client.entities.Ferias.get(solicitacao.id);
+      if (existente) {
+        await client.entities.Ferias.update(solicitacao.id, { cancelada: true });
+      }
+    } catch (e) {
+      console.error('[Ferias] Não foi possível cancelar registro:', e?.message);
+    }
+  }
+}
+
+// Fluxo único de resposta a uma solicitação: atualiza status, notifica o funcionário,
+// dispara os processamentos por tipo (PIX, atestado, férias) e registra auditoria.
+// Usado pelos 4 caminhos: modal, lote, inline e rápido.
+async function processarAprovacao(solicitacao, status, meUser, resposta = '', enviarPush = false) {
+  const agora = new Date().toISOString();
+  const tipoLabel = TIPO_LABELS[solicitacao.tipo_solicitacao] || 'solicitação';
+
+  await client.entities.SolicitacoesFuncionario.update(solicitacao.id, {
+    status,
+    resposta_rh: resposta,
+    respondido_por: meUser?.email || '',
+    data_resposta: agora,
+    push_enviado: enviarPush,
+  });
+
+  await client.entities.MensagensRH.create({
+    titulo: `Sua solicitação de ${tipoLabel} foi ${status === 'aprovado' ? 'aprovada' : 'recusada'}`,
+    mensagem: resposta || `Sua solicitação de ${tipoLabel} foi ${status === 'aprovado' ? 'aprovada' : 'recusada'} pelo RH.`,
+    tipo: status === 'aprovado' ? 'comunicado' : 'aviso',
+    data_envio: agora,
+    enviado_por: meUser?.email || '',
+    publico_alvo: 'funcionario',
+    funcionario_id_alvo: solicitacao.funcionario_id,
+    push_ativado: enviarPush,
+    lidas_por: [],
+  });
+
+  if (status === 'aprovado') {
+    await processarAprovacaoPix(solicitacao);
+    await processarAprovacaoAtestado(solicitacao);
+    await processarAprovacaoFerias(solicitacao, 'aprovado');
+  } else if (status === 'recusado') {
+    await processarAprovacaoFerias(solicitacao, 'recusado');
+  }
+
+  await registrarAuditoria({
+    acao: 'editar',
+    modulo: 'lancamento',
+    descricao: `Solicitação de ${tipoLabel} de ${solicitacao.funcionario_nome} foi ${status} por ${meUser?.email}`,
+    dados_anteriores: { status: solicitacao.status },
+    dados_novos: { status, resposta_rh: resposta },
+  });
+}
+
+// Invalida as queries relacionadas a férias (refletem no dashboard, tab de férias e 360)
+function invalidarFerias(queryClient) {
+  queryClient.invalidateQueries({ queryKey: ['ferias_consumidas'] });
+  queryClient.invalidateQueries({ queryKey: ['ferias_dashboard'] });
+  queryClient.invalidateQueries({ queryKey: ['solicitacoes-ferias-bh'] });
+}
+
 // Exibe os anexos de uma solicitação
 function AnexosView({ solicitacao }) {
   const anexos = solicitacao.anexos_urls || [];
@@ -90,46 +191,18 @@ function ResponderModal({ solicitacao, onClose, onSaved, meUser }) {
 
   const handleSalvar = async () => {
     setSaving(true);
-    const agora = new Date().toISOString();
-    await client.entities.SolicitacoesFuncionario.update(solicitacao.id, {
-      status,
-      resposta_rh: resposta,
-      respondido_por: meUser?.email || '',
-      data_resposta: agora,
-      push_enviado: enviarPush,
-    });
-
-    const tipoLabel = TIPO_LABELS[solicitacao.tipo_solicitacao] || 'solicitação';
-    await client.entities.MensagensRH.create({
-      titulo: `Sua solicitação de ${tipoLabel} foi ${status === 'aprovado' ? 'aprovada' : 'recusada'}`,
-      mensagem: resposta || `Sua solicitação de ${tipoLabel} foi ${status === 'aprovado' ? 'aprovada' : 'recusada'} pelo RH.`,
-      tipo: status === 'aprovado' ? 'comunicado' : 'aviso',
-      data_envio: agora,
-      enviado_por: meUser?.email || '',
-      publico_alvo: 'funcionario',
-      funcionario_id_alvo: solicitacao.funcionario_id,
-      push_ativado: enviarPush,
-      lidas_por: [],
-    });
-
-    if (status === 'aprovado') {
-      await processarAprovacaoPix(solicitacao);
-      await processarAprovacaoAtestado(solicitacao);
+    try {
+      await processarAprovacao(solicitacao, status, meUser, resposta, enviarPush);
+      queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+      invalidarFerias(queryClient);
+      toast.success(`Solicitação ${status === 'aprovado' ? 'aprovada' : 'recusada'} com sucesso!`);
+      setSaving(false);
+      onSaved();
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao salvar resposta');
+      setSaving(false);
     }
-
-    await registrarAuditoria({
-      acao: 'editar',
-      modulo: 'lancamento',
-      descricao: `Solicitação de ${tipoLabel} de ${solicitacao.funcionario_nome} foi ${status} por ${meUser?.email}`,
-      dados_anteriores: { status: solicitacao.status },
-      dados_novos: { status, resposta_rh: resposta },
-    });
-
-    queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
-    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
-    toast.success(`Solicitação ${status === 'aprovado' ? 'aprovada' : 'recusada'} com sucesso!`);
-    setSaving(false);
-    onSaved();
   };
 
   return (
@@ -211,36 +284,20 @@ function ResponderLoteModal({ selecionadas, solicitacoes, onClose, onSaved, meUs
 
   const handleSalvar = async () => {
     setSaving(true);
-    const agora = new Date().toISOString();
-    await Promise.all(items.map(async (s) => {
-      const tipoLabel = TIPO_LABELS[s.tipo_solicitacao] || 'solicitação';
-      await client.entities.SolicitacoesFuncionario.update(s.id, {
-        status,
-        resposta_rh: resposta,
-        respondido_por: meUser?.email || '',
-        data_resposta: agora,
-      });
-      await client.entities.MensagensRH.create({
-        titulo: `Sua solicitação de ${tipoLabel} foi ${status === 'aprovado' ? 'aprovada' : 'recusada'}`,
-        mensagem: resposta || `Sua solicitação de ${tipoLabel} foi ${status === 'aprovado' ? 'aprovada' : 'recusada'} pelo RH.`,
-        tipo: status === 'aprovado' ? 'comunicado' : 'aviso',
-        data_envio: agora,
-        enviado_por: meUser?.email || '',
-        publico_alvo: 'funcionario',
-        funcionario_id_alvo: s.funcionario_id,
-        push_ativado: false,
-        lidas_por: [],
-      });
-      if (status === 'aprovado') {
-        await processarAprovacaoPix(s);
-        await processarAprovacaoAtestado(s);
-      }
-    }));
-    queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
-    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
-    toast.success(`${items.length} solicitação(ões) ${status === 'aprovado' ? 'aprovadas' : 'recusadas'}!`);
-    setSaving(false);
-    onSaved();
+    try {
+      await Promise.all(items.map(async (s) => {
+        await processarAprovacao(s, status, meUser, resposta, false);
+      }));
+      queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+      invalidarFerias(queryClient);
+      toast.success(`${items.length} solicitação(ões) ${status === 'aprovado' ? 'aprovadas' : 'recusadas'}!`);
+      setSaving(false);
+      onSaved();
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao responder em lote');
+      setSaving(false);
+    }
   };
 
   return (
@@ -408,65 +465,33 @@ export default function Solicitacoes() {
 
   const handleResponderInline = async (s, novoStatus) => {
     setSavingInline(s.id);
-    const agora = new Date().toISOString();
-    const texto = respostaInline[s.id] || '';
-    await client.entities.SolicitacoesFuncionario.update(s.id, {
-      status: novoStatus,
-      resposta_rh: texto,
-      respondido_por: meUser?.email || '',
-      data_resposta: agora,
-    });
-    const tipoLabel = TIPO_LABELS[s.tipo_solicitacao] || 'solicitação';
-    await client.entities.MensagensRH.create({
-      titulo: `Sua solicitação de ${tipoLabel} foi ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}`,
-      mensagem: texto || `Sua solicitação de ${tipoLabel} foi ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'} pelo RH.`,
-      tipo: novoStatus === 'aprovado' ? 'comunicado' : 'aviso',
-      data_envio: agora,
-      enviado_por: meUser?.email || '',
-      publico_alvo: 'funcionario',
-      funcionario_id_alvo: s.funcionario_id,
-      push_ativado: false,
-      lidas_por: [],
-    });
-    if (novoStatus === 'aprovado') {
-      await processarAprovacaoPix(s);
-      await processarAprovacaoAtestado(s);
+    try {
+      const texto = respostaInline[s.id] || '';
+      await processarAprovacao(s, novoStatus, meUser, texto, false);
+      queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+      invalidarFerias(queryClient);
+      setExpandidoId(null);
+      setRespostaInline(prev => { const n = { ...prev }; delete n[s.id]; return n; });
+      toast.success(`Solicitação ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}!`);
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao responder solicitação');
+    } finally {
+      setSavingInline(null);
     }
-    queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
-    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
-    setExpandidoId(null);
-    setRespostaInline(prev => { const n = { ...prev }; delete n[s.id]; return n; });
-    toast.success(`Solicitação ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}!`);
-    setSavingInline(null);
   };
 
   const handleAprovarRapido = async (s, novoStatus) => {
-    const agora = new Date().toISOString();
-    await client.entities.SolicitacoesFuncionario.update(s.id, {
-      status: novoStatus,
-      respondido_por: meUser?.email || '',
-      data_resposta: agora,
-    });
-    const tipoLabel = TIPO_LABELS[s.tipo_solicitacao] || 'solicitação';
-    await client.entities.MensagensRH.create({
-      titulo: `Sua solicitação de ${tipoLabel} foi ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}`,
-      mensagem: `Sua solicitação de ${tipoLabel} foi ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'} pelo RH.`,
-      tipo: novoStatus === 'aprovado' ? 'comunicado' : 'aviso',
-      data_envio: agora,
-      enviado_por: meUser?.email || '',
-      publico_alvo: 'funcionario',
-      funcionario_id_alvo: s.funcionario_id,
-      push_ativado: false,
-      lidas_por: [],
-    });
-    if (novoStatus === 'aprovado') {
-      await processarAprovacaoPix(s);
-      await processarAprovacaoAtestado(s);
+    try {
+      await processarAprovacao(s, novoStatus, meUser, '', false);
+      queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
+      queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+      invalidarFerias(queryClient);
+      toast.success(`Solicitação ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}!`);
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao responder solicitação');
     }
-    queryClient.invalidateQueries({ queryKey: ['solicitacoes_rh'] });
-    queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
-    toast.success(`Solicitação ${novoStatus === 'aprovado' ? 'aprovada' : 'recusada'}!`);
-    };
+  };
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">

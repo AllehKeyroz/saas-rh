@@ -30,6 +30,7 @@ import ModelosDocumentos from './pages/ModelosDocumentos';
 import AuditoriaDocumentos from './pages/AuditoriaDocumentos';
 import EspelhoPortal from './pages/EspelhoPortal';
 import ExportarDados from './pages/ExportarDados';
+import FeriasCalendario from './pages/FeriasCalendario';
 import PageNotFound from './lib/PageNotFound';
 
 const AuthenticatedApp = () => {
@@ -85,6 +86,7 @@ const AuthenticatedApp = () => {
         <Route path="/solicitacoes" element={<Solicitacoes />} />
         <Route path="/logs-financeiros" element={<LogsFinanceiros />} />
         <Route path="/funcionarios/:funcId/360" element={<Funcionarios360 />} />
+        <Route path="/ferias" element={<FeriasCalendario />} />
         <Route path="/advertencias" element={<Advertencias />} />
         <Route path="/assinaturas-digitais" element={<AssinaturasDigitais />} />
         <Route path="/modelos-documentos" element={<ModelosDocumentos />} />

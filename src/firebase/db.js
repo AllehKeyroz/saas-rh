@@ -1,5 +1,5 @@
 import { db } from './config'
-import { collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, writeBatch, onSnapshot } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, writeBatch, onSnapshot } from 'firebase/firestore'
 
 class FirestoreEntity {
   constructor(collectionName) {
@@ -33,6 +33,16 @@ class FirestoreEntity {
       created_date: new Date().toISOString(),
     })
     return { id: d.id, ...data }
+  }
+
+  // Cria com ID determinístico — usado para idempotência (ex.: Ferias com id = solicitacao_id)
+  async createWithId(id, data) {
+    await setDoc(doc(this.collectionRef, id), {
+      ...data,
+      created_date: new Date().toISOString(),
+    })
+    const d = await getDoc(doc(this.collectionRef, id))
+    return { id: d.id, ...d.data() }
   }
 
   async update(id, data) {

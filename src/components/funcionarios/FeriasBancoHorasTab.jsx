@@ -8,54 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { differenceInDays, addDays, addMonths, format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { differenceInDays, addDays, format, parseISO } from 'date-fns';
 import { Search, User, Calendar, Clock, AlertTriangle, CheckCircle2, XCircle, Plus, History, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentTenantId } from '@/firebase/auth';
-
-/** Calcula a situação do período aquisitivo de férias considerando períodos já gozados. */
-function calcularSituacaoFerias(dataAdmissao, feriasConsumidas = []) {
-  if (!dataAdmissao) return null;
-  const admissao = parseISO(dataAdmissao);
-  const hoje = new Date();
-  const diasTrabalhados = differenceInDays(hoje, admissao);
-  const mesesTrabalhados = diasTrabalhados / 30.44;
-
-  const totalPeriodos = Math.floor(mesesTrabalhados / 12);
-  if (totalPeriodos === 0 || diasTrabalhados < 0) return null;
-
-  const periodosConsumidos = new Set(feriasConsumidas.map(f => f.periodo_aquisitivo));
-
-  // Encontra o primeiro período aquisitivo não consumido
-  let periodoPendente = null;
-  for (let p = 1; p <= totalPeriodos; p++) {
-    if (!periodosConsumidos.has(p)) {
-      periodoPendente = p;
-      break;
-    }
-  }
-
-  if (!periodoPendente) {
-    return { todosConsumidos: true, totalPeriodos, periodosConsumidos: feriasConsumidas.length };
-  }
-
-  const fimPeriodo = addDays(admissao, periodoPendente * 365);
-  const prazoLimite = addMonths(fimPeriodo, 11);
-  const diasParaVencer = differenceInDays(prazoLimite, hoje);
-
-  return {
-    periodoAquisitivo: periodoPendente,
-    totalPeriodos,
-    periodosConsumidos: feriasConsumidas.length,
-    periodosPendentes: totalPeriodos - feriasConsumidas.length,
-    diasParaVencer,
-    prazoLimite,
-    vencido: diasParaVencer < 0,
-    urgente: diasParaVencer >= 0 && diasParaVencer <= 60,
-    atencao: diasParaVencer > 60 && diasParaVencer <= 120,
-  };
-}
+import { calcularSituacaoFerias } from '@/lib/ferias';
 
 function StatusBadgeFerias({ situacao }) {
   if (!situacao) return <Badge variant="secondary" className="text-xs">Em período aquisitivo</Badge>;
@@ -64,24 +21,30 @@ function StatusBadgeFerias({ situacao }) {
       <CheckCircle2 className="w-3 h-3" />Todas em dia
     </Badge>
   );
-  if (situacao.vencido) return (
+  if (situacao.concessaoVencida) return (
     <Badge className="text-xs bg-red-100 text-red-700 border-0 gap-1">
-      <XCircle className="w-3 h-3" />Vencido há {Math.abs(situacao.diasParaVencer)} dias
+      <XCircle className="w-3 h-3" />Concessão vencida — dobra (art. 137)
+    </Badge>
+  );
+  if (situacao.vencido) return (
+    <Badge className="text-xs bg-amber-300/60 text-amber-900 border-0 gap-1 ring-1 ring-amber-500">
+      <AlertTriangle className="w-3 h-3" />
+      {situacao.periodosPendentes > 1 ? `${situacao.periodosPendentes} períodos aquisitivos pendentes` : 'Período aquisitivo pendente'}
     </Badge>
   );
   if (situacao.urgente) return (
     <Badge className="text-xs bg-orange-100 text-orange-700 border-0 gap-1">
-      <AlertTriangle className="w-3 h-3" />Vence em {situacao.diasParaVencer} dias
+      <AlertTriangle className="w-3 h-3" />Concessão vence em {situacao.diasParaVencer} dias
     </Badge>
   );
   if (situacao.atencao) return (
     <Badge className="text-xs bg-yellow-100 text-yellow-700 border-0 gap-1">
-      <AlertTriangle className="w-3 h-3" />Atenção: {situacao.diasParaVencer} dias
+      <AlertTriangle className="w-3 h-3" />Atenção: concessão em {situacao.diasParaVencer} dias
     </Badge>
   );
   return (
     <Badge className="text-xs bg-green-100 text-green-700 border-0 gap-1">
-      <CheckCircle2 className="w-3 h-3" />OK · Vence em {situacao.diasParaVencer} dias
+      <CheckCircle2 className="w-3 h-3" />OK · Concessão em {situacao.diasParaVencer} dias
     </Badge>
   );
 }
@@ -144,6 +107,7 @@ function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved,
         dias_gozados: diasGozados,
         dias_abono: diasAbono ? Number(diasAbono) : 0,
         observacao: observacao || '',
+        origem: 'manual',
         tenant_id: getCurrentTenantId(),
       });
       toast.success(`Férias do período ${periodo} registradas com sucesso!`);
@@ -357,7 +321,7 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
         const horasBH = solBH.filter(s => s.funcionario_id === f.id && (s.status === 'pendente' || s.status === 'aprovado'))
           .reduce((acc, s) => acc + (s.horas_compensar || 0), 0);
 
-        if (filtro === 'vencendo') return situacao && !situacao.vencido && !situacao.todosConsumidos && (situacao.urgente || situacao.atencao);
+        if (filtro === 'vencendo') return situacao && !situacao.todosConsumidos && !situacao.concessaoVencida && situacao.diasParaVencer <= 120;
         if (filtro === 'vencido') return situacao?.vencido && !situacao.todosConsumidos;
         if (filtro === 'bh_disponivel') return horasBH > 0;
         return situacao || horasBH > 0;
@@ -367,10 +331,11 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
         const sb = calcularSituacaoFerias(b.data_admissao, feriasConsumidas.filter(fc => fc.funcionario_id === b.id));
         const score = (s) => {
           if (!s || s.todosConsumidos) return 100;
-          if (s.vencido) return 0;
-          if (s.urgente) return 1;
-          if (s.atencao) return 2;
-          return 3;
+          if (s.concessaoVencida) return 0;
+          if (s.diasParaVencer <= 30) return 1;
+          if (s.diasParaVencer <= 60) return 2;
+          if (s.diasParaVencer <= 120) return 3;
+          return 4;
         };
         return score(sa) - score(sb);
       });
@@ -400,7 +365,7 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos com pendências</SelectItem>
-            <SelectItem value="vencendo">⚠️ Vencendo em breve (até 120 dias)</SelectItem>
+            <SelectItem value="vencendo">⚠️ Concessão vencendo (até 120 dias)</SelectItem>
             <SelectItem value="vencido">🔴 Férias vencidas</SelectItem>
             <SelectItem value="bh_disponivel">🕐 Banco de horas disponível</SelectItem>
           </SelectContent>
@@ -413,8 +378,9 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
       <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700 space-y-0.5">
         <p className="font-semibold">📋 Regras CLT:</p>
         <p>• Direito a 30 dias de férias após 12 meses trabalhados (período aquisitivo)</p>
-        <p>• Prazo máximo para concessão: até 11 meses após o fim do período aquisitivo</p>
-        <p>• <span className="font-medium text-orange-600">Atenção:</span> férias vencidas geram multa de 1/3 extra ao empregador</p>
+        <p>• Ao fechar o período aquisitivo sem gozo concedido, a férias já é considerada <span className="font-medium">vencida</span></p>
+        <p>• Prazo máximo de concessão: 12 meses após o fim do período aquisitivo (art. 134)</p>
+        <p>• <span className="font-medium text-orange-600">Atenção:</span> férias não concedidas no prazo concessivo geram pagamento <span className="font-medium">em dobro</span> (art. 137)</p>
         <p>• Os períodos já gozados são descontados automaticamente do cálculo</p>
       </div>
 

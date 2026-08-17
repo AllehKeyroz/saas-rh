@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Palmtree, Wallet, Clock, FileText, Package, PlusCircle, CheckCircle2, XCircle, AlertCircle, Upload, X, Key } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { useRHControl } from '@/lib/rhControl';
+import { calcularSaldoFerias } from '@/lib/ferias';
 
 const STATUS_CONFIG = {
   pendente: { label: 'Pendente', icon: AlertCircle, color: 'bg-yellow-100 text-yellow-800' },
@@ -73,9 +74,28 @@ function AnexoUpload({ form, setForm }) {
   );
 }
 
-function FormFerias({ form, setForm }) {
+function FormFerias({ form, setForm, saldo }) {
+  const periodoPendente = (saldo?.periodos || []).find(p => p.estado === 'disponivel');
   return (
     <>
+      {saldo && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800 space-y-0.5">
+          <p className="font-semibold">Seu saldo de férias: {saldo.diasDisponiveis} dias</p>
+          {saldo.periodos.length === 0 && (
+            <p className="text-green-700/80">Você ainda não completou 12 meses de trabalho.</p>
+          )}
+          {saldo.diasGozados > 0 && (
+            <p className="text-green-700/80">{saldo.periodos.filter(p => p.estado === 'gozado').length} período(s) já gozado(s) · {saldo.diasGozados} dias</p>
+          )}
+          {periodoPendente && (
+            <p className="text-green-700/80">
+              {periodoPendente.numero}º período aquisitivo: {format(periodoPendente.inicio, 'dd/MM/yyyy')} — {format(periodoPendente.fim, 'dd/MM/yyyy')}
+              {periodoPendente.concessaoVencida && <span className="font-semibold text-red-700"> · prazo de concessão vencido</span>}
+              {!periodoPendente.concessaoVencida && <span className="font-semibold text-red-700"> · férias vencida — solicite</span>}
+            </p>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label>Data de início *</Label>
@@ -86,6 +106,11 @@ function FormFerias({ form, setForm }) {
           <Input type="date" value={form.periodo_fim || ''} onChange={e => setForm(p => ({ ...p, periodo_fim: e.target.value }))} required />
         </div>
       </div>
+      {form.periodo_inicio && form.periodo_fim && new Date(form.periodo_fim) >= new Date(form.periodo_inicio) && (
+        <p className="text-xs text-muted-foreground">
+          Total: {differenceInDays(parseISO(form.periodo_fim), parseISO(form.periodo_inicio)) + 1} dias
+        </p>
+      )}
       <div>
         <Label>Observação</Label>
         <Textarea value={form.descricao || ''} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Informações adicionais..." rows={2} />
@@ -199,6 +224,17 @@ function SolicitacaoModal({ tipo, funcionario, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const cfg = TIPO_CONFIG[tipo];
 
+  const { data: feriasRegistradas = [] } = useQuery({
+    queryKey: ['minhas_ferias', funcionario?.id],
+    queryFn: () => client.entities.Ferias.filter({ funcionario_id: funcionario?.id }),
+    enabled: tipo === 'ferias' && !!funcionario?.id,
+  });
+
+  const saldoFerias = React.useMemo(
+    () => (tipo === 'ferias' ? calcularSaldoFerias(funcionario, feriasRegistradas) : null),
+    [tipo, funcionario, feriasRegistradas]
+  );
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -229,7 +265,7 @@ function SolicitacaoModal({ tipo, funcionario, onClose, onSaved }) {
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {tipo === 'ferias' && <FormFerias form={form} setForm={setForm} />}
+          {tipo === 'ferias' && <FormFerias form={form} setForm={setForm} saldo={saldoFerias} />}
           {tipo === 'vale' && <FormVale form={form} setForm={setForm} />}
           {tipo === 'banco_horas' && <FormBancoHoras form={form} setForm={setForm} />}
           {tipo === 'atestado' && <FormAtestado form={form} setForm={setForm} />}

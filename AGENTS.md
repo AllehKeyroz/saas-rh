@@ -14,13 +14,17 @@ npm run preview      # serve dist/
 
 No test suite.
 
+## Reference docs
+
+Project notes an agent should read for context: `MATRIZ_ACESSO.md` (access matrix), `FUNCOES_DO_APP.md` / `FUNCOES_PENDENTES.md` (feature inventory), `UX_ANALISE.md`, `docs/auditoria-rh.md`, `docs/auditoria-portal.md`.
+
 ## Architecture
 
 **SPA** — React 18 + Vite 6, no SSR. Entry: `src/main.jsx` → `src/App.jsx`.
 
 **Multi-tenant** by `tenant_id`. Proxy in `src/api/client.js` (`import { client } from '@/api/client'`) auto-injects `tenant_id` on list/filter/create/bulkCreate. Collections that skip tenant scoping: `users`, `convites`, `tenants`, `ApplicationError`, `LogNotificacao`.
 
-Personal finance collections (`GastosPessoais`, `DividasPessoais`, `AssinaturasPessoais`, `MetasObjetivos`, `MetaFinanceira`) are **user-scoped** (not tenant-scoped) — any authenticated user can read/write their own data. `SolicitacoesFuncionario` create is allowed for any authenticated user.
+Personal finance collections (`GastosPessoais`, `DividasPessoais`, `AssinaturasPessoais`, `MetasObjetivos`, `MetaFinanceira`) are keyed/filtered by `funcionario_id` (not `tenant_id`). Firestore rules allow `read, write` for **any authenticated user** with no tenant/ownership check (`firestore.rules:83-87`) — the `funcionario_id` filter is enforced only client-side. `SolicitacoesFuncionario` create is also open to any authenticated user.
 
 **Firebase**: Auth + Firestore + Storage. Named database `rhdtalia` in prod, `(default)` on localhost (auto-detect in `src/firebase/config.js:21`). Emulators auto-connect on localhost. Cloud Functions (`sendEmail`, `calcularLimiteValeMensal`) are **not deployed** — calls hit `us-central1-<projectId>.cloudfunctions.net/<name>` and silently fail.
 
@@ -36,7 +40,9 @@ const item = await client.entities.Funcionarios.get(id)
 client.entities.FichaFinanceira.create({ valor: 1000, ... })
 ```
 
-36 collections auto-registered in `src/firebase/db.js` via `ENTITY_NAMES`. Custom `tipo_lancamento` categories from `client.entities.TipoLancamento.list()`.
+38 collections auto-registered in `src/firebase/db.js` via `ENTITY_NAMES`. Custom `tipo_lancamento` categories from `client.entities.TipoLancamento.list()`.
+
+`filter()` (`db.js`) falls back to client-side sort when Firestore rejects a query (e.g. missing composite index), so a new `where`+`orderBy` combo silently works but is unscalable — add indexes to `firestore.indexes.json` and deploy via `firebase deploy --only firestore:indexes`.
 
 ## Feature toggles
 
@@ -123,4 +129,5 @@ No CI/CD pipeline configured (no `.github/` directory).
 
 - `inativo` role: no frontend gating — sees admin UI, edit buttons visible (Firestore rejects writes server-side)
 - Cloud Functions not deployed — `sendEmail` and `calcularLimiteValeMensal` fetch calls silently return `null`
+- `Funcionarios` update rule (`firestore.rules:55`) lets any authenticated user update a doc whose `email` matches their auth token — self-service write with no tenant/role check
 - No test suite

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { client } from '@/api/client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Clock, CheckCircle2, XCircle, FileText, Download, ExternalLink, PenLine } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, FileText, Download, ExternalLink, PenLine, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 const STATUS_CONFIG = {
   aguardando: { label: 'Aguardando Assinatura', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
@@ -26,11 +27,32 @@ function StatusBadge({ status }) {
 }
 
 export default function AssinaturasPortal({ funcionario }) {
+  const queryClient = useQueryClient();
+  const [assinandoId, setAssinandoId] = useState(null);
+
   const { data: assinaturas = [], isLoading } = useQuery({
     queryKey: ['assinaturas-portal', funcionario?.id],
     queryFn: () => client.entities.AssinaturaDigital.filter({ funcionario_id: funcionario.id }, '-data_envio'),
     enabled: !!funcionario?.id,
   });
+
+  // Assinatura real do documento pelo próprio funcionário (regra Firestore valida a posse)
+  const handleAssinar = async (doc) => {
+    setAssinandoId(doc.id);
+    try {
+      await client.entities.AssinaturaDigital.update(doc.id, {
+        status: 'assinado',
+        data_assinatura: new Date().toISOString(),
+        documento_assinado_url: doc.documento_url || '',
+      });
+      toast.success(`Documento "${doc.nome_documento}" assinado com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ['assinaturas-portal', funcionario?.id] });
+    } catch (e) {
+      toast.error(e?.message || 'Não foi possível confirmar a assinatura.');
+    } finally {
+      setAssinandoId(null);
+    }
+  };
 
   const pendentes  = assinaturas.filter(a => a.status === 'aguardando');
   const assinados  = assinaturas.filter(a => a.status === 'assinado');
@@ -78,20 +100,27 @@ export default function AssinaturasPortal({ funcionario }) {
                   <StatusBadge status={doc.status} />
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  {doc.link_assinatura && (
-                    <a href={doc.link_assinatura} target="_blank" rel="noopener noreferrer">
-                      <Button className="gap-2 bg-blue-700 hover:bg-blue-800 text-white h-10 text-sm">
-                        <PenLine className="w-4 h-4" />
-                        Assinar com GovBR
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </Button>
-                    </a>
-                  )}
                   {doc.documento_url && (
                     <a href={doc.documento_url} target="_blank" rel="noopener noreferrer">
                       <Button variant="outline" className="gap-2 h-10 text-sm">
                         <FileText className="w-4 h-4" />
                         Ver Documento
+                      </Button>
+                    </a>
+                  )}
+                  <Button
+                    onClick={() => handleAssinar(doc)}
+                    disabled={assinandoId === doc.id}
+                    className="gap-2 bg-green-700 hover:bg-green-800 text-white h-10 text-sm"
+                  >
+                    {assinandoId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
+                    {assinandoId === doc.id ? 'Confirmando...' : 'Assinar Documento'}
+                  </Button>
+                  {doc.link_assinatura && (
+                    <a href={doc.link_assinatura} target="_blank" rel="noopener noreferrer">
+                      <Button variant="ghost" className="gap-2 h-10 text-sm">
+                        <ExternalLink className="w-4 h-4" />
+                        GovBR
                       </Button>
                     </a>
                   )}

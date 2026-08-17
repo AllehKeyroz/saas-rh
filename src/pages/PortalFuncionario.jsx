@@ -27,6 +27,7 @@ import AvisosPendentes from '@/components/portal/AvisosPendentes';
 import AvisosCloudMobile from '@/components/portal/AvisosCloudMobile';
 import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
 import MeusDocumentos from '@/components/portal/MeusDocumentos';
+import MinhasFerias from '@/components/portal/MinhasFerias';
 
 
 const TIPOS_LIMITE_BASE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio', 'consumo', 'credito_consignado'];
@@ -44,6 +45,7 @@ const ABA_LABELS = {
   'comissoes': 'Minhas Comissões',
   'metas': 'Minhas Metas',
   'meus-documentos': 'Meus Documentos',
+  'minhas-ferias': 'Minhas Férias',
   'mensagens': 'Mensagens',
   'solicitacoes': 'Minhas Solicitações',
   'assinaturas': 'Assinaturas Digitais',
@@ -443,6 +445,9 @@ export default function PortalFuncionario() {
           )}
           {aba === 'meus-documentos' && (
             <MeusDocumentos funcionarioId={funcionario?.id} />
+          )}
+          {aba === 'minhas-ferias' && (
+            <MinhasFerias funcionario={funcionario} onVerAssinaturas={() => setAba('assinaturas')} />
           )}
           {aba === 'mensagens' && isAtiva('modulo_mensagens') && (
             <MensagensPortal funcionario={funcionario} />

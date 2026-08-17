@@ -75,6 +75,23 @@
       ]
     },
     {
+      "collectionGroup": "Ferias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Ferias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenant_id", "order": "ASCENDING" },
+        { "fieldPath": "funcionario_id", "order": "ASCENDING" },
+        { "fieldPath": "data_inicio", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "convites",
       "queryScope": "COLLECTION",
       "fields": [

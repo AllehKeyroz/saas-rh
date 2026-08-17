@@ -5,13 +5,15 @@ import { client } from '@/api/client';
 import StatisticsGrid from '@/components/dashboard-rh/StatisticsGrid';
 import AlertBanner from '@/components/dashboard-rh/AlertBanner';
 import IndicadoresFinanceiros from '@/components/dashboard-rh/IndicadoresFinanceiros';
+import FeriasAlertas from '@/components/dashboard-rh/FeriasAlertas';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { User, ExternalLink, CalendarDays } from 'lucide-react';
-import { formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { formatDate, getMesRef } from '@/lib/formatters';
 import { mergeTipos } from '@/lib/formatters';
+import { calcularSituacaoFerias, isFeriasAtiva } from '@/lib/ferias';
 
 export default function DashboardRH() {
   const navigate = useNavigate();
@@ -65,25 +67,12 @@ export default function DashboardRH() {
     const ativas = funcionarios.filter(f => f.ativo !== false && !f.data_demissao).length;
     const pendentes = solicitacoes?.filter(s => s.status === 'pendente').length || 0;
 
-    // Férias vencidas: período aquisitivo (12 meses) + concessivo (12 meses) = 24 meses no total
+    // Férias vencidas: prazo concessivo (12 meses após o fim do aquisitivo) expirado — art. 134/137
     const feriasVencidas = funcionarios.filter(f => {
-      const dataAdm = f.data_admissao ? new Date(f.data_admissao) : null;
-      if (!dataAdm || f.data_demissao) return false;
-      const mesesDesdeAdmissao = (now.getFullYear() * 12 + now.getMonth()) - (dataAdm.getFullYear() * 12 + dataAdm.getMonth());
-      const totalPeriodos = Math.floor(mesesDesdeAdmissao / 12);
-      if (totalPeriodos === 0) return false;
-      const consumidos = new Set(
-        todasFerias.filter(fc => fc.funcionario_id === f.id).map(fc => fc.periodo_aquisitivo)
-      );
-      for (let p = 1; p <= totalPeriodos; p++) {
-        if (!consumidos.has(p)) {
-          const fimAquisitivo = new Date(dataAdm.getFullYear(), dataAdm.getMonth() + p * 12, 1);
-          const prazoLimite = new Date(fimAquisitivo);
-          prazoLimite.setMonth(prazoLimite.getMonth() + 12); // 12 meses de prazo concessivo
-          if (now > prazoLimite) return true;
-        }
-      }
-      return false;
+      if (f.data_demissao) return false;
+      const feriasFunc = todasFerias.filter(fc => fc.funcionario_id === f.id);
+      const situacao = calcularSituacaoFerias(f.data_admissao, feriasFunc);
+      return !!situacao && !situacao.todosConsumidos && situacao.vencido;
     }).length;
 
     const lancamentosMes = (lancamentos || []).filter(l => {
@@ -94,12 +83,7 @@ export default function DashboardRH() {
     const valesMes = vales.reduce((s, l) => s + (l.valor || 0), 0);
     // Funcionários em férias agora
     const agora = new Date();
-    const feriadosAtivos = (todasFerias || []).filter(fc => {
-      if (!fc.data_inicio || !fc.data_fim) return false;
-      const inicio = new Date(fc.data_inicio);
-      const fim = new Date(fc.data_fim);
-      return inicio <= agora && fim >= agora;
-    });
+    const feriadosAtivos = (todasFerias || []).filter(fc => isFeriasAtiva(fc, agora));
     const funcIdsFerias = new Set(feriadosAtivos.map(fc => fc.funcionario_id));
     const funcionariosFeriasList = (funcionarios || []).filter(f => funcIdsFerias.has(f.id));
     const funcionariosFerias = funcionariosFeriasList.length;
@@ -122,7 +106,7 @@ export default function DashboardRH() {
 
   const alerts = React.useMemo(() => {
     const result = [];
-    if (stats.feriasVencidas > 0) result.push({ type: 'warning', title: `${stats.feriasVencidas} funcionário(s) com férias vencidas`, description: `${stats.feriasVencidas} funcionário(s) com prazo concessivo de férias expirado.`, action: 'Verificar', onAction: () => navigate('/funcionarios?tab=ferias') });
+    // Alertas de férias ficam no componente FeriasAlertas (pílulas discretas abaixo)
     if (stats.docsVencendo > 0) result.push({ type: 'error', title: `${stats.docsVencendo} documento(s) vencendo`, description: `${stats.docsVencendo} documento(s) vencerão nos próximos 5 dias.`, action: 'Gerenciar', onAction: () => navigate('/assinaturas-digitais') });
     return result;
   }, [stats, navigate]);
@@ -176,6 +160,7 @@ export default function DashboardRH() {
   return (
     <div className="space-y-6">
       <AlertBanner alerts={alerts} />
+      <FeriasAlertas />
       <StatisticsGrid stats={stats} onFeriasClick={() => setFeriasModalOpen(true)} />
       <IndicadoresFinanceiros />
 

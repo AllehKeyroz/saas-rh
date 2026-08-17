@@ -7,6 +7,7 @@
 export const VALID_ROUTES = {
   dashboard: '/',
   funcionarios: '/funcionarios',
+  ferias: '/ferias',
   lancamentos: '/lancamentos',
   fechamento: '/fechamento',
   relatorios: '/relatorios',

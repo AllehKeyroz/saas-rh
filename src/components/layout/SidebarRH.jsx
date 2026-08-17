@@ -36,6 +36,7 @@ const menuStructure = [
     category: 'Funcionários', icon: Users,
     items: [
       { path: '/funcionarios', label: 'Gerenciar', icon: Users },
+      { path: '/ferias', label: 'Calendário de Férias', icon: Calendar },
       { path: '/espelho-portal', label: 'Espelho do Portal', icon: Eye }
     ]
   },

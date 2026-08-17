@@ -13,7 +13,7 @@ import { registrarAuditoria, ACOES } from '@/lib/auditoriaDocumentos';
 import html2canvas from 'html2canvas';
 import { toast } from 'sonner';
 
-function preencherVariaveis(template, funcionario) {
+function preencherVariaveis(template, funcionario, contextoFerias = null) {
   if (!template || !funcionario) return template || '';
   const hoje = format(new Date(), 'dd/MM/yyyy', { locale: ptBR });
   const admissao = funcionario.data_admissao
@@ -21,6 +21,13 @@ function preencherVariaveis(template, funcionario) {
     : '';
   const expAdmissao = funcionario.data_admissao
     ? format(new Date(new Date(funcionario.data_admissao).getTime() + 90 * 86400000), 'dd/MM/yyyy', { locale: ptBR })
+    : '';
+
+  // Variáveis de contexto de férias (usadas pelo Aviso de Férias)
+  const ferias = contextoFerias || {};
+  const fmtF = (d) => d ? format(new Date(d), 'dd/MM/yyyy', { locale: ptBR }) : '';
+  const retorno = ferias.data_fim
+    ? format(new Date(new Date(ferias.data_fim).getTime() + 86400000), 'dd/MM/yyyy', { locale: ptBR })
     : '';
 
   return template
@@ -33,7 +40,13 @@ function preencherVariaveis(template, funcionario) {
     .replace(/\{\{data_atual\}\}/g, hoje)
     .replace(/\{\{periodo_experiencia\}\}/g, expAdmissao)
     .replace(/\{\{email\}\}/g, funcionario.email || '')
-    .replace(/\{\{telefone\}\}/g, funcionario.telefone || '');
+    .replace(/\{\{telefone\}\}/g, funcionario.telefone || '')
+    .replace(/\{\{periodo_aquisitivo\}\}/g, ferias.periodo_aquisitivo ? `${ferias.periodo_aquisitivo}º` : '')
+    .replace(/\{\{data_inicio_ferias\}\}/g, fmtF(ferias.data_inicio))
+    .replace(/\{\{data_fim_ferias\}\}/g, fmtF(ferias.data_fim))
+    .replace(/\{\{data_retorno\}\}/g, retorno)
+    .replace(/\{\{dias_ferias\}\}/g, ferias.dias_gozados || '')
+    .replace(/\{\{dias_abono\}\}/g, ferias.dias_abono || '0');
 }
 
 export default function EnviarDocumentoDialog({ open, onClose, funcionarios, onSucesso }) {
