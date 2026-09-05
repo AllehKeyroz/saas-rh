@@ -24,12 +24,7 @@ import {
   DescontosConsignados360,
   Comissoes360,
   Solicitacoes360,
-  Advertencias360,
-  BancoHoras360,
-  Desempenho360,
-  LinhaTempoInteligente360,
-  Auditoria360,
-  AnexosGerais360
+  LinhaTempoInteligente360
 } from '@/components/funcionarios360/stub-components';
 
 function getSituacaoFerias(ferias) {
@@ -230,7 +225,7 @@ export default function Funcionarios360() {
 
       {/* Abas de Conteúdo */}
       <Tabs value={abaSelecionada} onValueChange={setAbaSelecionada} className="mt-6">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 h-auto">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-6 h-auto">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="dados">Dados Pessoais</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
@@ -239,15 +234,10 @@ export default function Funcionarios360() {
           <TabsTrigger value="descontos">Descontos</TabsTrigger>
           <TabsTrigger value="comissoes">Comissões</TabsTrigger>
           <TabsTrigger value="solicitacoes">Solicitações</TabsTrigger>
-          <TabsTrigger value="advertencias">Advertências</TabsTrigger>
           <TabsTrigger value="ferias">Férias</TabsTrigger>
           <TabsTrigger value="afastamentos">Afastamentos</TabsTrigger>
-          <TabsTrigger value="bancohoras">Banco de Horas</TabsTrigger>
-          <TabsTrigger value="desempenho">Desempenho</TabsTrigger>
           <TabsTrigger value="cargo-salario">Cargo & Salário</TabsTrigger>
           <TabsTrigger value="timeline">Linha do Tempo</TabsTrigger>
-          <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
-          <TabsTrigger value="anexos">Anexos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dados" className="mt-6">
@@ -278,24 +268,12 @@ export default function Funcionarios360() {
           <Solicitacoes360 funcionario={funcionario} solicitacoes={solicitacoes} />
         </TabsContent>
 
-        <TabsContent value="advertencias" className="mt-6">
-          <Advertencias360 funcionario={funcionario} />
-        </TabsContent>
-
         <TabsContent value="ferias" className="mt-6">
           <Ferias360 funcionario={funcionario} />
         </TabsContent>
 
         <TabsContent value="afastamentos" className="mt-6">
           <Afastamento360 funcionario={funcionario} onRegistrar={() => setRegistrarAfastamentoOpen(true)} />
-        </TabsContent>
-
-        <TabsContent value="bancohoras" className="mt-6">
-          <BancoHoras360 funcionario={funcionario} />
-        </TabsContent>
-
-        <TabsContent value="desempenho" className="mt-6">
-          <Desempenho360 funcionario={funcionario} />
         </TabsContent>
 
         <TabsContent value="cargo-salario" className="mt-6">
@@ -311,14 +289,6 @@ export default function Funcionarios360() {
             comissoes={comissoes}
             fechamentos={fechamentos}
           />
-        </TabsContent>
-
-        <TabsContent value="auditoria" className="mt-6">
-          <Auditoria360 funcionario={funcionario} />
-        </TabsContent>
-
-        <TabsContent value="anexos" className="mt-6">
-          <AnexosGerais360 funcionario={funcionario} />
         </TabsContent>
       </Tabs>
 

@@ -12,7 +12,7 @@ import { differenceInDays, addDays, format, parseISO } from 'date-fns';
 import { Search, User, Calendar, Clock, AlertTriangle, CheckCircle2, XCircle, Plus, History, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentTenantId } from '@/firebase/auth';
-import { calcularSituacaoFerias } from '@/lib/ferias';
+import { calcularSituacaoFerias, calcularSaldoFerias, getSobreposicaoFuncionario } from '@/lib/ferias';
 
 function StatusBadgeFerias({ situacao }) {
   if (!situacao) return <Badge variant="secondary" className="text-xs">Em período aquisitivo</Badge>;
@@ -70,21 +70,15 @@ function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved,
 
   const func = funcionarios.find(f => f.id === funcId);
   const consumidos = feriasConsumidas.filter(f => f.funcionario_id === funcId);
-  const consumidosSet = new Set(consumidos.map(f => f.periodo_aquisitivo));
 
+  // Períodos com saldo restante (saldo parcial: 30 − gozados − programados)
   const periodosDisponiveis = useMemo(() => {
     if (!func?.data_admissao) return [];
-    const admissao = parseISO(func.data_admissao);
-    const meses = differenceInDays(new Date(), admissao) / 30.44;
-    const total = Math.floor(meses / 12);
-    const ops = [];
-    for (let p = 1; p <= total; p++) {
-      if (!consumidosSet.has(p)) {
-        ops.push(p);
-      }
-    }
-    return ops;
-  }, [func, consumidosSet]);
+    const saldo = calcularSaldoFerias(func, consumidos);
+    return (saldo?.periodos || [])
+      .filter(p => p.saldoRestante > 0)
+      .map(p => p.numero);
+  }, [func, consumidos]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -96,9 +90,20 @@ function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved,
       toast.error('Data fim não pode ser anterior à data início');
       return;
     }
+    const diasGozados = differenceInDays(parseISO(dataFim), parseISO(dataInicio)) + 1;
+    const saldoPeriodo = calcularSaldoFerias(func, consumidos).periodos.find(p => p.numero === Number(periodo));
+    const saldoRestante = saldoPeriodo?.saldoRestante || 0;
+    if (diasGozados > saldoRestante) {
+      toast.error(`O ${periodo}º período tem apenas ${saldoRestante} dias restantes. Reduza o intervalo.`);
+      return;
+    }
+    const sobreposicao = getSobreposicaoFuncionario(funcId, dataInicio, dataFim, consumidos);
+    if (sobreposicao.length > 0) {
+      toast.error('Este funcionário já tem férias registradas no período informado.');
+      return;
+    }
     setSaving(true);
     try {
-      const diasGozados = differenceInDays(parseISO(dataFim), parseISO(dataInicio)) + 1;
       await client.entities.Ferias.create({
         funcionario_id: funcId,
         periodo_aquisitivo: Number(periodo),

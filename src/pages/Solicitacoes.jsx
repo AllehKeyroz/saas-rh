@@ -62,11 +62,13 @@ async function processarAprovacaoAtestado(solicitacao) {
 // Ao aprovar uma solicitação de férias, cria o registro de gozo na coleção Ferias.
 // ID determinístico = solicitacao_id → idempotente contra duplo clique / dupla aprovação.
 // Ao recusar (inclusive aprovado → recusado), cancela o registro correspondente.
+// Retorna true se o registro foi criado/tratado com sucesso, false se não foi possível
+// (ex.: sem período aquisitivo) — para o chamador avisar o RH.
 async function processarAprovacaoFerias(solicitacao, status = 'aprovado') {
-  if (solicitacao.tipo_solicitacao !== 'ferias') return;
+  if (solicitacao.tipo_solicitacao !== 'ferias') return true;
 
   if (status === 'aprovado') {
-    if (!solicitacao.periodo_inicio || !solicitacao.periodo_fim) return;
+    if (!solicitacao.periodo_inicio || !solicitacao.periodo_fim) return false;
     let funcionario = null;
     let periodoAquisitivo = null;
     try {
@@ -78,6 +80,11 @@ async function processarAprovacaoFerias(solicitacao, status = 'aprovado') {
       console.error('[Ferias] Não foi possível calcular o período aquisitivo:', e?.message);
     }
     const diasGozados = differenceInDays(parseISO(solicitacao.periodo_fim), parseISO(solicitacao.periodo_inicio)) + 1;
+    // Nunca gravar registro sem período aquisitivo (evita registros órfãos)
+    if (!periodoAquisitivo) {
+      console.warn('[Ferias] Sem período aquisitivo disponível — registro de férias não criado');
+      return false;
+    }
     const feriasCriada = await client.entities.Ferias.createWithId(solicitacao.id, {
       funcionario_id: solicitacao.funcionario_id,
       funcionario_nome: solicitacao.funcionario_nome || '',
@@ -87,14 +94,17 @@ async function processarAprovacaoFerias(solicitacao, status = 'aprovado') {
       dias_gozados: Math.max(diasGozados, 1),
       dias_abono: 0,
       observacao: solicitacao.descricao || '',
+      anexos_urls: solicitacao.anexos_urls || [],
       origem: 'solicitacao',
       solicitacao_id: solicitacao.id,
+      cancelada: false, // re-aprovação de uma solicitação antes recusada reativa o registro
     });
 
     // Gera o Aviso de Férias em segundo plano (não bloqueia a aprovação)
     if (funcionario && feriasCriada) {
       gerarAvisoFerias(funcionario, feriasCriada);
     }
+    return true;
   } else if (status === 'recusado') {
     try {
       const existente = await client.entities.Ferias.get(solicitacao.id);
@@ -104,7 +114,9 @@ async function processarAprovacaoFerias(solicitacao, status = 'aprovado') {
     } catch (e) {
       console.error('[Ferias] Não foi possível cancelar registro:', e?.message);
     }
+    return true;
   }
+  return true;
 }
 
 // Fluxo único de resposta a uma solicitação: atualiza status, notifica o funcionário,
@@ -137,7 +149,10 @@ async function processarAprovacao(solicitacao, status, meUser, resposta = '', en
   if (status === 'aprovado') {
     await processarAprovacaoPix(solicitacao);
     await processarAprovacaoAtestado(solicitacao);
-    await processarAprovacaoFerias(solicitacao, 'aprovado');
+    const feriasOk = await processarAprovacaoFerias(solicitacao, 'aprovado');
+    if (solicitacao.tipo_solicitacao === 'ferias' && !feriasOk) {
+      toast.warning('Solicitação aprovada, mas o registro de férias não foi criado — funcionário sem período aquisitivo disponível.');
+    }
   } else if (status === 'recusado') {
     await processarAprovacaoFerias(solicitacao, 'recusado');
   }

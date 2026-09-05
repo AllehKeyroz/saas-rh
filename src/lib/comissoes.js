@@ -55,6 +55,27 @@ export function sobrepoeAfastamento(afast, periodoInicio, periodoFim) {
   return calcularDiasSobrepostos(afast.data_inicio, afast.data_fim, periodoInicio, periodoFim) > 0;
 }
 
+// Dias ausentes DISTINTOS (união) de vários períodos (afastamento + férias) dentro do
+// período da comissão. Evita contar em dobro quando afastamento e férias se cruzam.
+export function calcularDiasUniao(periodos, periodoInicio, periodoFim) {
+  const dias = new Set();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  for (const p of periodos || []) {
+    if (!p.data_inicio) continue;
+    const ini = new Date(p.data_inicio + 'T00:00:00');
+    const fim = p.data_fim ? new Date(p.data_fim + 'T00:00:00') : new Date(periodoFim + 'T00:00:00');
+    const pIni = new Date(periodoInicio + 'T00:00:00');
+    const pFim = new Date(periodoFim + 'T00:00:00');
+    const a = ini > pIni ? ini : pIni;
+    const b = fim < pFim ? fim : pFim;
+    if (a > b) continue;
+    for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+      dias.add(iso(d));
+    }
+  }
+  return dias.size;
+}
+
 // Calcula proporcionalidade por dias trabalhados
 // diasAusentes: número de dias ausentes no período
 // Retorna { diasTotais, diasTrabalhados, proporcao }

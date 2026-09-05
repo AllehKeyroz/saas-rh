@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { formatCurrency } from '@/lib/formatters';
-import { formatPeriodo, calcularComissaoMensal, calcularProgressoMetaComissao, getAlertaMetaComissao } from '@/lib/comissoes';
-import { AlertTriangle, Award, Info, CheckCircle2, Target, TrendingUp, Star, Zap, CalendarDays, ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { formatPeriodo, calcularProgressoMetaComissao, getAlertaMetaComissao } from '@/lib/comissoes';
+import { Award, Target, TrendingUp, Star, Zap, CalendarDays, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRHControl } from '@/lib/rhControl';
 import { useFinancialDataLogger } from '@/hooks/useFinancialDataLogger';
@@ -103,7 +103,10 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSe
           </div>
 
           {mesesSetor.filter(mes => !mesSelecionado || mes === mesSelecionado).map(mes => {
-            const registros = setorPorMes[mes];
+            // O resumo do setor mostra apenas as gorjetas (rateio) — comissões individuais
+            // de outros funcionários não entram aqui (aparecem em "Minhas Comissões")
+            const registros = setorPorMes[mes].filter(r => r.origem !== 'individual');
+            if (registros.length === 0) return null;
             // Deduplica por período: valor_setor é o mesmo para todos do setor
             const periodosVistos = new Set();
             const totalBruto = registros.reduce((s, r) => {

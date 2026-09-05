@@ -9,6 +9,7 @@ import { getTipoAfastamento, getHojeISO, isAfastamentoAtivo } from '@/lib/afasta
 import { FileText, Plus, Ban, Stethoscope, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import EncerrarAfastamentoDialog from '@/components/funcionarios/EncerrarAfastamentoDialog';
+import ComprovantesSection from '@/components/funcionarios/ComprovantesSection';
 
 const TIPO_ICONS = {
   atestado_medico: Stethoscope,
@@ -47,6 +48,25 @@ export default function Afastamento360({ funcionario, onRegistrar }) {
     } catch (err) {
       toast.error(err?.message || 'Erro ao encerrar afastamento');
     }
+  };
+
+  const atualizarComprovantes = async (a, novo) => {
+    await client.entities.Afastamento.update(a.id, { anexos_urls: novo });
+    queryClient.invalidateQueries({ queryKey: ['afastamentos_360', funcionario?.id] });
+  };
+
+  const handleAddComprovante = async (a, file) => {
+    const { file_url } = await client.integrations.Core.UploadFile({ file });
+    const novo = [
+      ...(a.anexos_urls || []),
+      { nome: file.name, url: file_url, visivel_ao_funcionario: false, criado_em: new Date().toISOString() },
+    ];
+    await atualizarComprovantes(a, novo);
+  };
+
+  const handleRemoverComprovante = async (a, item) => {
+    const novo = (a.anexos_urls || []).filter(x => x !== item);
+    await atualizarComprovantes(a, novo);
   };
 
   return (
@@ -116,6 +136,12 @@ export default function Afastamento360({ funcionario, onRegistrar }) {
                       Justificativa do encerramento: {a.justificativa_encerramento}
                     </p>
                   )}
+
+                  <ComprovantesSection
+                    anexos={a.anexos_urls}
+                    onAddFile={(file) => handleAddComprovante(a, file)}
+                    onRemover={(item) => handleRemoverComprovante(a, item)}
+                  />
 
                   {ativo && (
                     <div className="flex justify-end">

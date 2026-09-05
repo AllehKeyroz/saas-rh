@@ -35,12 +35,13 @@ class FirestoreEntity {
     return { id: d.id, ...data }
   }
 
-  // Cria com ID determinístico — usado para idempotência (ex.: Ferias com id = solicitacao_id)
+  // Cria com ID determinístico — usado para idempotência (ex.: Ferias com id = solicitacao_id).
+  // merge:true preserva campos já gravados (ex.: aviso_id) ao reprocessar o mesmo registro.
   async createWithId(id, data) {
     await setDoc(doc(this.collectionRef, id), {
       ...data,
       created_date: new Date().toISOString(),
-    })
+    }, { merge: true })
     const d = await getDoc(doc(this.collectionRef, id))
     return { id: d.id, ...d.data() }
   }
@@ -148,6 +149,8 @@ const ENTITY_NAMES = [
   'GastosPessoais', 'DividasPessoais', 'AssinaturasPessoais',
   'MetasObjetivos', 'MetaFinanceira', 'users', 'convites',
   'Consignado', 'HistoricoSalario', 'Afastamento',
+  'EscalaFolga',
+  'ComissaoIndividual',
 ]
 
 ENTITY_NAMES.forEach(registerEntity)

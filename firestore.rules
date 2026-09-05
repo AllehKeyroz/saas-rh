@@ -56,6 +56,7 @@ service cloud.firestore {
     match /FichaFinanceira/{docId}  { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /FechamentoMensal/{docId} { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ComissoesGorjetas/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
+    match /ComissaoIndividual/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ComissaoPorFuncionario/{docId}     { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /SetoresComissao/{docId}            { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /MetaComissao/{docId}               { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
@@ -63,7 +64,7 @@ service cloud.firestore {
     match /Setor/{docId}             { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /Funcao/{docId}            { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /TipoLancamento/{docId}    { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
-    match /ConfiguracoesRH/{docId}   { allow read: if isAuthenticated(); allow create: if isAdmin() && tenantMatch(); allow update: if isAdmin(); allow delete: if isAdmin(); }
+    match /ConfiguracoesRH/{docId}   { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ConfiguracaoNotificacao/{docId} { allow read: if isAuthenticated(); allow create: if isAdmin() && tenantMatch(); allow update: if isAdmin(); allow delete: if isAdmin(); }
     match /ConfiguracaoAparencia/{docId}   { allow read: if isAuthenticated(); allow create: if isAdmin() && tenantMatch(); allow update: if isAdmin(); allow delete: if isAdmin(); }
     match /BackupRegistro/{docId}    { allow read: if isAdmin(); allow create: if isAdmin() && tenantMatch(); allow update: if isAdmin(); allow delete: if isAdmin(); }
@@ -95,5 +96,6 @@ service cloud.firestore {
     match /Consignado/{docId}           { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /HistoricoSalario/{docId}     { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); }
     match /Afastamento/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
+    match /EscalaFolga/{docId}          { allow read: if isRH() || ownFuncionario(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
   }
 }

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatDate, getMesReferenciaAtual } from '@/lib/formatters';
 import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus } from 'lucide-react';
 import { toast } from 'sonner';
-import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios, calcularDiasSobrepostos, sobrepoeAfastamento } from '@/lib/comissoes';
+import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios, sobrepoeAfastamento, calcularDiasUniao } from '@/lib/comissoes';
 import { registrarAuditoria } from '@/lib/audit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRHControl } from '@/lib/rhControl';
@@ -20,6 +20,16 @@ function getMesFromDatas(inicio) {
   if (!inicio) return getMesReferenciaAtual();
   const d = new Date(inicio + 'T00:00:00');
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+// Motivo de exclusão do rateio conforme o tipo de ausência (afastamento e/ou férias)
+function motivoAusencia(aus) {
+  if (!aus) return 'Afastamento no período';
+  const temAfast = (aus.afastamentos || []).length > 0;
+  const temFerias = (aus.ferias || []).length > 0;
+  if (temAfast && temFerias) return 'Afastamento e férias no período';
+  if (temFerias) return 'Férias no período';
+  return 'Afastamento no período';
 }
 
 export default function LancarComissao({ funcionarios, onSaved }) {
@@ -33,8 +43,8 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   const [retencao, setRetencao] = useState('0');
   // diasAusentes por funcionário: { [funcId]: número }
   const [diasAusentesPorFunc, setDiasAusentesPorFunc] = useState({});
-  // decisão de rateio por funcionário com afastamento no período: { [funcId]: 'recebe' | 'nao_recebe' }
-  const [decisoesAfast, setDecisoesAfast] = useState({});
+  // decisão de rateio por funcionário ausente no período (afastamento ou férias): { [funcId]: 'recebe' | 'nao_recebe' }
+  const [decisoesAusencia, setDecisoesAusencia] = useState({});
 
   const mesRef = getMesFromDatas(periodoInicio);
 
@@ -46,6 +56,12 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   const { data: afastamentos = [] } = useQuery({
     queryKey: ['afastamentos_comissao'],
     queryFn: () => client.entities.Afastamento.list(),
+  });
+
+  // Férias também contam como ausência no período da comissão (mesmo tratamento do afastamento)
+  const { data: ferias = [] } = useQuery({
+    queryKey: ['ferias_comissao'],
+    queryFn: () => client.entities.Ferias.list(),
   });
 
   // Carrega retenção padrão da configuração
@@ -78,6 +94,8 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   }, [valorTotal, setoresAtivos, setoresValidos, pctRetencao]);
 
   const valorRetido = (parseFloat(valorTotal) || 0) * (pctRetencao / 100);
+  // Valor efetivamente a distribuir aos funcionários (após a retenção da empresa)
+  const vDistribuir = (parseFloat(valorTotal) || 0) - valorRetido;
 
   const hoje = new Date().toISOString().split('T')[0];
 
@@ -133,7 +151,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       let valorSetor, nome;
       if (setorId === '__outros') {
         const totalDistribuido = Object.values(divisao).reduce((s, v) => s + (v?.valor || 0), 0);
-        valorSetor = Math.max(0, (parseFloat(valorTotal) || 0) - totalDistribuido);
+        valorSetor = Math.max(0, vDistribuir - totalDistribuido);
         nome = 'Outros (setor não mapeado)';
       } else {
         valorSetor = divisao[setorId]?.valor || 0;
@@ -163,47 +181,57 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       const totalDistribuido = Object.values(result)
         .filter(v => v !== result['__outros'])
         .reduce((s, v) => s + (v.valorSetor || 0), 0);
-      result['__outros'].valorSetor = Math.max(0, (parseFloat(valorTotal) || 0) - totalDistribuido);
+      result['__outros'].valorSetor = Math.max(0, vDistribuir - totalDistribuido);
       result['__outros'].valorInd = result['__outros'].aptos.length > 0
         ? result['__outros'].valorSetor / result['__outros'].aptos.length : 0;
     }
 
     return result;
-  }, [aptoPorSetor, divisao, valorTotal]);
+  }, [aptoPorSetor, divisao, valorTotal, vDistribuir]);
 
   const setoresSemAptosComFuncs = Object.entries(distribuicao).filter(([sid, v]) => v.semAptos && (porSetor[sid]?.length || 0) > 0 && sid !== '__outros');
   const outrosFuncs = aptoPorSetor['__outros']?.aptos || [];
 
-  // Funcionários aptos com afastamento que sobrepõe o período da comissão
-  const afastamentosNoPeriodo = useMemo(() => {
+  // Funcionários aptos com ausência no período da comissão (afastamento OU férias)
+  const ausenciasNoPeriodo = useMemo(() => {
     if (!calculado || !periodoInicio || !periodoFim) return {};
     const mapa = {};
     for (const [sid, { aptos }] of Object.entries(distribuicao)) {
       for (const f of aptos) {
         const afs = (afastamentos || []).filter(a => a.funcionario_id === f.id && sobrepoeAfastamento(a, periodoInicio, periodoFim));
-        if (afs.length === 0) continue;
-        const totalDias = afs.reduce((s, a) => s + calcularDiasSobrepostos(a.data_inicio, a.data_fim, periodoInicio, periodoFim), 0);
+        const fer = (ferias || []).filter(x => x.funcionario_id === f.id && x.cancelada !== true && sobrepoeAfastamento(x, periodoInicio, periodoFim));
+        if (afs.length === 0 && fer.length === 0) continue;
+        const totalDias = calcularDiasUniao([...afs, ...fer], periodoInicio, periodoFim);
         mapa[f.id] = {
           funcionario: f,
           afastamentos: afs,
+          ferias: fer,
           totalDias,
         };
       }
     }
     return mapa;
-  }, [calculado, periodoInicio, periodoFim, distribuicao, afastamentos]);
+  }, [calculado, periodoInicio, periodoFim, distribuicao, afastamentos, ferias]);
 
-  // Distribuição efetiva: exclui quem "não recebe" o rateio por afastamento
+  // Distribuição efetiva: exclui quem "não recebe" o rateio por ausência (afastamento/férias)
   const distribuicaoEfetiva = useMemo(() => {
-    if (Object.keys(afastamentosNoPeriodo).length === 0) return distribuicao;
+    if (Object.keys(ausenciasNoPeriodo).length === 0) return distribuicao;
 
     const result = {};
     let totalComAptos = 0;
     let totalSemAptos = 0;
 
     for (const [setorId, data] of Object.entries(distribuicao)) {
-      const aptosEfetivos = data.aptos.filter(f => decisoesAfast[f.id] !== 'nao_recebe');
-      const excluidos = [...(data.excluidos || []), ...data.aptos.filter(f => decisoesAfast[f.id] === 'nao_recebe')];
+      // Ausente (afastamento/férias) só recebe se marcado explicitamente como "recebe".
+      // Sem decisão (padrão) = "não recebe" → sai da lista de aptos.
+      const aptosEfetivos = data.aptos.filter(f => {
+        if (!ausenciasNoPeriodo[f.id]) return true;
+        return decisoesAusencia[f.id] === 'recebe';
+      });
+      const excluidos = [
+        ...(data.excluidos || []),
+        ...data.aptos.filter(f => ausenciasNoPeriodo[f.id] && decisoesAusencia[f.id] !== 'recebe'),
+      ];
       const semAptos = aptosEfetivos.length === 0;
       if (setorId !== '__outros') {
         if (semAptos) totalSemAptos += data.valorSetor;
@@ -223,7 +251,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     }
 
     return result;
-  }, [distribuicao, afastamentosNoPeriodo, decisoesAfast]);
+  }, [distribuicao, ausenciasNoPeriodo, decisoesAusencia]);
 
   // Preview em tempo real usa a distribuição efetiva
   const previewAptos = useMemo(() => {
@@ -248,7 +276,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     if (!setoresValidos) { toast.error('Os percentuais dos setores não somam 100%. Verifique a aba "Setores".'); return; }
     if (pctRetencao >= 100) { toast.error('Retenção não pode ser 100%. Deixe espaço para distribuir aos funcionários.'); return; }
     setCalculado(true);
-    setDecisoesAfast({});
+    setDecisoesAusencia({});
   };
 
 
@@ -296,8 +324,9 @@ export default function LancarComissao({ funcionarios, onSaved }) {
           });
         }
 
-        // Registra excluídos por afastamento (não recebem rateio)
+        // Registra excluídos por ausência no período (afastamento ou férias — não recebem rateio)
         for (const f of excluidos) {
+          const aus = ausenciasNoPeriodo[f.id];
           registros.push({
             funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id,
             setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
@@ -307,12 +336,12 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             valor_individual_final: 0,
             perda_faltas_proprias: 0,
             bonus_faltas_terceiros: 0,
-            dias_ausentes_no_periodo: afastamentosNoPeriodo[f.id]?.totalDias || 0,
+            dias_ausentes_no_periodo: aus?.totalDias || 0,
             dias_trabalhados: 0,
             dias_totais: 0,
             proporcao: 0,
             apto: false,
-            motivo_exclusao: 'Afastamento no período',
+            motivo_exclusao: motivoAusencia(aus),
           });
         }
       }
@@ -326,7 +355,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
       });
 
       toast.success('Comissão lançada com sucesso!');
-      setPeriodoInicio(''); setPeriodoFim(''); setValorTotal(''); setObservacao(''); setCalculado(false); setDiasAusentesPorFunc({}); setDecisoesAfast({});
+      setPeriodoInicio(''); setPeriodoFim(''); setValorTotal(''); setObservacao(''); setCalculado(false); setDiasAusentesPorFunc({}); setDecisoesAusencia({});
       onSaved();
       } catch (e) {
       toast.error(`Erro ao salvar: ${e.message}`);
@@ -450,33 +479,37 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             </div>
           ))}
 
-          {/* Questionamento de afastamento no período */}
-          {Object.keys(afastamentosNoPeriodo).length > 0 && (
+          {/* Questionamento de ausência no período (afastamento ou férias) */}
+          {Object.keys(ausenciasNoPeriodo).length > 0 && (
             <div className="flex items-start gap-3 bg-purple-50 border border-purple-200 rounded-xl p-4">
               <AlertCircle className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
               <div className="w-full text-sm text-purple-900">
                 <p className="font-semibold mb-2">
-                  {Object.keys(afastamentosNoPeriodo).length} funcionário(s) com afastamento no período da comissão
+                  {Object.keys(ausenciasNoPeriodo).length} funcionário(s) ausente(s) no período da comissão (afastamento ou férias)
                 </p>
                 <div className="space-y-2">
-                  {Object.values(afastamentosNoPeriodo).map(({ funcionario, afastamentos: afs, totalDias }) => {
-                    const decisao = decisoesAfast[funcionario.id] || 'nao_recebe';
+                  {Object.values(ausenciasNoPeriodo).map(({ funcionario, afastamentos: afs, ferias: fer, totalDias }) => {
+                    const decisao = decisoesAusencia[funcionario.id] || 'nao_recebe';
+                    const motivos = [
+                      ...afs.map(a => `afastado de ${a.data_inicio ? formatDate(a.data_inicio) : '—'} a ${a.data_fim ? formatDate(a.data_fim) : 'em aberto'}`),
+                      ...fer.map(x => `férias de ${formatDate(x.data_inicio)} a ${formatDate(x.data_fim)}`),
+                    ];
                     return (
                       <div key={funcionario.id} className="bg-white/60 rounded-lg px-3 py-2">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
                           <div className="min-w-0">
                             <p className="font-medium text-sm">{funcionario.nome}</p>
                             <p className="text-xs text-muted-foreground">
-                              {afs.map(a => `afastado de ${a.data_inicio ? formatDate(a.data_inicio) : '—'} a ${a.data_fim ? formatDate(a.data_fim) : 'em aberto'}`).join('; ')}
+                              {motivos.join('; ')}
                               {' · '}{totalDias} dia(s) no período
                             </p>
                           </div>
                           <RadioGroup
                             value={decisao}
                             onValueChange={v => {
-                              setDecisoesAfast(prev => ({ ...prev, [funcionario.id]: v }));
+                              setDecisoesAusencia(prev => ({ ...prev, [funcionario.id]: v }));
                               if (v === 'recebe') {
-                                // Pré-preenche os dias ausentes com os dias de afastamento sobrepostos
+                                // Pré-preenche os dias ausentes com os dias de ausência sobrepostos
                                 setDiasAusentesPorFunc(prev => ({ ...prev, [funcionario.id]: totalDias }));
                               }
                             }}
@@ -549,7 +582,7 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                       {excluidos.map(f => (
                         <div key={f.id} className="flex items-center justify-between text-xs">
                           <span className="text-red-800 font-medium">{f.nome}</span>
-                          <span className="text-red-600">Excluído — afastamento no período</span>
+                          <span className="text-red-600">Excluído — {motivoAusencia(ausenciasNoPeriodo[f.id])}</span>
                         </div>
                       ))}
                     </div>

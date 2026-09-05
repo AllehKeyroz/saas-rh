@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { client } from '@/api/client';
 import { registrarAuditoria } from '@/lib/audit';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -87,6 +87,9 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
   const [showRecontratar, setShowRecontratar] = useState(false);
   const [recontratarData, setRecontratarData] = useState(hojeStr);
   const [conviteFuncionario, setConviteFuncionario] = useState(null);
+  const [criandoFuncao, setCriandoFuncao] = useState(false);
+  const [criandoSetor, setCriandoSetor] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: setores = [] } = useQuery({
     queryKey: ['setores'],
@@ -189,6 +192,44 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
     setForm(prev => ({ ...prev, [field]: value }))
     setErrors(prev => ({ ...prev, [field]: undefined }))
   }
+
+  // Sincroniza setor e função digitados no cadastro com as coleções correspondentes
+  // (Setor, SetoresComissao, Funcao). Garante as "duas vias": categoria criada no
+  // funcionário aparece no lançamento de comissões e nos dropdowns, e vice-versa.
+  const garantirCategoriasCadastradas = async ({ setor, funcao }) => {
+    const normalizar = (s) => (s || '').trim().toLowerCase();
+
+    if (setor) {
+      const nome = setor.trim();
+      const existeComissao = setoresComissao.some(s => normalizar(s.nome_do_setor) === normalizar(nome));
+      if (!existeComissao) {
+        await client.entities.SetoresComissao.create({
+          nome_do_setor: nome,
+          percentual: 0,
+          palavras_chave: nome,
+          ativo: true,
+          ordem_exibicao: setoresComissao.length + 1,
+        });
+      }
+
+      const existeSetor = setores.some(s => normalizar(s.nome) === normalizar(nome));
+      if (!existeSetor) {
+        await client.entities.Setor.create({ nome, ativo: true });
+      }
+    }
+
+    if (funcao) {
+      const nome = funcao.trim();
+      const existeFuncao = funcoes.some(f => normalizar(f.nome) === normalizar(nome));
+      if (!existeFuncao) {
+        await client.entities.Funcao.create({ nome, ativo: true });
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['setores'] });
+    queryClient.invalidateQueries({ queryKey: ['setores_comissao_form'] });
+    queryClient.invalidateQueries({ queryKey: ['funcoes'] });
+  };
 
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -355,6 +396,16 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
           dados_novos: data,
         });
       }
+
+      // Sincroniza setor/função com as coleções de categorias (duas vias: cadastro ↔ comissão)
+      if (data.setor || data.funcao) {
+        try {
+          await garantirCategoriasCadastradas({ setor: data.setor, funcao: data.funcao });
+        } catch (e) {
+          console.warn('[FuncionarioForm] Não foi possível sincronizar categorias:', e?.message);
+        }
+      }
+
       setSaving(false);
       onSaved();
       onClose();
@@ -411,14 +462,14 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
 
       <div>
         <Label>Nome *</Label>
-        <Input value={form.nome} onChange={e => handleChange('nome', e.target.value)} placeholder="Nome completo" required />
+        <Input name="firstName" value={form.nome} onChange={e => handleChange('nome', e.target.value)} placeholder="Nome completo" required />
         {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label>E-mail</Label>
-          <Input type="email" value={form.email || ''} onChange={e => handleChange('email', e.target.value.toLowerCase())} placeholder="funcionario@empresa.com" />
+          <Input name="email" type="email" value={form.email || ''} onChange={e => handleChange('email', e.target.value.toLowerCase())} placeholder="funcionario@empresa.com" />
           {isEdit && form.email && (
             <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs text-amber-600 mt-1" onClick={handleReenviarConvite}>
               <Send className="w-3 h-3 mr-1" />Reenviar convite de acesso
@@ -427,24 +478,35 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         </div>
         <div>
           <Label>Telefone / WhatsApp</Label>
-          <Input type="tel" value={form.telefone || ''} onChange={e => handleChange('telefone', e.target.value)} placeholder="11999998888" />
+          <Input name="phone" type="tel" value={form.telefone || ''} onChange={e => handleChange('telefone', e.target.value)} placeholder="11999998888" />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label>Função</Label>
-          {funcoes.length > 0 ? (
-            <Select value={form.funcao || ''} onValueChange={v => handleChange('funcao', v)}>
+          {criandoFuncao ? (
+            <div className="space-y-1">
+              <Input name="funcao" value={form.funcao || ''} onChange={e => handleChange('funcao', e.target.value)} placeholder="Digite a nova função..." autoFocus />
+              <button type="button" onClick={() => { setCriandoFuncao(false); if (!form.funcao) handleChange('funcao', ''); }} className="text-xs text-muted-foreground hover:text-foreground">
+                ← Escolher da lista
+              </button>
+            </div>
+          ) : funcoes.length > 0 ? (
+            <Select value={form.funcao || ''} onValueChange={v => {
+              if (v === '__nova_funcao') { setCriandoFuncao(true); handleChange('funcao', ''); }
+              else handleChange('funcao', v);
+            }}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {funcoes.filter(f => f.ativo !== false).map(f => (
                   <SelectItem key={f.id} value={f.nome}>{f.nome}</SelectItem>
                 ))}
+                <SelectItem value="__nova_funcao">＋ Criar nova função...</SelectItem>
               </SelectContent>
             </Select>
           ) : (
-            <Input value={form.funcao || ''} onChange={e => handleChange('funcao', e.target.value)} placeholder="Ex: Operador" />
+            <Input name="funcao" value={form.funcao || ''} onChange={e => handleChange('funcao', e.target.value)} placeholder="Ex: Operador" />
           )}
         </div>
         <div>
@@ -456,17 +518,31 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
                 ...setoresComissao.map(s => s.nome_do_setor),
               ]),
             ];
+            if (criandoSetor) {
+              return (
+                <div className="space-y-1">
+                  <Input name="setor" value={form.setor || ''} onChange={e => handleChange('setor', e.target.value)} placeholder="Digite o novo setor..." autoFocus />
+                  <button type="button" onClick={() => { setCriandoSetor(false); if (!form.setor) handleChange('setor', ''); }} className="text-xs text-muted-foreground hover:text-foreground">
+                    ← Escolher da lista
+                  </button>
+                </div>
+              );
+            }
             return opcoesSetores.length > 0 ? (
-              <Select value={form.setor || ''} onValueChange={v => handleChange('setor', v)}>
+              <Select value={form.setor || ''} onValueChange={v => {
+                if (v === '__novo_setor') { setCriandoSetor(true); handleChange('setor', ''); }
+                else handleChange('setor', v);
+              }}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {opcoesSetores.map(nome => (
                     <SelectItem key={nome} value={nome}>{nome}</SelectItem>
                   ))}
+                  <SelectItem value="__novo_setor">＋ Criar novo setor...</SelectItem>
                 </SelectContent>
               </Select>
             ) : (
-              <Input value={form.setor || ''} onChange={e => handleChange('setor', e.target.value)} placeholder="Ex: Produção" />
+              <Input name="setor" value={form.setor || ''} onChange={e => handleChange('setor', e.target.value)} placeholder="Ex: Produção" />
             );
           })()}
         </div>
@@ -475,12 +551,12 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label>Data de Nascimento</Label>
-          <Input type="date" max={hojeStr} value={form.data_nascimento || ''} onChange={e => handleChange('data_nascimento', e.target.value)} />
+          <Input name="dateOfBirth" type="date" max={hojeStr} value={form.data_nascimento || ''} onChange={e => handleChange('data_nascimento', e.target.value)} />
           {errors.data_nascimento && <p className="text-xs text-destructive mt-1">{errors.data_nascimento}</p>}
         </div>
         <div>
           <Label>Data Admissão *</Label>
-          <Input type="date" max={hojeStr} value={form.data_admissao || ''} onChange={e => handleChange('data_admissao', e.target.value)} required />
+          <Input name="data_admissao" type="date" max={hojeStr} value={form.data_admissao || ''} onChange={e => handleChange('data_admissao', e.target.value)} required />
           {errors.data_admissao && <p className="text-xs text-destructive mt-1">{errors.data_admissao}</p>}
         </div>
       </div>
@@ -530,16 +606,16 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
       <div className="grid grid-cols-3 gap-4">
         <div>
           <Label>Salário Base *</Label>
-          <Input type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => { setLimiteEditado(false); handleChange('salario_base', e.target.value); }} placeholder="0,00" required disabled={isEdit && Number(form.salario_base) > 0} />
+          <Input name="salario_base" type="number" step="0.01" min="0" value={form.salario_base || ''} onChange={e => { setLimiteEditado(false); handleChange('salario_base', e.target.value); }} placeholder="0,00" required disabled={isEdit && Number(form.salario_base) > 0} />
           {errors.salario_base && <p className="text-xs text-destructive mt-1">{errors.salario_base}</p>}
         </div>
         <div>
           <Label>Ajuda de Custo</Label>
-          <Input type="number" step="0.01" min="0" value={form.ajuda_custo || ''} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" disabled={isEdit && Number(form.ajuda_custo) > 0} />
+          <Input name="ajuda_custo" type="number" step="0.01" min="0" value={form.ajuda_custo || ''} onChange={e => handleChange('ajuda_custo', e.target.value)} placeholder="0,00" disabled={isEdit && Number(form.ajuda_custo) > 0} />
         </div>
         <div>
           <Label>Limite de Vales ({LIMITE_PERCENTUAL}%)</Label>
-          <Input type="number" step="0.01" min="0" value={form.limite_vales || ''} onChange={e => { setLimiteEditado(true); handleChange('limite_vales', e.target.value); }} placeholder="Sem limite" />
+          <Input name="limite_vales" type="number" step="0.01" min="0" value={form.limite_vales || ''} onChange={e => { setLimiteEditado(true); handleChange('limite_vales', e.target.value); }} placeholder="Sem limite" />
         </div>
       </div>
 
@@ -617,7 +693,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         {!form.apto_comissao && (
           <div>
             <Label className="text-xs text-muted-foreground">Data programada para início da comissão</Label>
-            <Input type="date" value={form.data_inicio_comissao || ''} onChange={e => handleChange('data_inicio_comissao', e.target.value)} />
+            <Input name="data_inicio_comissao" type="date" value={form.data_inicio_comissao || ''} onChange={e => handleChange('data_inicio_comissao', e.target.value)} />
             {comissaoAtivaByData && <p className="text-xs text-amber-600 mt-1">⚠️ A data programada já passou — considere marcar como apto manualmente.</p>}
             {form.data_inicio_comissao && !comissaoAtivaByData && <p className="text-xs text-blue-600 mt-1">ℹ️ Funcionário passará a receber comissão em {form.data_inicio_comissao}.</p>}
           </div>
@@ -872,7 +948,7 @@ export default function FuncionarioForm({ open, onClose, funcionario, onSaved })
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar Funcionário' : 'Novo Funcionário'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form id="form-funcionario" name="cadastro-funcionario" data-formid="cadastro-funcionario" onSubmit={handleSubmit} className="space-y-4">
           <TabNav />
 
           {tab === 'cadastro' && renderCadastro()}

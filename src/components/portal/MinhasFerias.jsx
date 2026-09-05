@@ -27,6 +27,28 @@ const STATUS_LABEL = {
   [FERIAS_STATUS.CANCELADA]: 'Cancelada',
 };
 
+// Comprovantes de férias marcados como visíveis ao funcionário (somente leitura)
+function ComprovantesVisiveis({ ferias }) {
+  const visiveis = (ferias?.anexos_urls || []).filter(a => a.visivel_ao_funcionario === true);
+  if (visiveis.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1">
+      {visiveis.map((a, idx) => (
+        <a
+          key={idx}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs bg-primary/5 text-primary border border-primary/20 rounded-md px-2 py-0.5 hover:bg-primary/10 transition-colors"
+        >
+          <FileText className="w-3 h-3 shrink-0" />
+          <span className="max-w-[140px] truncate">{a.nome || 'Comprovante'}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export default function MinhasFerias({ funcionario, onVerAssinaturas }) {
   const { data: ferias = [], isLoading } = useQuery({
     queryKey: ['minhas_ferias', funcionario?.id],
@@ -119,6 +141,7 @@ export default function MinhasFerias({ funcionario, onVerAssinaturas }) {
             ) : (
               <p className="text-sm text-muted-foreground">Nenhuma férias programada.</p>
             )}
+            <ComprovantesVisiveis ferias={emAndamento || proximas} />
           </CardContent>
         </Card>
 
@@ -132,12 +155,12 @@ export default function MinhasFerias({ funcionario, onVerAssinaturas }) {
                 <span>
                   {p.estado === 'disponivel' && (
                     p.concessaoVencida
-                      ? <Badge className="bg-red-100 text-red-700">Concessão vencida</Badge>
+                      ? <Badge className="bg-red-100 text-red-700">Concessão vencida ({p.saldoRestante} dias)</Badge>
                       : p.vencido
-                        ? <Badge className="bg-amber-300/60 text-amber-900 ring-1 ring-amber-500">Aquisitivo pendente</Badge>
+                        ? <Badge className="bg-amber-300/60 text-amber-900 ring-1 ring-amber-500">Aquisitivo pendente ({p.saldoRestante} dias)</Badge>
                         : p.diasParaVencer <= 120
-                          ? <Badge className="bg-orange-100 text-orange-700">Concessão em {p.diasParaVencer} dias</Badge>
-                          : <Badge className="bg-green-100 text-green-700">Disponível</Badge>
+                          ? <Badge className="bg-orange-100 text-orange-700">Concessão em {p.diasParaVencer} dias ({p.saldoRestante} restantes)</Badge>
+                          : <Badge className="bg-green-100 text-green-700">Disponível ({p.saldoRestante} dias)</Badge>
                   )}
                   {p.estado === 'gozado' && <Badge className="bg-green-100 text-green-700">Gozado</Badge>}
                   {p.estado === 'programado' && <Badge className="bg-blue-100 text-blue-700">Programado</Badge>}
@@ -165,6 +188,7 @@ export default function MinhasFerias({ funcionario, onVerAssinaturas }) {
                       {f.dias_abono > 0 && <span className="text-muted-foreground text-xs"> (+{f.dias_abono} abono)</span>}
                     </p>
                     {f.origem === 'solicitacao' && <p className="text-xs text-muted-foreground">Concedida via solicitação</p>}
+                    <ComprovantesVisiveis ferias={f} />
                   </div>
                   <div className="flex items-center gap-2">
                     {aviso?.assinatura && (

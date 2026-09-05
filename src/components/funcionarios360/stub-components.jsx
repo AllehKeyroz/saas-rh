@@ -1,11 +1,9 @@
-// Componentes stub para completar a Visão 360°
-// Cada um será expandido conforme necessário
+// Componentes de leitura da Visão 360° (tabelas simples a partir dos dados já carregados)
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCurrency, formatDate } from '@/lib/formatters';
-import StubBadge from '@/components/StubBadge';
 
 export function ValesAdiantamentos360({ funcionario, vales }) {
   return (
@@ -169,96 +167,6 @@ export function Solicitacoes360({ funcionario, solicitacoes }) {
   );
 }
 
-export function Advertencias360({ funcionario }) {
-  return (
-    <StubBadge nome="Advertências e Ocorrências">
-      <Card>
-        <CardHeader>
-          <CardTitle>Advertências e Ocorrências</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Módulo de advertências será integrado</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
-export function Ferias360({ funcionario }) {
-  return (
-    <StubBadge nome="Férias">
-      <Card>
-        <CardHeader>
-          <CardTitle>Férias</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Histórico de férias será integrado</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
-export function BancoHoras360({ funcionario }) {
-  return (
-    <StubBadge nome="Banco de Horas">
-      <Card>
-        <CardHeader>
-          <CardTitle>Banco de Horas</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Histórico de banco de horas será integrado</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
-export function Desempenho360({ funcionario }) {
-  return (
-    <StubBadge nome="Avaliações de Desempenho">
-      <Card>
-        <CardHeader>
-          <CardTitle>Avaliações de Desempenho</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Histórico de avaliações será integrado</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
-export function HistoricoSalario360({ funcionario }) {
-  return (
-    <StubBadge nome="Histórico de Salário">
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Salário</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Aumentos e alterações salariais serão integradas</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
-export function HistoricoFuncaoSetor360({ funcionario }) {
-  return (
-    <StubBadge nome="Histórico de Função e Setor">
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Função e Setor</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Mudanças de cargo e setor serão integradas</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
 export function LinhaTempoInteligente360({ funcionario, lancamentos, solicitacoes, documentos, comissoes, fechamentos }) {
   const eventos = [];
 
@@ -329,35 +237,5 @@ export function LinhaTempoInteligente360({ funcionario, lancamentos, solicitacoe
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-export function Auditoria360({ funcionario }) {
-  return (
-    <StubBadge nome="Auditoria de Alterações">
-      <Card>
-        <CardHeader>
-          <CardTitle>Auditoria de Alterações</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Alterações realizadas no cadastro serão registradas aqui</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
-  );
-}
-
-export function AnexosGerais360({ funcionario }) {
-  return (
-    <StubBadge nome="Anexos Gerais">
-      <Card>
-        <CardHeader>
-          <CardTitle>Anexos Gerais</CardTitle>
-        </CardHeader>
-        <CardContent className="text-center py-8 text-muted-foreground">
-          <p>Documentos diversos e contratos podem ser armazenados aqui</p>
-        </CardContent>
-      </Card>
-    </StubBadge>
   );
 }

@@ -11,6 +11,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { registrarAuditoria } from '@/lib/audit';
 import { AFASTAMENTO_TIPOS, getHojeISO } from '@/lib/afastamento';
+import ComprovantesSection from '@/components/funcionarios/ComprovantesSection';
 
 export default function AfastamentoFormModal({ open, onClose, funcionarios, onSaved, selectedFunc }) {
   const queryClient = useQueryClient();
@@ -19,6 +20,7 @@ export default function AfastamentoFormModal({ open, onClose, funcionarios, onSa
   const [dataInicio, setDataInicio] = useState(getHojeISO());
   const [dataFim, setDataFim] = useState('');
   const [motivo, setMotivo] = useState('');
+  const [anexos, setAnexos] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -30,8 +32,21 @@ export default function AfastamentoFormModal({ open, onClose, funcionarios, onSa
       setDataInicio(getHojeISO());
       setDataFim('');
       setMotivo('');
+      setAnexos([]);
     }
   }, [open, selectedFunc]);
+
+  const handleAddComprovante = async (file) => {
+    const { file_url } = await client.integrations.Core.UploadFile({ file });
+    setAnexos(prev => [
+      ...prev,
+      { nome: file.name, url: file_url, visivel_ao_funcionario: false, criado_em: new Date().toISOString() },
+    ]);
+  };
+
+  const handleRemoverComprovante = (item) => {
+    setAnexos(prev => prev.filter(x => x !== item));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,6 +66,7 @@ export default function AfastamentoFormModal({ open, onClose, funcionarios, onSa
         data_inicio: dataInicio,
         data_fim: dataFim || null,
         motivo: motivo.trim() || '',
+        anexos_urls: anexos,
         status: 'ativo',
         origem: 'rh',
       });
@@ -121,6 +137,11 @@ export default function AfastamentoFormModal({ open, onClose, funcionarios, onSa
             <Label>Motivo / Justificativa</Label>
             <Textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ex: Atestado médico — CID X..." rows={3} />
           </div>
+          <ComprovantesSection
+            anexos={anexos}
+            onAddFile={handleAddComprovante}
+            onRemover={handleRemoverComprovante}
+          />
           <DialogFooter>
             <Button variant="outline" type="button" onClick={onClose}>Cancelar</Button>
             <Button type="submit" disabled={saving}>

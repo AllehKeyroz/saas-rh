@@ -14,6 +14,7 @@ import {
   calcularSaldoFerias, getStatusFerias, FERIAS_STATUS, getDiaRetorno, FERIAS_ORIGEM,
 } from '@/lib/ferias';
 import GerarAvisoFeriasDialog from '@/components/funcionarios/GerarAvisoFeriasDialog';
+import ComprovantesSection from '@/components/funcionarios/ComprovantesSection';
 
 const STATUS_BADGE = {
   [FERIAS_STATUS.PROGRAMADA]: 'bg-blue-100 text-blue-700',
@@ -71,6 +72,36 @@ export default function Ferias360({ funcionario }) {
     }
   };
 
+  const atualizarComprovantes = async (f, novo) => {
+    try {
+      await client.entities.Ferias.update(f.id, { anexos_urls: novo });
+      queryClient.invalidateQueries({ queryKey: ['ferias360', funcionario?.id] });
+      toast.success('Comprovante atualizado.');
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao salvar comprovante');
+      throw e;
+    }
+  };
+
+  const handleAddComprovante = async (f, file) => {
+    const { file_url } = await client.integrations.Core.UploadFile({ file });
+    const novo = [
+      ...(f.anexos_urls || []),
+      { nome: file.name, url: file_url, visivel_ao_funcionario: false, criado_em: new Date().toISOString() },
+    ];
+    await atualizarComprovantes(f, novo);
+  };
+
+  const handleToggleVisivel = async (f, item) => {
+    const novo = (f.anexos_urls || []).map(x => (x === item ? { ...x, visivel_ao_funcionario: !(x.visivel_ao_funcionario === true) } : x));
+    await atualizarComprovantes(f, novo);
+  };
+
+  const handleRemoverComprovante = async (f, item) => {
+    const novo = (f.anexos_urls || []).filter(x => x !== item);
+    await atualizarComprovantes(f, novo);
+  };
+
   if (isLoading) {
     return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>;
   }
@@ -119,12 +150,12 @@ export default function Ferias360({ funcionario }) {
                   <span>
                     {p.estado === 'disponivel' && (
                       p.concessaoVencida
-                        ? <Badge className="bg-red-100 text-red-700">Concessão vencida — dobra</Badge>
+                        ? <Badge className="bg-red-100 text-red-700">Concessão vencida — dobra ({p.saldoRestante} dias)</Badge>
                         : p.vencido
-                          ? <Badge className="bg-amber-300/60 text-amber-900 ring-1 ring-amber-500">Aquisitivo pendente</Badge>
+                          ? <Badge className="bg-amber-300/60 text-amber-900 ring-1 ring-amber-500">Aquisitivo pendente ({p.saldoRestante} dias)</Badge>
                           : p.diasParaVencer <= 120
-                            ? <Badge className="bg-orange-100 text-orange-700">Concessão em {p.diasParaVencer} dias</Badge>
-                            : <Badge className="bg-green-100 text-green-700">Disponível</Badge>
+                            ? <Badge className="bg-orange-100 text-orange-700">Concessão em {p.diasParaVencer} dias ({p.saldoRestante} restantes)</Badge>
+                            : <Badge className="bg-green-100 text-green-700">Disponível ({p.saldoRestante} dias)</Badge>
                     )}
                     {p.estado === 'gozado' && <Badge className="bg-green-100 text-green-700">Gozado ({p.diasGozados} dias)</Badge>}
                     {p.estado === 'programado' && <Badge className="bg-blue-100 text-blue-700">Programado ({p.diasProgramados} dias)</Badge>}
@@ -203,6 +234,13 @@ export default function Ferias360({ funcionario }) {
                 </div>
 
                 {f.observacao && <p className="text-xs text-muted-foreground">{f.observacao}</p>}
+
+                <ComprovantesSection
+                  anexos={f.anexos_urls}
+                  onAddFile={(file) => handleAddComprovante(f, file)}
+                  onToggleVisivel={(item) => handleToggleVisivel(f, item)}
+                  onRemover={(item) => handleRemoverComprovante(f, item)}
+                />
               </div>
             );
           })}

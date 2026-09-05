@@ -13,6 +13,7 @@ import { registrarAuditoria } from '@/lib/audit';
 import { getTipoAfastamento, getHojeISO, isAfastamentoAtivo } from '@/lib/afastamento';
 import AfastamentoFormModal from '@/components/funcionarios/AfastamentoFormModal';
 import EncerrarAfastamentoDialog from '@/components/funcionarios/EncerrarAfastamentoDialog';
+import ComprovantesSection from '@/components/funcionarios/ComprovantesSection';
 
 const TIPO_ICONS = {
   atestado_medico: Stethoscope,
@@ -24,6 +25,26 @@ function AfastamentoCard({ afastamento, funcionario, onEncerrar }) {
   const cfg = getTipoAfastamento(afastamento.tipo);
   const Icon = TIPO_ICONS[afastamento.tipo] || FileText;
   const ativo = isAfastamentoAtivo(afastamento, getHojeISO());
+  const queryClient = useQueryClient();
+
+  const atualizarComprovantes = async (novo) => {
+    await client.entities.Afastamento.update(afastamento.id, { anexos_urls: novo });
+    queryClient.invalidateQueries({ queryKey: ['afastamentos'] });
+  };
+
+  const handleAddComprovante = async (file) => {
+    const { file_url } = await client.integrations.Core.UploadFile({ file });
+    const novo = [
+      ...(afastamento.anexos_urls || []),
+      { nome: file.name, url: file_url, visivel_ao_funcionario: false, criado_em: new Date().toISOString() },
+    ];
+    await atualizarComprovantes(novo);
+  };
+
+  const handleRemoverComprovante = async (item) => {
+    const novo = (afastamento.anexos_urls || []).filter(x => x !== item);
+    await atualizarComprovantes(novo);
+  };
 
   return (
     <div className="border rounded-xl bg-card px-4 py-3 space-y-2">
@@ -79,6 +100,12 @@ function AfastamentoCard({ afastamento, funcionario, onEncerrar }) {
           Justificativa do encerramento: {afastamento.justificativa_encerramento}
         </p>
       )}
+
+      <ComprovantesSection
+        anexos={afastamento.anexos_urls}
+        onAddFile={handleAddComprovante}
+        onRemover={handleRemoverComprovante}
+      />
 
       {ativo && (
         <div className="flex justify-end pt-1">

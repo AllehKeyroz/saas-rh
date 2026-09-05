@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FileText, Calculator, MessageSquare,
-  ClipboardList, Sliders, ChevronDown, ChevronRight, LogOut, FolderOpen,
-  Calendar, AlertCircle, TrendingUp, Clock, DollarSign, Settings, Bell, PenLine, LayoutTemplate,
-  Building2, Briefcase, Tags, Palette, HardDrive, FileWarning, ShieldCheck, Eye, Wallet
+  ClipboardList, Sliders, ChevronDown, ChevronRight, LogOut,
+  Calendar, TrendingUp, Settings, Bell, PenLine, LayoutTemplate,
+  Building2, Briefcase, Tags, Palette, HardDrive, FileWarning, ShieldCheck, Eye, Wallet, CalendarClock
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import VersionFooter from './VersionFooter';
 import { client } from '@/api/client';
@@ -37,6 +36,7 @@ const menuStructure = [
     items: [
       { path: '/funcionarios', label: 'Gerenciar', icon: Users },
       { path: '/ferias', label: 'Calendário de Férias', icon: Calendar },
+      { path: '/escala-folga', label: 'Escala de Folga', icon: CalendarClock },
       { path: '/espelho-portal', label: 'Espelho do Portal', icon: Eye }
     ]
   },

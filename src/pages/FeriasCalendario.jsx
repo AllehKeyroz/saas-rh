@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Button } from '@/components/ui/button';
@@ -10,17 +10,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import {
   CalendarDays, CalendarRange, Search, Plus, ChevronLeft, ChevronRight, AlertTriangle, Settings2,
+  Download, FileSpreadsheet, FileText, CalendarX2,
 } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 import {
-  parseDataLocal, getStatusFerias, FERIAS_STATUS, calcularSaldoFerias,
-  getFeriasSobrepostas, validarFracionamento, abonoMaximo, getHojeISO, getMarcosFuturos,
+  parseDataLocal, getStatusFerias, FERIAS_STATUS, calcularSaldoFerias, isFeriasAtiva,
+  getFeriasSobrepostas, getSobreposicaoFuncionario, validarFracionamento, abonoMaximo, getHojeISO, getMarcosFuturos,
 } from '@/lib/ferias';
+import { getFeriadosCompletos, verificarRegra48h } from '@/lib/feriados';
+import { getEscalaEfetiva, verificarRegra48hFolga } from '@/lib/escalaFolga';
+import { exportarEscalaCSV, exportarEscalaPDF } from '@/lib/exportarEscala';
+import FeriadosDialog from '@/components/feriados/FeriadosDialog';
 import { formatDate } from '@/lib/formatters';
 import { getCurrentTenantId } from '@/firebase/auth';
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const MESES_COMPLETOS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const DIA_INICIAIS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const LIMITE_AUSENCIAS_PADRAO = 2;
 
 // Paleta determinística por setor (escala anual)
@@ -50,7 +56,7 @@ function PendenciaBadge({ func, feriasFunc }) {
   const periodos = saldo?.periodos || [];
   if (periodos.length === 0) return <span className="inline-flex items-center text-[10px] text-muted-foreground whitespace-nowrap">Aquisitivo</span>;
 
-  const pendentes = periodos.filter(p => p.estado === 'disponivel');
+  const pendentes = periodos.filter(p => p.saldoRestante > 0);
   const programados = periodos.filter(p => p.estado === 'programado' || p.estado === 'em_andamento');
 
   if (pendentes.length === 0) return <span className="inline-flex items-center text-[10px] text-green-700 whitespace-nowrap">Em dia</span>;
@@ -75,9 +81,9 @@ function PendenciaBadge({ func, feriasFunc }) {
 }
 
 function celulaDiaMes(func, feriasLista, dia, mesIdx, ano, limiteSetor, ausenciasPorDia) {
-  // Retorna { classe, conflito } para o dia de um funcionário na visão mensal.
+  // Retorna { classe, conflito, titulo } para o dia de um funcionário na visão mensal.
   // Conflito = ausências do MESMO SETOR do funcionário >= limite do setor.
-  if (!func) return { classe: '', conflito: false };
+  if (!func) return { classe: '', conflito: false, titulo: '' };
   const diaISO = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
   const diaDate = parseDataLocal(diaISO);
   const registros = feriasLista.filter(f => f.funcionario_id === func.id && f.cancelada !== true);
@@ -93,14 +99,24 @@ function celulaDiaMes(func, feriasLista, dia, mesIdx, ano, limiteSetor, ausencia
       const ausenciasDoSetor = (ausenciasPorDia?.get(diaISO)?.[func.setor]) || 0;
       const limite = limiteSetor?.[func.setor] ?? LIMITE_AUSENCIAS_PADRAO;
       const conflito = ausenciasDoSetor >= limite;
-      return { classe: STATUS_CELL[status] || 'bg-slate-300', conflito };
+      return {
+        classe: STATUS_CELL[status] || 'bg-slate-300',
+        conflito,
+        titulo: `${func.nome}: ${formatDate(r.data_inicio)} → ${formatDate(r.data_fim)}`,
+      };
     }
   }
-  return { classe: '', conflito: false };
+  return { classe: '', conflito: false, titulo: '' };
 }
 
-function VisaoMensal({ funcionarios, todasFerias, mesIdx, ano, limiteSetor }) {
+function VisaoMensal({ funcionarios, todasFerias, mesIdx, ano, limiteSetor, onProgramar, feriadosExtras }) {
   const diasNoMes = new Date(ano, mesIdx + 1, 0).getDate();
+
+  // Feriados do mês exibido (nacionais + extras) para destaque visual
+  const feriadosDoMes = useMemo(() => {
+    const prefixo = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-`;
+    return getFeriadosCompletos(ano, feriadosExtras).filter(f => f.data.startsWith(prefixo));
+  }, [ano, mesIdx, feriadosExtras]);
 
   // Conta ausências por setor/dia para marcar conflitos
   const ausenciasPorDia = useMemo(() => {
@@ -174,11 +190,16 @@ function VisaoMensal({ funcionarios, todasFerias, mesIdx, ano, limiteSetor }) {
                 const diaISO = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const conflito = diasConflito.has(diaISO);
                 const isHoje = diaISO === hojeISO;
+                const feriado = feriadosDoMes.find(f => f.data === diaISO);
+                const dow = new Date(diaISO + 'T00:00:00').getDay();
                 return (
-                  <th key={d} className={`border-b border-l px-0 py-1 text-center text-[10px] font-medium w-[22px] ${isHoje ? 'bg-primary/10' : ''}`}>
-                    <div className="flex flex-col items-center">
-                      <span className={conflito ? 'text-red-600 font-bold' : 'text-muted-foreground'}>{d}</span>
-                      {conflito && <AlertTriangle className="w-2.5 h-2.5 text-red-500" />}
+                  <th key={d} title={feriado ? `Feriado: ${feriado.nome}` : undefined}
+                    className={`border-b border-l px-0 py-1 text-center text-[10px] font-medium w-[22px] ${isHoje ? 'bg-primary/10' : ''} ${feriado ? 'bg-red-50' : ''}`}>
+                    <div className="flex flex-col items-center leading-none">
+                      <span className={`text-[8px] ${feriado ? 'text-red-500' : 'text-muted-foreground/60'}`}>{DIA_INICIAIS[dow]}</span>
+                      <span className={`mt-0.5 ${feriado ? 'text-red-600 font-bold' : conflito ? 'text-red-600 font-bold' : 'text-muted-foreground'}`}>{d}</span>
+                      {feriado && <span className="w-1 h-1 rounded-full bg-red-500 mt-0.5" />}
+                      {conflito && !feriado && <AlertTriangle className="w-2.5 h-2.5 text-red-500 mt-0.5" />}
                     </div>
                   </th>
                 );
@@ -192,7 +213,7 @@ function VisaoMensal({ funcionarios, todasFerias, mesIdx, ano, limiteSetor }) {
             {funcionarios.map(func => {
               const feriasFunc = todasFerias.filter(f => f.funcionario_id === func.id);
               return (
-                <tr key={func.id} className="border-b last:border-0">
+<tr key={func.id} onClick={() => onProgramar?.(func)} title={`Clique para programar férias de ${func.nome}`} className="border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors">
                   <td className="sticky left-0 bg-card z-10 px-3 py-1 text-xs font-medium whitespace-nowrap">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${SETOR_COLORS[setorColorIndex(func.setor, [...new Set(funcionarios.map(f => f.setor))])]}`} />
@@ -202,9 +223,9 @@ function VisaoMensal({ funcionarios, todasFerias, mesIdx, ano, limiteSetor }) {
                   </td>
                   {dias.map(d => {
                     const diaISO = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    const { classe, conflito } = celulaDiaMes(func, todasFerias, d, mesIdx, ano, limiteSetor, ausenciasPorDia);
+                    const { classe, conflito, titulo } = celulaDiaMes(func, todasFerias, d, mesIdx, ano, limiteSetor, ausenciasPorDia);
                     return (
-                      <td key={d} className={`border-l p-0.5 h-6 ${classe ? classe + ' rounded-sm' : ''} ${conflito ? 'ring-2 ring-red-500 ring-inset rounded-sm' : ''} ${diaISO === hojeISO ? 'bg-primary/5' : ''}`} />
+                      <td key={d} title={titulo || undefined} className={`border-l p-0.5 h-6 ${classe ? classe + ' rounded-sm' : ''} ${conflito ? 'ring-2 ring-red-500 ring-inset rounded-sm' : ''} ${diaISO === hojeISO ? 'bg-primary/5' : ''}`} />
                     );
                   })}
                   <td className="border-l px-2 py-1 align-middle">
@@ -248,7 +269,7 @@ function VisaoMensal({ funcionarios, todasFerias, mesIdx, ano, limiteSetor }) {
   );
 }
 
-function VisaoAnual({ funcionarios, todasFerias, ano, limiteSetor }) {
+function VisaoAnual({ funcionarios, todasFerias, ano, limiteSetor, onProgramar }) {
   const setores = [...new Set(funcionarios.map(f => f.setor).filter(Boolean))];
 
   // Setores com ausências simultâneas >= limite em cada mês (visão aproximada por sobreposição no mês)
@@ -307,7 +328,7 @@ function VisaoAnual({ funcionarios, todasFerias, ano, limiteSetor }) {
             const cor = SETOR_COLORS[setorColorIndex(func.setor, setores)];
             const marcos = ehAnoComMarcos ? (getMarcosFuturos(func.data_admissao, feriasFunc, ano, mesAtual).porMes || {}) : {};
             return (
-              <tr key={func.id} className="border-b last:border-0">
+              <tr key={func.id} onClick={() => onProgramar?.(func)} title={`Clique para programar férias de ${func.nome}`} className="border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors">
                 <td className="sticky left-0 bg-card z-10 px-3 py-1 text-xs font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1.5 truncate">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${cor}`} />
@@ -361,22 +382,52 @@ function VisaoAnual({ funcionarios, todasFerias, ano, limiteSetor }) {
   );
 }
 
-function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor, onSaved }) {
+function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor, onSaved, funcionarioInicial, feriadosExtras }) {
   const [funcId, setFuncId] = useState('');
+  const [periodoNum, setPeriodoNum] = useState('');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [abono, setAbono] = useState(0);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
+  // Ao abrir, pré-seleciona o funcionário clicado no calendário (atalho) e limpa o estado anterior
+  useEffect(() => {
+    if (open) {
+      setFuncId(funcionarioInicial?.id || '');
+      setPeriodoNum('');
+      setDataInicio('');
+      setDataFim('');
+      setAbono(0);
+    }
+  }, [open, funcionarioInicial]);
+
   const func = funcionarios.find(f => f.id === funcId);
   const feriasFunc = todasFerias.filter(f => f.funcionario_id === funcId && f.cancelada !== true);
   const saldo = calcularSaldoFerias(func, feriasFunc);
-  const periodoPendente = saldo.periodos.find(p => p.estado === 'disponivel');
+
+  // Períodos com saldo restante (disponíveis para programar)
+  const periodosComSaldo = (saldo?.periodos || []).filter(p => p.saldoRestante > 0);
+  const periodoSelecionado = saldo?.periodos?.find(p => p.numero === Number(periodoNum)) || null;
+  const saldoRestante = periodoSelecionado?.saldoRestante || 0;
 
   const dias = dataInicio && dataFim && new Date(dataFim) >= new Date(dataInicio)
     ? differenceInDays(parseDataLocal(dataFim), parseDataLocal(dataInicio)) + 1
     : 0;
+
+  // Regra do art. 134 §3º: férias não podem começar nos 2 dias anteriores a feriado
+  const viola48h = dataInicio
+    ? verificarRegra48h(dataInicio, getFeriadosCompletos(new Date(dataInicio + 'T00:00:00').getFullYear(), feriadosExtras))
+    : null;
+
+  // Regra do art. 134 §3º: também não podem começar 2 dias antes da folga/DSR do funcionário
+  const { data: escalasFunc = [] } = useQuery({
+    queryKey: ['escala_folga_func', funcId],
+    queryFn: () => funcId ? client.entities.EscalaFolga.filter({ funcionario_id: funcId }) : [],
+    enabled: !!funcId,
+  });
+  const escalaEfetiva = dataInicio ? getEscalaEfetiva(escalasFunc, dataInicio) : null;
+  const viola48hFolga = dataInicio ? verificarRegra48hFolga(escalaEfetiva, dataInicio) : null;
 
   const conflitos = useMemo(() => {
     if (!func || !dataInicio || !dataFim) return [];
@@ -390,10 +441,32 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
     });
   }, [func, dataInicio, dataFim, todasFerias, funcionarios]);
 
-  const fracionamento = validarFracionamento([...feriasFunc.filter(r => getStatusFerias(r) === FERIAS_STATUS.CONCLUIDA || getStatusFerias(r) === FERIAS_STATUS.PROGRAMADA).map(r => ({ dias: r.dias_gozados })), { dias }]);
+  // Sobreposição do MESMO funcionário → bloqueia (evita dupla contagem de dias)
+  const sobreposicao = useMemo(() => {
+    if (!func || !dataInicio || !dataFim) return [];
+    return getSobreposicaoFuncionario(func.id, dataInicio, dataFim, feriasFunc);
+  }, [func, dataInicio, dataFim, feriasFunc]);
+
+  // Fracionamento: apenas as partes do MESMO período selecionado + o candidato
+  const partesDoPeriodo = periodoSelecionado
+    ? feriasFunc
+        .filter(r => r.periodo_aquisitivo === periodoSelecionado.numero)
+        .map(r => ({ dias: r.dias_gozados }))
+    : [];
+  const fracionamento = dias > 0 && periodoSelecionado
+    ? validarFracionamento([...partesDoPeriodo, { dias }])
+    : null;
 
   const abonoMax = abonoMaximo(30);
-  const podeSalvar = !!func && !!dataInicio && !!dataFim && new Date(dataFim) >= new Date(dataInicio) && !saving;
+  const excedeSaldo = dias > saldoRestante;
+  // Abono pecuniário também consome o saldo (art. 143) — gozo + abono não podem passar do restante
+  const excedeComAbono = dias + abono > saldoRestante;
+  const podeSalvar = !!func && !!periodoSelecionado && !!dataInicio && !!dataFim
+    && new Date(dataFim) >= new Date(dataInicio)
+    && dias > 0 && !excedeSaldo && !excedeComAbono
+    && sobreposicao.length === 0
+    && (!fracionamento || fracionamento.valido)
+    && !saving;
 
   const handleSave = async () => {
     setSaving(true);
@@ -403,11 +476,10 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
         setSaving(false);
         return;
       }
-      const periodoAquisitivo = periodoPendente?.numero ?? null;
       await client.entities.Ferias.create({
         funcionario_id: func.id,
         funcionario_nome: func.nome || '',
-        periodo_aquisitivo: periodoAquisitivo,
+        periodo_aquisitivo: periodoSelecionado.numero,
         data_inicio: dataInicio,
         data_fim: dataFim,
         dias_gozados: dias,
@@ -441,7 +513,7 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
         <div className="space-y-4">
           <div>
             <Label>Funcionário *</Label>
-            <Select value={funcId} onValueChange={setFuncId}>
+            <Select value={funcId} onValueChange={(v) => { setFuncId(v); setPeriodoNum(''); }}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {[...funcionarios].sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).map(f => (
@@ -452,16 +524,34 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
           </div>
 
           {func && (
+            <div>
+              <Label>Período aquisitivo *</Label>
+              <Select value={periodoNum} onValueChange={setPeriodoNum} disabled={periodosComSaldo.length === 0}>
+                <SelectTrigger><SelectValue placeholder={periodosComSaldo.length === 0 ? 'Sem saldo disponível' : 'Selecione o período...'} /></SelectTrigger>
+                <SelectContent>
+                  {periodosComSaldo.map(p => (
+                    <SelectItem key={p.numero} value={String(p.numero)}>
+                      {p.numero}º período ({formatDate(p.inicio.toISOString())} — {formatDate(p.fim.toISOString())}) · {p.saldoRestante} dias restantes
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {func && (
             <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800 space-y-0.5">
               <p className="font-semibold">Saldo: {saldo.diasDisponiveis} dias disponíveis</p>
-              {periodoPendente && (
+              {periodoSelecionado && (
                 <p>
-                  {periodoPendente.numero}º período aquisitivo ({formatDate(periodoPendente.inicio.toISOString())} — {formatDate(periodoPendente.fim.toISOString())})
-                  {periodoPendente.concessaoVencida && <span className="font-semibold text-red-700"> · prazo de concessão VENCIDO (dobra)</span>}
-                  {!periodoPendente.concessaoVencida && <span className="font-semibold text-red-700"> · férias vencida — conceda</span>}
+                  {periodoSelecionado.numero}º período aquisitivo ({formatDate(periodoSelecionado.inicio.toISOString())} — {formatDate(periodoSelecionado.fim.toISOString())})
+                  {' · '}<span className="font-semibold">{saldoRestante} dias restantes</span>
+                  {periodoSelecionado.concessaoVencida && <span className="font-semibold text-red-700"> · prazo de concessão VENCIDO (dobra)</span>}
                 </p>
               )}
-              {!periodoPendente && <p className="text-red-700 font-medium">Sem período aquisitivo pendente para este funcionário.</p>}
+              {!periodoSelecionado && periodosComSaldo.length === 0 && (
+                <p className="text-red-700 font-medium">Sem período aquisitivo com saldo para este funcionário.</p>
+              )}
             </div>
           )}
 
@@ -481,6 +571,46 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
             <Label>Abono pecuniário (até {abonoMax} dias)</Label>
             <Input type="number" min="0" max={abonoMax} value={abono} onChange={e => setAbono(Number(e.target.value) || 0)} />
           </div>
+
+          {excedeSaldo && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              O período selecionado tem apenas <span className="font-semibold">{saldoRestante} dias restantes</span> (máximo de 30 dias por período). Reduza o intervalo.
+            </div>
+          )}
+
+          {!excedeSaldo && excedeComAbono && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              O total de <span className="font-semibold">{dias} dias de gozo + {abono} de abono</span> ({dias + abono} dias) ultrapassa o saldo restante de <span className="font-semibold">{saldoRestante} dias</span> do período (art. 143 CLT — o abono consome o saldo).
+            </div>
+          )}
+
+          {viola48h && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
+              Férias não podem começar nos 2 dias anteriores a feriado (art. 134 §3º CLT): <strong>{viola48h.nome}</strong> em {formatDate(viola48h.data)}.
+            </div>
+          )}
+
+          {viola48hFolga && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
+              Férias não podem começar nos 2 dias anteriores à folga/DSR do funcionário (art. 134 §3º CLT): folga em {formatDate(viola48hFolga)}.
+            </div>
+          )}
+
+          {sobreposicao.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 space-y-1">
+              <p className="text-xs font-semibold text-red-800 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Este funcionário já tem férias no período:
+              </p>
+              {sobreposicao.slice(0, 5).map((r, i) => (
+                <p key={i} className="text-xs text-red-700">
+                  • {formatDate(r.data_inicio)} → {formatDate(r.data_fim)} ({r.dias_gozados} dias)
+                </p>
+              ))}
+            </div>
+          )}
 
           {conflitos.length > 0 && (
             <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 space-y-1">
@@ -593,8 +723,16 @@ export default function FeriasCalendario() {
   const [pendFiltro, setPendFiltro] = useState('todas');
   const [search, setSearch] = useState('');
   const [programarOpen, setProgramarOpen] = useState(false);
+  const [programarFunc, setProgramarFunc] = useState(null);
   const [limitesOpen, setLimitesOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [feriadosOpen, setFeriadosOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  const abrirProgramar = (func) => {
+    setProgramarFunc(func || null);
+    setProgramarOpen(true);
+  };
 
   const { data: funcionarios = [], isLoading: loadingFunc } = useQuery({
     queryKey: ['funcionarios'],
@@ -612,6 +750,12 @@ export default function FeriasCalendario() {
   });
   const limiteSetor = configs[0]?.valor || {};
 
+  const { data: configsFeriados = [] } = useQuery({
+    queryKey: ['feriados_especificos'],
+    queryFn: () => client.entities.ConfiguracoesRH.filter({ chave: 'feriados_especificos' }),
+  });
+  const feriadosExtras = configsFeriados[0]?.valor || [];
+
   const ativos = useMemo(() =>
     funcionarios.filter(f => f.ativo !== false && !f.data_demissao),
   [funcionarios]);
@@ -625,7 +769,7 @@ export default function FeriasCalendario() {
       .filter(f => {
         if (pendFiltro === 'todas') return true;
         const saldo = calcularSaldoFerias(f, todasFerias.filter(x => x.funcionario_id === f.id));
-        const pendentes = (saldo?.periodos || []).filter(p => p.estado === 'disponivel');
+        const pendentes = (saldo?.periodos || []).filter(p => p.saldoRestante > 0);
         if (pendentes.length === 0) return false;
         if (pendFiltro === 'concessao') return pendentes.some(p => p.concessaoVencida);
         if (pendFiltro === 'aquisitivo') return !pendentes.some(p => p.concessaoVencida);
@@ -643,6 +787,31 @@ export default function FeriasCalendario() {
     setAno(y);
   };
 
+  // Resumo executivo do calendário (cards no topo)
+  const resumo = useMemo(() => {
+    const hoje = new Date();
+    const emFeriasHoje = ativos.filter(f =>
+      todasFerias.some(x => x.funcionario_id === f.id && isFeriasAtiva(x, hoje))
+    ).length;
+
+    const programadasMes = todasFerias.filter(x => {
+      if (x.cancelada === true || !x.data_inicio) return false;
+      const d = parseDataLocal(x.data_inicio);
+      return d.getFullYear() === ano && d.getMonth() === mesIdx && getStatusFerias(x) === FERIAS_STATUS.PROGRAMADA;
+    }).length;
+
+    let pendentes = 0;
+    let dobra = 0;
+    for (const f of ativos) {
+      const saldo = calcularSaldoFerias(f, todasFerias.filter(x => x.funcionario_id === f.id));
+      const periodos = saldo?.periodos || [];
+      if (periodos.some(p => p.saldoRestante > 0)) pendentes++;
+      if (periodos.some(p => p.concessaoVencida)) dobra++;
+    }
+
+    return { emFeriasHoje, programadasMes, pendentes, dobra };
+  }, [ativos, todasFerias, ano, mesIdx]);
+
   const isLoading = loadingFunc || loadingFerias;
 
   return (
@@ -656,12 +825,56 @@ export default function FeriasCalendario() {
           <p className="text-muted-foreground text-sm">Escala anual e visão mensal das férias da equipe</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <Button variant="outline" onClick={() => setExportOpen(o => !o)}>
+              <Download className="w-4 h-4 mr-2" />Exportar
+            </Button>
+            {exportOpen && (
+              <div className="absolute right-0 mt-1 z-20 w-44 rounded-lg border bg-card shadow-lg overflow-hidden">
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                  onClick={() => { exportarEscalaCSV(ativos, todasFerias); setExportOpen(false); }}
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-green-600" />Planilha (CSV)
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                  onClick={() => { exportarEscalaPDF(ativos, todasFerias); setExportOpen(false); }}
+                >
+                  <FileText className="w-4 h-4 text-red-600" />PDF
+                </button>
+              </div>
+            )}
+          </div>
+          <Button variant="outline" onClick={() => setFeriadosOpen(true)}>
+            <CalendarX2 className="w-4 h-4 mr-2" />Feriados
+          </Button>
           <Button variant="outline" onClick={() => setLimitesOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />Limites por Setor
           </Button>
-          <Button onClick={() => setProgramarOpen(true)}>
+          <Button onClick={() => abrirProgramar(null)}>
             <Plus className="w-4 h-4 mr-2" />Programar Férias
           </Button>
+        </div>
+      </div>
+
+      {/* Resumo executivo */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-2xl font-bold text-primary">{resumo.emFeriasHoje}</p>
+          <p className="text-xs text-muted-foreground">Em férias hoje</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-2xl font-bold text-blue-600">{resumo.programadasMes}</p>
+          <p className="text-xs text-muted-foreground">Programadas no mês</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-2xl font-bold text-amber-600">{resumo.pendentes}</p>
+          <p className="text-xs text-muted-foreground">Aquisitivos pendentes</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-2xl font-bold text-red-600">{resumo.dobra}</p>
+          <p className="text-xs text-muted-foreground">Concessões vencidas (dobra)</p>
         </div>
       </div>
 
@@ -732,14 +945,15 @@ export default function FeriasCalendario() {
         <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cyan-500 inline-block" /> Aquisição de direito</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm ring-2 ring-red-500 inline-block" /> Conflito de setor (≥ limite)</span>
         <span className="flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Dia com ausências excessivas</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-400 inline-block" /> Feriado nacional</span>
       </div>
 
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 rounded-xl" />)}</div>
       ) : view === 'mensal' ? (
-        <VisaoMensal funcionarios={filtrados} todasFerias={todasFerias} mesIdx={mesIdx} ano={ano} limiteSetor={limiteSetor} />
+        <VisaoMensal funcionarios={filtrados} todasFerias={todasFerias} mesIdx={mesIdx} ano={ano} limiteSetor={limiteSetor} onProgramar={abrirProgramar} feriadosExtras={feriadosExtras} />
       ) : (
-        <VisaoAnual funcionarios={filtrados} todasFerias={todasFerias} ano={ano} limiteSetor={limiteSetor} />
+        <VisaoAnual funcionarios={filtrados} todasFerias={todasFerias} ano={ano} limiteSetor={limiteSetor} onProgramar={abrirProgramar} />
       )}
 
       <ProgramarModal
@@ -748,6 +962,8 @@ export default function FeriasCalendario() {
         funcionarios={filtrados}
         todasFerias={todasFerias}
         limiteSetor={limiteSetor}
+        funcionarioInicial={programarFunc}
+        feriadosExtras={feriadosExtras}
         onSaved={() => queryClient.invalidateQueries({ queryKey: ['ferias'] })}
       />
 
@@ -756,6 +972,12 @@ export default function FeriasCalendario() {
         onClose={() => setLimitesOpen(false)}
         setores={setores}
         limiteSetor={limiteSetor}
+      />
+
+      <FeriadosDialog
+        open={feriadosOpen}
+        onClose={() => setFeriadosOpen(false)}
+        ano={ano}
       />
     </div>
   );

@@ -88,21 +88,21 @@ function isRegistroConsumido(f) {
 /**
  * Situação do próximo período aquisitivo pendente — mesma forma de retorno do
  * cálculo legado para manter compatibilidade de consumo.
+ * Considera saldo PARCIAL: um período com parte gozada e saldo restante
+ * continua pendente (ex.: gozou 10 de 30 → ainda faltam 20).
  */
 export function calcularSituacaoFerias(dataAdmissao, feriasConsumidas = []) {
   const periodos = calcularPeriodosAquisitivos(dataAdmissao);
   if (periodos.length === 0) return null;
 
-  const consumidos = new Set(
-    (feriasConsumidas || []).filter(isRegistroConsumido).map(f => f.periodo_aquisitivo)
-  );
-  const pendente = periodos.find(p => !consumidos.has(p.numero));
+  const saldo = calcularSaldoFerias({ data_admissao: dataAdmissao }, feriasConsumidas);
+  const pendente = saldo.periodos.find(p => p.saldoRestante > 0);
 
   if (!pendente) {
     return {
       todosConsumidos: true,
       totalPeriodos: periodos.length,
-      periodosConsumidos: consumidos.size,
+      periodosConsumidos: saldo.periodos.filter(p => p.saldoRestante === 0).length,
     };
   }
 
@@ -113,8 +113,8 @@ export function calcularSituacaoFerias(dataAdmissao, feriasConsumidas = []) {
   return {
     periodoAquisitivo: pendente.numero,
     totalPeriodos: periodos.length,
-    periodosConsumidos: consumidos.size,
-    periodosPendentes: periodos.length - consumidos.size,
+    periodosConsumidos: saldo.periodos.filter(p => p.saldoRestante === 0).length,
+    periodosPendentes: saldo.periodos.filter(p => p.saldoRestante > 0).length,
     diasParaVencer,
     prazoLimite: pendente.prazoLimite,
     // Férias "vencida" = período aquisitivo fechado e gozo ainda não concedido.
@@ -274,7 +274,8 @@ export function diasEfetivosGozados(r, hoje = new Date()) {
 
 /**
  * Saldo de férias do funcionário: períodos e dias disponíveis/gozados.
- * @returns {{ periodos: Array<{numero: number, inicio: Date, fim: Date, prazoLimite: Date, estado: string, diasParaVencer: number, vencido: boolean, concessaoVencida: boolean, diasDisponiveis: number, diasGozados: number, diasProgramados: number}>, diasDisponiveis: number, diasGozados: number, diasProgramados: number, totalPeriodos: number }}
+ * Saldo PARCIAL por período: 30 dias − já gozados − já programados − abono (nunca negativo).
+ * @returns {{ periodos: Array<{numero: number, inicio: Date, fim: Date, prazoLimite: Date, estado: string, diasParaVencer: number, vencido: boolean, concessaoVencida: boolean, diasDisponiveis: number, saldoRestante: number, diasGozados: number, diasProgramados: number, diasAbono: number}>, diasDisponiveis: number, diasGozados: number, diasProgramados: number, diasAbono: number, totalPeriodos: number }}
  */
 export function calcularSaldoFerias(funcionario, feriasRegistradas = []) {
   const periodos = calcularPeriodosAquisitivos(funcionario?.data_admissao);
@@ -283,7 +284,6 @@ export function calcularSaldoFerias(funcionario, feriasRegistradas = []) {
 
   const periodosMap = periodos.map(p => {
     const registrosDoPeriodo = registros.filter(r => r.periodo_aquisitivo === p.numero);
-    const concluido = registrosDoPeriodo.some(r => getStatusFerias(r) === FERIAS_STATUS.CONCLUIDA);
     const programado = registrosDoPeriodo.some(r => getStatusFerias(r) === FERIAS_STATUS.PROGRAMADA);
     const emAndamento = registrosDoPeriodo.some(r => getStatusFerias(r) === FERIAS_STATUS.EM_ANDAMENTO);
 
@@ -296,20 +296,28 @@ export function calcularSaldoFerias(funcionario, feriasRegistradas = []) {
         return st === FERIAS_STATUS.PROGRAMADA || st === FERIAS_STATUS.EM_ANDAMENTO;
       })
       .reduce((s, r) => s + Math.max(0, (r.dias_gozados || 0) - diasEfetivosGozados(r, hoje)), 0);
+    // Abono pecuniário (art. 143) converte dias de férias em dinheiro — também consome o saldo
+    const diasAbono = registrosDoPeriodo.reduce((s, r) => s + (r.dias_abono || 0), 0);
 
+    // Saldo parcial real: 30 dias do período − já gozados − já programados − abono
+    const diasDisponiveis = Math.max(0, DIAS_FERIAS_PADRAO - diasGozados - diasProgramados - diasAbono);
+
+    // 'gozado' só quando o período está 100% consumido (saldo parcial mantém 'disponivel')
     let estado;
     if (emAndamento) estado = 'em_andamento';
     else if (programado) estado = 'programado';
-    else if (concluido) estado = 'gozado';
+    else if (diasDisponiveis === 0) estado = 'gozado';
     else estado = 'disponivel';
 
     const diasParaVencer = differenceInCalendarDays(p.prazoLimite, hoje);
     return {
       ...p,
       estado,
-      diasDisponiveis: estado === 'disponivel' ? DIAS_FERIAS_PADRAO : 0,
+      diasDisponiveis,
+      saldoRestante: diasDisponiveis,
       diasGozados,
       diasProgramados,
+      diasAbono,
       diasParaVencer,
       // Férias vencida = período aquisitivo fechado e gozo não concedido (conceito operacional)
       vencido: estado === 'disponivel',
@@ -323,8 +331,35 @@ export function calcularSaldoFerias(funcionario, feriasRegistradas = []) {
     diasDisponiveis: periodosMap.reduce((s, p) => s + p.diasDisponiveis, 0),
     diasGozados: periodosMap.reduce((s, p) => s + p.diasGozados, 0),
     diasProgramados: periodosMap.reduce((s, p) => s + p.diasProgramados, 0),
+    diasAbono: periodosMap.reduce((s, p) => s + p.diasAbono, 0),
     totalPeriodos: periodos.length,
   };
+}
+
+/**
+ * Registros de férias NÃO cancelados do MESMO funcionário que se sobrepõem a um
+ * intervalo candidato. Usado para BLOQUEAR programação duplicada (correção de
+ * dupla contagem de dias).
+ * @param {string} funcionarioId
+ * @param {string} dataInicio "YYYY-MM-DD"
+ * @param {string} dataFim "YYYY-MM-DD"
+ * @param {Array} feriasRegistradas
+ * @returns {Array} registros sobrepostos
+ */
+export function getSobreposicaoFuncionario(funcionarioId, dataInicio, dataFim, feriasRegistradas = []) {
+  if (!funcionarioId || !dataInicio || !dataFim) return [];
+  const inicio = parseDataLocal(dataInicio);
+  const fim = parseDataLocal(dataFim);
+  if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) return [];
+  return (feriasRegistradas || []).filter(f => {
+    if (!isRegistroConsumido(f)) return false;
+    if (f.funcionario_id !== funcionarioId) return false;
+    if (!f.data_inicio || !f.data_fim) return false;
+    const fInicio = parseDataLocal(f.data_inicio);
+    const fFim = parseDataLocal(f.data_fim);
+    if (isNaN(fInicio.getTime()) || isNaN(fFim.getTime())) return false;
+    return fInicio <= fim && fFim >= inicio;
+  });
 }
 
 /**

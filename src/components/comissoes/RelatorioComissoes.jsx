@@ -5,33 +5,27 @@ import { formatCurrency } from '@/lib/formatters';
 import { formatPeriodo } from '@/lib/comissoes';
 import { Users, AlertTriangle, TrendingUp, Calendar, CalendarMinus } from 'lucide-react';
 
-function normSetorKey(setor) {
-  if (!setor) return 'outros';
-  const s = setor.toLowerCase();
-  if (s.includes('salão') || s.includes('salao') || s.includes('garçom') || s.includes('atendimento')) return 'salao';
-  if (s.includes('cozinha')) return 'cozinha';
-  if (s.includes('copa') || s.includes('playground') || s.includes('caixa')) return 'copa_playground_caixa';
-  if (s.includes('limpeza') || s.includes('rh')) return 'limpeza_rh';
-  return setor;
-}
-
 export default function RelatorioComissoes({ funcionarios, comissoes, comissoesFuncionarios, mesRef }) {
   const comissoesMes = comissoesFuncionarios.filter(c => c.mes_referencia === mesRef);
   const comissoesPeriodosMes = comissoes.filter(c => c.mes_referencia === mesRef && c.status === 'confirmado');
 
-  if (comissoesPeriodosMes.length === 0) {
+  const individuais = comissoesMes.filter(c => c.origem === 'individual');
+
+  if (comissoesPeriodosMes.length === 0 && individuais.length === 0) {
     return <div className="text-center py-16 text-muted-foreground">Nenhuma comissão lançada para {mesRef}</div>;
   }
 
   const totalDistribuido = comissoesMes.filter(c => c.apto).reduce((s, c) => s + (c.valor_individual_final ?? c.valor_individual ?? 0), 0);
   const totalGorjetas = comissoesPeriodosMes.reduce((s, c) => s + (c.valor_total_periodo || 0), 0);
+  const totalIndividual = individuais.filter(c => c.apto).reduce((s, c) => s + (c.valor_individual_final ?? c.valor_individual ?? 0), 0);
   const aptoCount = comissoesMes.filter(c => c.apto).length;
   const exclCount = comissoesMes.filter(c => !c.apto).length;
 
-  // Por setor
+  // Por setor (apenas gorjetas — individuais são exibidos em seção própria)
   const setores = {};
   comissoesMes.forEach(c => {
-    const sk = normSetorKey(c.setor);
+    if (c.origem === 'individual') return;
+    const sk = c.setor || 'Sem setor';
     if (!setores[sk]) setores[sk] = { aptos: [], excluidos: [] };
     if (c.apto) setores[sk].aptos.push(c);
     else setores[sk].excluidos.push(c);
@@ -57,8 +51,8 @@ export default function RelatorioComissoes({ funcionarios, comissoes, comissoesF
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-muted/50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Total Gorjetas</p><p className="text-lg font-bold">{formatCurrency(totalGorjetas)}</p></div>
-            <div className="bg-blue-50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Períodos</p><p className="text-lg font-bold text-blue-700">{comissoesPeriodosMes.length}</p></div>
-            <div className="bg-green-50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Distribuído</p><p className="text-lg font-bold text-green-700">{formatCurrency(totalDistribuido)}</p></div>
+            <div className="bg-purple-50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Comissão Individual</p><p className="text-lg font-bold text-purple-700">{formatCurrency(totalIndividual)}</p></div>
+            <div className="bg-green-50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Total Comissão</p><p className="text-lg font-bold text-green-700">{formatCurrency(totalDistribuido)}</p></div>
             <div className="bg-red-50 rounded-xl p-3"><p className="text-xs text-muted-foreground">Excluídos</p><p className="text-lg font-bold text-red-700">{exclCount}</p></div>
           </div>
         </CardContent>
@@ -137,6 +131,28 @@ export default function RelatorioComissoes({ funcionarios, comissoes, comissoesF
           </CardContent>
         </Card>
       ))}
+
+      {/* Comissão Individual */}
+      {individuais.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Comissão Individual — {mesRef}</CardTitle></CardHeader>
+          <CardContent className="space-y-1">
+            {(() => {
+              const porFuncInd = {};
+              individuais.forEach(c => {
+                if (!porFuncInd[c.funcionario_id]) porFuncInd[c.funcionario_id] = { nome: c.funcionario_nome, total: 0 };
+                porFuncInd[c.funcionario_id].total += (c.valor_individual_final ?? c.valor_individual ?? 0);
+              });
+              return Object.values(porFuncInd).sort((a, b) => b.total - a.total).map((f, i) => (
+                <div key={i} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
+                  <span className="font-medium">{f.nome}</span>
+                  <span className="font-bold text-purple-700">{formatCurrency(f.total)}</span>
+                </div>
+              ));
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Total acumulado por funcionário */}
       {Object.keys(porFunc).length > 0 && (

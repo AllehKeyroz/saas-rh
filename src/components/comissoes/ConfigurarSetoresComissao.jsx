@@ -5,24 +5,79 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Plus, Save, Trash2, Percent, AlertCircle, CheckCircle2, GripVertical, Info } from 'lucide-react';
+import { Plus, Save, Trash2, Percent, AlertCircle, CheckCircle2, GripVertical, Info, ChevronsUpDown, Check } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useMemo } from 'react';
 
-function SetorRow({ setor, onChange, onDelete }) {
+// Seletor pesquisável de setor. Consulta os setores que já existem no sistema
+// (coleção Setor, setores dos funcionários e SetoresComissao já cadastrados).
+// Se o usuário digitar algo que não existe, oferece "Criar" um novo setor.
+function ComboboxSetor({ opcoes, value, onChange, placeholder = 'Buscar setor...' }) {
+  const [open, setOpen] = useState(false);
+  const [busca, setBusca] = useState('');
+
+  const normalizar = (s) => (s || '').trim().toLowerCase();
+  const existe = opcoes.some(o => normalizar(o) === normalizar(busca));
+  const podeCriar = busca.trim() && !existe;
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setBusca(''); }}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="h-8 text-sm w-full justify-between font-normal">
+          {value ? <span className="truncate">{value}</span> : <span className="text-muted-foreground">{placeholder}</span>}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput placeholder="Buscar setor..." value={busca} onValueChange={setBusca} />
+          <CommandList>
+            <CommandEmpty>Nenhum setor encontrado.</CommandEmpty>
+            <CommandGroup>
+              {opcoes.map(o => (
+                <CommandItem
+                  key={o}
+                  value={o}
+                  onSelect={() => { onChange(o); setOpen(false); }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === o ? 'opacity-100' : 'opacity-0')} />
+                  <span className="truncate">{o}</span>
+                </CommandItem>
+              ))}
+              {podeCriar && (
+                <CommandItem
+                  value={`criar:${busca}`}
+                  onSelect={() => { onChange(busca.trim()); setOpen(false); }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  <span className="truncate">Criar "{busca.trim()}"</span>
+                </CommandItem>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function SetorRow({ setor, opcoesSetores, onChange, onDelete }) {
   return (
     <div className="flex items-center gap-3 py-3 border-b last:border-0">
       <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
       <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div>
           <Label className="text-xs text-muted-foreground mb-1 block">Nome do Setor</Label>
-          <Input
+          <ComboboxSetor
+            opcoes={opcoesSetores}
             value={setor.nome_do_setor}
-            onChange={e => onChange({ ...setor, nome_do_setor: e.target.value })}
-            placeholder="Ex: Salão"
-            className="h-8 text-sm"
+            onChange={nome => onChange({ ...setor, nome_do_setor: nome })}
+            placeholder="Selecione um setor existente..."
           />
         </div>
         <div>
@@ -30,7 +85,7 @@ function SetorRow({ setor, onChange, onDelete }) {
           <Input
             value={setor.palavras_chave || ''}
             onChange={e => onChange({ ...setor, palavras_chave: e.target.value })}
-            placeholder="Ex: salão, garçom, atendimento"
+            placeholder="Ex: atendimento, caixa, cozinha"
             className="h-8 text-sm"
           />
         </div>
@@ -78,6 +133,26 @@ export default function ConfigurarSetoresComissao() {
     queryKey: ['setores_comissao'],
     queryFn: () => client.entities.SetoresComissao.list('ordem_exibicao', 50),
   });
+
+  // Setores que já existem no sistema — para escolher no dropdown em vez de digitar.
+  // Fonte: coleção Setor + o campo setor dos funcionários + SetoresComissao cadastrados.
+  const { data: setoresCadastro = [] } = useQuery({
+    queryKey: ['setores_cadastro'],
+    queryFn: () => client.entities.Setor.list(),
+  });
+  const { data: funcionarios = [] } = useQuery({
+    queryKey: ['funcionarios_setores'],
+    queryFn: () => client.entities.Funcionarios.list(),
+  });
+
+  const opcoesSetores = useMemo(() => {
+    const normalizar = (s) => (s || '').trim().toLowerCase();
+    const mapa = new Set();
+    (setoresCadastro || []).forEach(s => { if (s.nome) mapa.add(s.nome.trim()); });
+    (funcionarios || []).forEach(f => { if (f.setor) mapa.add(f.setor.trim()); });
+    (setoresDB || []).forEach(s => { if (s.nome_do_setor) mapa.add(s.nome_do_setor.trim()); });
+    return [...mapa].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [setoresCadastro, funcionarios, setoresDB]);
 
   const { data: todasConfigsRH = [] } = useQuery({
     queryKey: ['config_rh_retencao'],
@@ -236,7 +311,7 @@ export default function ConfigurarSetoresComissao() {
 
           <div>
             {lista.map((setor, i) => (
-              <SetorRow key={setor.id || `novo-${i}`} setor={setor} onChange={u => handleChange(i, u)} onDelete={() => handleDelete(i)} />
+              <SetorRow key={setor.id || `novo-${i}`} setor={setor} opcoesSetores={opcoesSetores} onChange={u => handleChange(i, u)} onDelete={() => handleDelete(i)} />
             ))}
           </div>
 
