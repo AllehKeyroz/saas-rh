@@ -74,7 +74,7 @@ async function processarAprovacaoFerias(solicitacao, status = 'aprovado') {
     try {
       funcionario = await client.entities.Funcionarios.get(solicitacao.funcionario_id);
       const feriasFunc = await client.entities.Ferias.filter({ funcionario_id: solicitacao.funcionario_id });
-      const situacao = calcularSituacaoFerias(funcionario?.data_admissao, feriasFunc);
+      const situacao = calcularSituacaoFerias(funcionario?.data_admissao, feriasFunc, funcionario?.faltas_por_periodo);
       periodoAquisitivo = situacao?.periodoAquisitivo ?? null;
     } catch (e) {
       console.error('[Ferias] Não foi possível calcular o período aquisitivo:', e?.message);

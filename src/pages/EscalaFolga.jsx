@@ -5,11 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarClock, ChevronLeft, ChevronRight, Search, Settings2, CalendarX2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { CalendarClock, ChevronLeft, ChevronRight, Search, Settings2, CalendarX2, Download, FileSpreadsheet, FileText, CheckCircle2, RotateCcw, Loader2 } from 'lucide-react';
 import { getFeriadosCompletos } from '@/lib/feriados';
 import { parseDataLocal, getStatusFerias, FERIAS_STATUS, getHojeISO } from '@/lib/ferias';
-import { ehDiaFolga, rotuloEscala, getEscalaEfetiva } from '@/lib/escalaFolga';
+import { ehDiaFolga, rotuloEscala, getEscalaEfetiva, isConsolidada, isRascunho, ESCALA_STATUS, statusEscalasFuncionario, escalaCobrePeriodo } from '@/lib/escalaFolga';
+import { exportarFolgaCSV, exportarFolgaPDF } from '@/lib/exportarEscala';
 import { formatDate } from '@/lib/formatters';
+import { registrarAuditoria } from '@/lib/audit';
+import { toast } from 'sonner';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import ConfigurarEscalaDialog from '@/components/escala-folga/ConfigurarEscalaDialog';
 import FeriadosDialog from '@/components/feriados/FeriadosDialog';
 
@@ -41,9 +46,12 @@ export default function EscalaFolga() {
   const [ano, setAno] = useState(hoje.getFullYear());
   const [setorFiltro, setSetorFiltro] = useState('todos');
   const [search, setSearch] = useState('');
+  const [statusFiltro, setStatusFiltro] = useState('todos');
   const [configOpen, setConfigOpen] = useState(false);
   const [configFunc, setConfigFunc] = useState(null);
   const [feriadosOpen, setFeriadosOpen] = useState(false);
+  const [consolidando, setConsolidando] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const abrirConfig = (func) => {
@@ -72,6 +80,9 @@ export default function EscalaFolga() {
   });
   const feriadosExtras = configsFeriados[0]?.valor || [];
 
+  // Feriados do ano selecionado (nacionais + extras) — usados no export
+  const feriadosAno = useMemo(() => getFeriadosCompletos(ano, feriadosExtras), [ano, feriadosExtras]);
+
   const escalasPorFunc = useMemo(() => {
     const m = new Map();
     for (const e of escalas) {
@@ -88,12 +99,29 @@ export default function EscalaFolga() {
 
   const setores = useMemo(() => [...new Set(ativos.map(f => f.setor).filter(Boolean))], [ativos]);
 
+  // Status de publicação por funcionário: 'consolidada' | 'rascunho' | 'sem_escala'
+  const statusPorFunc = useMemo(() => {
+    const m = new Map();
+    for (const f of ativos) {
+      m.set(f.id, statusEscalasFuncionario(escalasPorFunc.get(f.id) || []));
+    }
+    return m;
+  }, [ativos, escalasPorFunc]);
+
   const filtrados = useMemo(() => {
     return ativos
       .filter(f => setorFiltro === 'todos' || f.setor === setorFiltro)
       .filter(f => !search || f.nome?.toLowerCase().includes(search.toLowerCase()))
+      .filter(f => {
+        if (statusFiltro === 'todos') return true;
+        const st = statusPorFunc.get(f.id);
+        if (statusFiltro === 'rascunho') return st === ESCALA_STATUS.RASCUNHO;
+        if (statusFiltro === 'consolidada') return st === ESCALA_STATUS.CONSOLIDADA;
+        if (statusFiltro === 'sem_escala') return st === 'sem_escala';
+        return true;
+      })
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-  }, [ativos, setorFiltro, search]);
+  }, [ativos, setorFiltro, search, statusFiltro, statusPorFunc]);
 
   const diasNoMes = new Date(ano, mesIdx + 1, 0).getDate();
   const hojeISO = getHojeISO();
@@ -148,6 +176,124 @@ export default function EscalaFolga() {
     setAno(y);
   };
 
+  const handleExportCSV = () => {
+    if (filtrados.length === 0) { toast.error('Nenhum funcionário para exportar'); return; }
+    exportarFolgaCSV(filtrados, escalas, feriadosAno, ano);
+  };
+
+  const handleExportPDF = () => {
+    if (filtrados.length === 0) { toast.error('Nenhum funcionário para exportar'); return; }
+    exportarFolgaPDF(filtrados, escalas, feriadosAno, ano);
+  };
+
+  // ── Consolidação (publicação) ─────────────────────────────────────────────
+  const periodoMes = useMemo(() => {
+    const mm = String(mesIdx + 1).padStart(2, '0');
+    return {
+      inicio: `${ano}-${mm}-01`,
+      fim: `${ano}-${mm}-${String(new Date(ano, mesIdx + 1, 0).getDate()).padStart(2, '0')}`,
+    };
+  }, [ano, mesIdx]);
+
+  const rascunhosDoMes = useMemo(
+    () => escalas.filter(e => e.ativo !== false && isRascunho(e) && escalaCobrePeriodo(e, periodoMes.inicio, periodoMes.fim)),
+    [escalas, periodoMes],
+  );
+  const consolidadasDoMes = useMemo(
+    () => escalas.filter(e => e.ativo !== false && isConsolidada(e) && escalaCobrePeriodo(e, periodoMes.inicio, periodoMes.fim)),
+    [escalas, periodoMes],
+  );
+
+  // Folgas que caem em feriado no mês em exibição (para a revisão pré-consolidação)
+  const folgasEmFeriadoMes = useMemo(() => {
+    const feriadoSet = new Set(feriadosDoMes.map(f => f.data));
+    let total = 0;
+    for (const f of filtrados) {
+      const escalasFunc = escalasPorFunc.get(f.id) || [];
+      for (let d = 1; d <= diasNoMes; d++) {
+        const iso = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const escala = getEscalaEfetiva(escalasFunc, iso);
+        if (escala && ehDiaFolga(escala, iso) && feriadoSet.has(iso)) total++;
+      }
+    }
+    return total;
+  }, [filtrados, escalasPorFunc, feriadosDoMes, ano, mesIdx, diasNoMes]);
+
+  const consolidarFuncionario = async (funcId) => {
+    const func = ativos.find(f => f.id === funcId);
+    const rascunhos = (escalasPorFunc.get(funcId) || []).filter(e => e.ativo !== false && isRascunho(e));
+    if (rascunhos.length === 0) { toast.info('Nenhuma escala em rascunho para consolidar.'); return; }
+    setConsolidando(true);
+    try {
+      const agora = new Date().toISOString();
+      for (const e of rascunhos) {
+        await client.entities.EscalaFolga.update(e.id, { status: ESCALA_STATUS.CONSOLIDADA, consolidado_em: agora });
+      }
+      await registrarAuditoria({ acao: 'editar', modulo: 'funcionario', entidade_id: funcId, descricao: `Escala de folga de ${func?.nome || funcId} consolidada (${rascunhos.length} registro(s))` });
+      toast.success(`Escala de ${func?.nome || 'funcionário'} consolidada.`);
+      queryClient.invalidateQueries({ queryKey: ['escala_folga'] });
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao consolidar escala');
+    } finally {
+      setConsolidando(false);
+    }
+  };
+
+  const reabrirFuncionario = async (funcId) => {
+    const func = ativos.find(f => f.id === funcId);
+    const consolidadas = (escalasPorFunc.get(funcId) || []).filter(e => isConsolidada(e));
+    if (consolidadas.length === 0) { toast.info('Nenhuma escala consolidada para reabrir.'); return; }
+    setConsolidando(true);
+    try {
+      for (const e of consolidadas) {
+        await client.entities.EscalaFolga.update(e.id, { status: ESCALA_STATUS.RASCUNHO, reaberto_em: new Date().toISOString() });
+      }
+      await registrarAuditoria({ acao: 'editar', modulo: 'funcionario', entidade_id: funcId, descricao: `Escala de folga de ${func?.nome || funcId} reaberta para edição` });
+      toast.success(`Escala de ${func?.nome || 'funcionário'} reaberta.`);
+      queryClient.invalidateQueries({ queryKey: ['escala_folga'] });
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao reabrir escala');
+    } finally {
+      setConsolidando(false);
+    }
+  };
+
+  const consolidarMes = async () => {
+    if (rascunhosDoMes.length === 0) { toast.info('Nenhuma escala em rascunho neste mês.'); return; }
+    setConsolidando(true);
+    try {
+      const agora = new Date().toISOString();
+      for (const e of rascunhosDoMes) {
+        await client.entities.EscalaFolga.update(e.id, { status: ESCALA_STATUS.CONSOLIDADA, consolidado_em: agora });
+      }
+      await registrarAuditoria({ acao: 'editar', modulo: 'funcionario', descricao: `Escala de folga consolidada — ${MESES_COMPLETOS[mesIdx]}/${ano} (${rascunhosDoMes.length} registro(s))` });
+      toast.success(`${rascunhosDoMes.length} escala(s) consolidada(s) em ${MESES_COMPLETOS[mesIdx]}.`);
+      queryClient.invalidateQueries({ queryKey: ['escala_folga'] });
+      setReviewOpen(false);
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao consolidar escalas');
+    } finally {
+      setConsolidando(false);
+    }
+  };
+
+  const reabrirMes = async () => {
+    if (consolidadasDoMes.length === 0) { toast.info('Nenhuma escala consolidada neste mês.'); return; }
+    setConsolidando(true);
+    try {
+      for (const e of consolidadasDoMes) {
+        await client.entities.EscalaFolga.update(e.id, { status: ESCALA_STATUS.RASCUNHO, reaberto_em: new Date().toISOString() });
+      }
+      await registrarAuditoria({ acao: 'editar', modulo: 'funcionario', descricao: `Escalas de folga reabertas — ${MESES_COMPLETOS[mesIdx]}/${ano} (${consolidadasDoMes.length})` });
+      toast.success(`${consolidadasDoMes.length} escala(s) reaberta(s) em ${MESES_COMPLETOS[mesIdx]}.`);
+      queryClient.invalidateQueries({ queryKey: ['escala_folga'] });
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao reabrir escalas');
+    } finally {
+      setConsolidando(false);
+    }
+  };
+
   const isLoading = loadingFunc || loadingFerias || loadingEscalas;
 
   return (
@@ -164,7 +310,40 @@ export default function EscalaFolga() {
           <Button variant="outline" onClick={() => setFeriadosOpen(true)}>
             <CalendarX2 className="w-4 h-4 mr-2" />Feriados
           </Button>
-<Button onClick={() => abrirConfig(null)}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="w-4 h-4 mr-2" />Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportCSV}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />Planilha (Excel)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPDF}>
+                <FileText className="w-4 h-4 mr-2" />PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={consolidando}>
+                <CheckCircle2 className="w-4 h-4 mr-2" />Consolidar
+                {rascunhosDoMes.length > 0 && (
+                  <span className="ml-1.5 text-xs bg-amber-100 text-amber-700 rounded px-1.5">{rascunhosDoMes.length}</span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setReviewOpen(true)} disabled={rascunhosDoMes.length === 0}>
+                <CheckCircle2 className="w-4 h-4 mr-2" />Consolidar rascunhos de {MESES_COMPLETOS[mesIdx]}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={reabrirMes} disabled={consolidadasDoMes.length === 0}>
+                <RotateCcw className="w-4 h-4 mr-2" />Reabrir consolidadas de {MESES_COMPLETOS[mesIdx]}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => abrirConfig(null)}>
             <Settings2 className="w-4 h-4 mr-2" />Configurar Escala
           </Button>
         </div>
@@ -206,6 +385,15 @@ export default function EscalaFolga() {
           <SelectContent>
             <SelectItem value="todos">Todos os setores</SelectItem>
             {setores.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={statusFiltro} onValueChange={setStatusFiltro}>
+          <SelectTrigger className="w-44 h-9 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os status</SelectItem>
+            <SelectItem value="rascunho">Rascunho</SelectItem>
+            <SelectItem value="consolidada">Consolidada</SelectItem>
+            <SelectItem value="sem_escala">Sem escala</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -258,6 +446,7 @@ export default function EscalaFolga() {
                 {filtrados.map(func => {
                   const escalasFunc = escalasPorFunc.get(func.id) || [];
                   const escalaAtual = getEscalaEfetiva(escalasFunc, hojeISO);
+                  const statusFunc = statusPorFunc.get(func.id);
                   const feriasFunc = todasFerias.filter(x => x.funcionario_id === func.id && x.cancelada !== true);
                   return (
                     <tr key={func.id} onClick={() => abrirConfig(func)} title={`Clique para configurar a escala de ${func.nome}`} className="border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors">
@@ -294,9 +483,39 @@ export default function EscalaFolga() {
                         );
                       })}
                       <td className="border-l px-2 py-1 align-middle">
-                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${escalaAtual ? 'bg-blue-100 text-blue-700' : 'bg-muted text-muted-foreground'}`}>
-                          {escalaAtual ? rotuloEscala(escalaAtual) : 'Sem escala'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${escalaAtual ? 'bg-blue-100 text-blue-700' : 'bg-muted text-muted-foreground'}`}>
+                            {escalaAtual ? rotuloEscala(escalaAtual) : 'Sem escala'}
+                          </span>
+                          {statusFunc === ESCALA_STATUS.RASCUNHO && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap bg-amber-100 text-amber-700">Rascunho</span>
+                          )}
+                          {statusFunc === ESCALA_STATUS.CONSOLIDADA && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap bg-green-100 text-green-700">Consolidada</span>
+                          )}
+                          {statusFunc === ESCALA_STATUS.RASCUNHO && (
+                            <button
+                              type="button"
+                              title="Consolidar escala"
+                              disabled={consolidando}
+                              onClick={(ev) => { ev.stopPropagation(); consolidarFuncionario(func.id); }}
+                              className="text-amber-600 hover:text-amber-700 disabled:opacity-50"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {statusFunc === ESCALA_STATUS.CONSOLIDADA && (
+                            <button
+                              type="button"
+                              title="Reabrir escala para edição"
+                              disabled={consolidando}
+                              onClick={(ev) => { ev.stopPropagation(); reabrirFuncionario(func.id); }}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -341,6 +560,7 @@ export default function EscalaFolga() {
         funcionarios={ativos}
         escalas={escalas}
         funcionarioInicial={configFunc}
+        feriadosExtras={feriadosExtras}
         onSaved={() => queryClient.invalidateQueries({ queryKey: ['escala_folga'] })}
       />
 
@@ -349,6 +569,50 @@ export default function EscalaFolga() {
         onClose={() => setFeriadosOpen(false)}
         ano={ano}
       />
+
+      {/* Revisão pré-consolidação (publicação) */}
+      <Dialog open={reviewOpen} onOpenChange={(o) => { if (!o && !consolidando) setReviewOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-primary" />
+              Consolidar escala — {MESES_COMPLETOS[mesIdx]}/{ano}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Ao consolidar, as escalas em rascunho deste mês ficam <strong>publicadas e travadas</strong>.
+              Para alterar depois, será preciso <strong>reabrir</strong>.
+            </p>
+            <div className="rounded-lg border bg-muted/30 divide-y">
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-muted-foreground">Escalas em rascunho a consolidar</span>
+                <span className="font-bold text-amber-700">{rascunhosDoMes.length}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-muted-foreground">Funcionários sem escala no mês</span>
+                <span className="font-bold">{resumo.semEscala}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-muted-foreground">Folgas que caem em feriado</span>
+                <span className={`font-bold ${folgasEmFeriadoMes > 0 ? 'text-amber-700' : ''}`}>{folgasEmFeriadoMes}</span>
+              </div>
+            </div>
+            {resumo.semEscala > 0 && (
+              <p className="text-xs text-amber-700">
+                Há funcionários sem escala definida — eles não terão folga publicada neste mês.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={consolidando}>Cancelar</Button>
+            <Button onClick={consolidarMes} disabled={consolidando || rascunhosDoMes.length === 0}>
+              {consolidando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Consolidar {rascunhosDoMes.length} escala(s)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

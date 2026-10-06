@@ -202,7 +202,7 @@ function DarBaixaModal({ open, onClose, funcionarios, feriasConsumidas, onSaved,
 }
 
 function FuncionarioFeriasRow({ func, solicitacoesFerias, solicitacoesBH, feriasConsumidas, onDarBaixa }) {
-  const situacao = calcularSituacaoFerias(func.data_admissao, feriasConsumidas);
+  const situacao = calcularSituacaoFerias(func.data_admissao, feriasConsumidas, func.faltas_por_periodo);
   const temDireitoFerias = !!situacao;
 
   const horasAcumuladas = solicitacoesBH
@@ -322,7 +322,7 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
         if (!match) return false;
 
         const funcFerias = feriasConsumidas.filter(fc => fc.funcionario_id === f.id);
-        const situacao = calcularSituacaoFerias(f.data_admissao, funcFerias);
+        const situacao = calcularSituacaoFerias(f.data_admissao, funcFerias, f.faltas_por_periodo);
         const horasBH = solBH.filter(s => s.funcionario_id === f.id && (s.status === 'pendente' || s.status === 'aprovado'))
           .reduce((acc, s) => acc + (s.horas_compensar || 0), 0);
 
@@ -332,8 +332,8 @@ export default function FeriasBancoHorasTab({ funcionarios }) {
         return situacao || horasBH > 0;
       })
       .sort((a, b) => {
-        const sa = calcularSituacaoFerias(a.data_admissao, feriasConsumidas.filter(fc => fc.funcionario_id === a.id));
-        const sb = calcularSituacaoFerias(b.data_admissao, feriasConsumidas.filter(fc => fc.funcionario_id === b.id));
+        const sa = calcularSituacaoFerias(a.data_admissao, feriasConsumidas.filter(fc => fc.funcionario_id === a.id), a.faltas_por_periodo);
+        const sb = calcularSituacaoFerias(b.data_admissao, feriasConsumidas.filter(fc => fc.funcionario_id === b.id), b.faltas_por_periodo);
         const score = (s) => {
           if (!s || s.todosConsumidos) return 100;
           if (s.concessaoVencida) return 0;

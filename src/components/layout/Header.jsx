@@ -3,8 +3,8 @@ import { Bell, Menu, X, LogOut, User, Settings, AlertCircle, CheckCircle2, Clock
 import { Button } from '@/components/ui/button';
 import { client } from '@/api/client';
 import { useUserRole } from '@/lib/useUserRole';
-import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import InstallAppButton from '@/components/pwa/InstallAppButton';
 
 const STATUS_ICONS = {
   pendente: { icon: Clock, color: 'text-yellow-600' },
@@ -50,6 +50,8 @@ export default function Header({ onMobileMenuToggle, mobileMenuOpen }) {
 
         {/* Right section */}
         <div className="flex items-center gap-3 ml-auto">
+          {/* Instalar app (PWA) — discreto */}
+          <InstallAppButton />
           {/* Notifications */}
           <div className="relative" ref={notifRef}>
             <Button variant="ghost" size="icon" className="relative" onClick={() => setShowNotif(!showNotif)}>

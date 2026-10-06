@@ -71,7 +71,7 @@ export default function DashboardRH() {
     const feriasVencidas = funcionarios.filter(f => {
       if (f.data_demissao) return false;
       const feriasFunc = todasFerias.filter(fc => fc.funcionario_id === f.id);
-      const situacao = calcularSituacaoFerias(f.data_admissao, feriasFunc);
+      const situacao = calcularSituacaoFerias(f.data_admissao, feriasFunc, f.faltas_por_periodo);
       return !!situacao && !situacao.todosConsumidos && situacao.vencido;
     }).length;
 

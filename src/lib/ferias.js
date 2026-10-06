@@ -91,11 +91,11 @@ function isRegistroConsumido(f) {
  * Considera saldo PARCIAL: um período com parte gozada e saldo restante
  * continua pendente (ex.: gozou 10 de 30 → ainda faltam 20).
  */
-export function calcularSituacaoFerias(dataAdmissao, feriasConsumidas = []) {
+export function calcularSituacaoFerias(dataAdmissao, feriasConsumidas = [], faltasPorPeriodo = null) {
   const periodos = calcularPeriodosAquisitivos(dataAdmissao);
   if (periodos.length === 0) return null;
 
-  const saldo = calcularSaldoFerias({ data_admissao: dataAdmissao }, feriasConsumidas);
+  const saldo = calcularSaldoFerias({ data_admissao: dataAdmissao, faltas_por_periodo: faltasPorPeriodo }, feriasConsumidas);
   const pendente = saldo.periodos.find(p => p.saldoRestante > 0);
 
   if (!pendente) {
@@ -130,6 +130,20 @@ export function calcularSituacaoFerias(dataAdmissao, feriasConsumidas = []) {
 /** Dias de férias por período aquisitivo (base 30 — redução do art. 130 adiada). */
 export function calcularDiasFerias() {
   return DIAS_FERIAS_PADRAO;
+}
+
+/**
+ * Dias de férias do período conforme faltas injustificadas (art. 130 CLT):
+ * até 5 → 30 · 6–14 → 24 · 15–23 → 18 · 24–32 → 12 · 33+ → 0 (perde o direito).
+ * Sem faltas registradas retorna 30 (comportamento inalterado).
+ */
+export function diasFeriasPorFaltas(faltas = 0) {
+  const f = Math.max(0, Number(faltas) || 0);
+  if (f <= 5) return 30;
+  if (f <= 14) return 24;
+  if (f <= 23) return 18;
+  if (f <= 32) return 12;
+  return 0;
 }
 
 /**
@@ -299,8 +313,12 @@ export function calcularSaldoFerias(funcionario, feriasRegistradas = []) {
     // Abono pecuniário (art. 143) converte dias de férias em dinheiro — também consome o saldo
     const diasAbono = registrosDoPeriodo.reduce((s, r) => s + (r.dias_abono || 0), 0);
 
-    // Saldo parcial real: 30 dias do período − já gozados − já programados − abono
-    const diasDisponiveis = Math.max(0, DIAS_FERIAS_PADRAO - diasGozados - diasProgramados - diasAbono);
+    // Faltas injustificadas do período (art. 130) reduzem o total de dias de direito
+    const faltasPeriodo = Number(funcionario?.faltas_por_periodo?.[p.numero]) || 0;
+    const totalPeriodo = diasFeriasPorFaltas(faltasPeriodo);
+
+    // Saldo parcial real: total do período (30 ou reduzido por faltas) − gozados − programados − abono
+    const diasDisponiveis = Math.max(0, totalPeriodo - diasGozados - diasProgramados - diasAbono);
 
     // 'gozado' só quando o período está 100% consumido (saldo parcial mantém 'disponivel')
     let estado;
@@ -318,6 +336,8 @@ export function calcularSaldoFerias(funcionario, feriasRegistradas = []) {
       diasGozados,
       diasProgramados,
       diasAbono,
+      faltas: faltasPeriodo,
+      totalPeriodo,
       diasParaVencer,
       // Férias vencida = período aquisitivo fechado e gozo não concedido (conceito operacional)
       vencido: estado === 'disponivel',
@@ -359,6 +379,35 @@ export function getSobreposicaoFuncionario(funcionarioId, dataInicio, dataFim, f
     const fFim = parseDataLocal(f.data_fim);
     if (isNaN(fInicio.getTime()) || isNaN(fFim.getTime())) return false;
     return fInicio <= fim && fFim >= inicio;
+  });
+}
+
+/**
+ * Férias do mesmo funcionário que ficam "emendadas" ao intervalo candidato — sem
+ * ao menos 1 dia de trabalho entre elas (gap de 0 dias). Alerta SOFT.
+ * @param {string} funcionarioId
+ * @param {string} dataInicio "YYYY-MM-DD"
+ * @param {string} dataFim "YYYY-MM-DD"
+ * @param {Array} feriasRegistradas
+ * @returns {Array} registros emendados
+ */
+export function getFeriasEmendadas(funcionarioId, dataInicio, dataFim, feriasRegistradas = []) {
+  if (!funcionarioId || !dataInicio || !dataFim) return [];
+  const inicio = parseDataLocal(dataInicio);
+  const fim = parseDataLocal(dataFim);
+  if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) return [];
+  return (feriasRegistradas || []).filter(f => {
+    if (!isRegistroConsumido(f)) return false;
+    if (f.funcionario_id !== funcionarioId) return false;
+    if (!f.data_inicio || !f.data_fim) return false;
+    const fInicio = parseDataLocal(f.data_inicio);
+    const fFim = parseDataLocal(f.data_fim);
+    if (isNaN(fInicio.getTime()) || isNaN(fFim.getTime())) return false;
+    // Emenda "depois": candidato começa no dia seguinte ao fim do registro existente.
+    // Emenda "antes": candidato termina no dia anterior ao início do registro existente.
+    const emendaDepois = differenceInCalendarDays(inicio, fFim) === 1;
+    const emendaAntes = differenceInCalendarDays(fInicio, fim) === 1;
+    return emendaDepois || emendaAntes;
   });
 }
 

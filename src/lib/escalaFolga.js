@@ -20,6 +20,37 @@ export function getPresetEscala(id) {
   return ESCALA_PRESETS.find(p => p.id === id) || null;
 }
 
+// Status de publicação da escala.
+// - 'rascunho': ainda não publicada (não vai ao portal). Edição livre.
+// - 'consolidada': publicada/travada. Editar exige "reabrir".
+// RETROCOMPATIBILIDADE: registros antigos (sem `status`) são tratados como RASCUNHO.
+export const ESCALA_STATUS = {
+  RASCUNHO: 'rascunho',
+  CONSOLIDADA: 'consolidada',
+};
+
+export function isConsolidada(escala) {
+  return escala?.status === ESCALA_STATUS.CONSOLIDADA;
+}
+
+export function isRascunho(escala) {
+  return !isConsolidada(escala);
+}
+
+/** Status agregado das escalas (ativas) de um funcionário. */
+export function statusEscalasFuncionario(escalasFunc) {
+  const ativas = (escalasFunc || []).filter(e => e.ativo !== false);
+  if (ativas.length === 0) return 'sem_escala';
+  return ativas.some(isRascunho) ? ESCALA_STATUS.RASCUNHO : ESCALA_STATUS.CONSOLIDADA;
+}
+
+/** True se a escala cobre (total ou parcialmente) o intervalo [inicioISO, fimISO]. */
+export function escalaCobrePeriodo(escala, inicioISO, fimISO) {
+  if (!escala || !escala.data_ancora) return false;
+  const fim = escala.data_fim || '9999-12-31';
+  return escala.data_ancora <= fimISO && fim >= inicioISO;
+}
+
 export function getCicloEscala(escala) {
   const trab = Number(escala?.dias_trabalho) || 0;
   const folga = Number(escala?.dias_folga) || 0;
@@ -127,4 +158,55 @@ export function rotuloEscala(escala) {
     return `Fixa (${dias[escala.dia_semana_fixo ?? 0]})`;
   }
   return `${escala.dias_trabalho}x${escala.dias_folga}`;
+}
+
+/**
+ * Dias de folga EFETIVOS de um funcionário em um mês (ano, mes 0-11),
+ * respeitando o versionamento (usa a escala efetiva de cada dia).
+ * @param {Array} escalasFunc registros de EscalaFolga do funcionário
+ * @returns {string[]} datas ISO de folga
+ */
+export function getFolgasDoMes(escalasFunc, ano, mes) {
+  const dias = [];
+  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+  for (let d = 1; d <= diasNoMes; d++) {
+    const iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const escala = getEscalaEfetiva(escalasFunc, iso);
+    if (escala && ehDiaFolga(escala, iso)) dias.push(iso);
+  }
+  return dias;
+}
+
+/**
+ * Folgas que caem em feriado para uma escala (preview ou salva).
+ * - personalizada: verifica os dias escolhidos.
+ * - fixa/ciclo: percorre o período [data_ancora, data_fim] (ou até `maxDias`).
+ * @param {object} escala
+ * @param {Array<{data:string,nome:string}>} feriados
+ * @returns {Array<{data:string,nome:string}>}
+ */
+export function getFolgasEmFeriado(escala, feriados = [], maxDias = 400) {
+  if (!escala) return [];
+  const mapa = new Map((feriados || []).map(f => [f.data, f.nome || 'Feriado']));
+  const resultado = [];
+
+  if (escala.tipo === 'personalizada') {
+    for (const iso of (Array.isArray(escala.dias_folga) ? escala.dias_folga : [])) {
+      if (mapa.has(iso)) resultado.push({ data: iso, nome: mapa.get(iso) });
+    }
+    return resultado.sort((a, b) => a.data.localeCompare(b.data));
+  }
+
+  const inicio = parseDataLocal(escala.data_ancora);
+  if (isNaN(inicio.getTime())) return [];
+  const fim = escala.data_fim ? parseDataLocal(escala.data_fim) : addDays(inicio, maxDias);
+  let d = inicio;
+  let i = 0;
+  while (d <= fim && i <= maxDias) {
+    const iso = toISO(d);
+    if (ehDiaFolga(escala, iso) && mapa.has(iso)) resultado.push({ data: iso, nome: mapa.get(iso) });
+    d = addDays(d, 1);
+    i++;
+  }
+  return resultado;
 }

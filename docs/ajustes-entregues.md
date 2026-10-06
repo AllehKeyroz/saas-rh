@@ -385,6 +385,64 @@ Após revisão crítica, foram corrigidos:
 
 ---
 
+## Aplicativo instalável no celular (PWA) (23/09/2026)
+
+### 33. Instalar o RHDTalia como app no Android e iPhone ✅ Concluído
+
+**O que foi feito:** o sistema agora pode ser **instalado como aplicativo** no celular (Android e iPhone), criando um ícone na tela inicial que abre em tela cheia, como um app nativo.
+
+**Como funciona:**
+- Aparece um botão discreto **"Instalar"** no topo das telas (RH e Portal do Funcionário).
+- **Android:** o botão abre a instalação nativa do navegador.
+- **iPhone/iPad:** o botão mostra um passo a passo (Compartilhar → Adicionar à Tela de Início).
+- O botão só aparece quando o app **não está instalado** e **há conexão** — some sozinho depois de instalado.
+
+**Importante:** o app continua funcionando **somente online** (sem modo offline) — nenhum dado fica salvo no aparelho. É a mesma segurança de sempre, apenas com a conveniência do ícone/app.
+
+---
+
+## Escala de Folga — Feriados, aviso e exportação (23/09/2026)
+
+### 34. Feriados no calendário, aviso de folga em feriado e exportação ✅ Concluído
+
+**O que foi feito:**
+- **Feriados marcados no calendário da escala personalizada** — ao escolher os dias de folga, os dias de feriado aparecem destacados (fundo vermelho + ponto), com o nome do feriado ao passar o mouse.
+- **Aviso quando a folga cai em feriado** — o sistema mostra um alerta (sem bloquear) listando as folgas que caem em feriado, tanto no diálogo quanto ao salvar. É permitido — serve para o RH conferir se é intencional.
+- **Exportar escala de folga** — novo botão **Exportar** (Planilha/Excel ou PDF), gerando a lista por funcionário e mês (ex.: "Gedel — Setembro — 1, 5, 8, 12…"). Dias que caem em feriado são marcados com `*`.
+
+**Impacto:** a escala de folga fica completa para o RH conferir conflitos com feriados e entregar a lista (contabilidade/equipe) sem trabalho manual.
+
+---
+
+## Escala de Folga — Rascunho e Consolidação (RH) (23/09/2026)
+
+### 35. Lançar folgas em rascunho e consolidar (publicar) depois ✅ Concluído
+
+**O que foi feito:** a escala de folga agora tem o fluxo **rascunho → consolidar**, no mesmo espírito do "fechamento":
+- Toda escala criada ou alterada nasce como **Rascunho** (ainda não publicada).
+- O RH vê o **status por funcionário** (selo **Rascunho** / **Consolidada**) e pode **filtrar por status**.
+- **Consolidar** — por funcionário (ícone na linha) ou **em lote pelo mês** (menu "Consolidar"), com uma **revisão antes de publicar** mostrando: quantas escalas serão consolidadas, quantos funcionários estão sem escala e quantas folgas caem em feriado.
+- **Consolidada = travada**: para alterar depois, é preciso **Reabrir** (por funcionário ou pelo mês).
+- **Proteção dos dados já existentes:** escalas consolidadas **nunca** são sobrescritas, apagadas ou truncadas. O "Limpar escala" **preserva** as consolidadas. **Sem migração** — as escalas antigas continuam exatamente como estão.
+
+**Impacto:** o RH passa a decidir **quando publicar** a escala (exatamente o que o cliente pediu), com histórico preservado. O portal do funcionário virá numa próxima etapa, mostrando **apenas as escalas consolidadas**.
+
+---
+
+## Férias — Faltas (art. 130) e períodos emendados (23/09/2026)
+
+### 36. Faltas reduzem o direito a férias + aviso de períodos emendados ✅ Concluído
+
+**O que foi feito:**
+- **Faltas injustificadas (art. 130 CLT):** no modal de programação, o RH informa a quantidade de faltas do período aquisitivo. O sistema reduz automaticamente os dias de direito — até 5 faltas → 30 dias · 6 a 14 → 24 · 15 a 23 → 18 · 24 a 32 → 12 · 33 ou mais → 0 (perde o direito). A redução vale em **todo o sistema**: calendário de férias, dashboard, ficha 360, portal do funcionário e exportação.
+- **Aviso de férias emendadas:** quando a programação fica "colada" a outro período do mesmo funcionário (sem ao menos **1 dia de trabalho** entre eles), o sistema mostra um **alerta** — sem bloquear.
+
+**Proteção dos dados:** campo **novo e aditivo**. Funcionário sem faltas registradas continua com **30 dias** — nada muda no que já existe.
+
+**Impacto:** o saldo passa a respeitar a lei no caso de faltas, e o RH é avisado sobre emendar férias.
+
+---
+
 ## Próximos ajustes
 
 Este documento será atualizado conforme novos ajustes e melhorias forem concluídos.

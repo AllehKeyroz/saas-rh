@@ -16,6 +16,7 @@ import { differenceInDays } from 'date-fns';
 import {
   parseDataLocal, getStatusFerias, FERIAS_STATUS, calcularSaldoFerias, isFeriasAtiva,
   getFeriasSobrepostas, getSobreposicaoFuncionario, validarFracionamento, abonoMaximo, getHojeISO, getMarcosFuturos,
+  getFeriasEmendadas, diasFeriasPorFaltas,
 } from '@/lib/ferias';
 import { getFeriadosCompletos, verificarRegra48h } from '@/lib/feriados';
 import { getEscalaEfetiva, verificarRegra48hFolga } from '@/lib/escalaFolga';
@@ -388,6 +389,7 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [abono, setAbono] = useState(0);
+  const [faltas, setFaltas] = useState(0);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
@@ -399,8 +401,17 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
       setDataInicio('');
       setDataFim('');
       setAbono(0);
+      setFaltas(0);
     }
   }, [open, funcionarioInicial]);
+
+  // Carrega as faltas registradas do período selecionado (art. 130)
+  useEffect(() => {
+    const f = funcionarios.find(x => x.id === funcId);
+    const n = Number(periodoNum);
+    if (!f || !n) { setFaltas(0); return; }
+    setFaltas(Number(f.faltas_por_periodo?.[n]) || 0);
+  }, [funcId, periodoNum, funcionarios]);
 
   const func = funcionarios.find(f => f.id === funcId);
   const feriasFunc = todasFerias.filter(f => f.funcionario_id === funcId && f.cancelada !== true);
@@ -457,6 +468,14 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
     ? validarFracionamento([...partesDoPeriodo, { dias }])
     : null;
 
+  // Férias "emendadas" (sem ao menos 1 dia de trabalho entre períodos) — aviso soft
+  const emendadas = func && dataInicio && dataFim
+    ? getFeriasEmendadas(func.id, dataInicio, dataFim, feriasFunc)
+    : [];
+
+  // Total de dias de direito do período conforme as faltas informadas (art. 130)
+  const totalPeriodoFaltas = diasFeriasPorFaltas(faltas);
+
   const abonoMax = abonoMaximo(30);
   const excedeSaldo = dias > saldoRestante;
   // Abono pecuniário também consome o saldo (art. 143) — gozo + abono não podem passar do restante
@@ -468,6 +487,18 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
     && (!fracionamento || fracionamento.valido)
     && !saving;
 
+  // Motivos que impedem salvar (exibidos de forma clara perto do botão)
+  const motivosBloqueio = [];
+  if (!func) motivosBloqueio.push('Selecione o funcionário.');
+  if (func && !periodoSelecionado) motivosBloqueio.push('Selecione o período aquisitivo.');
+  if (func && periodoSelecionado && !dataInicio) motivosBloqueio.push('Informe a data de início.');
+  if (func && periodoSelecionado && !dataFim) motivosBloqueio.push('Informe a data de fim.');
+  if (dataInicio && dataFim && new Date(dataFim) < new Date(dataInicio)) motivosBloqueio.push('A data fim não pode ser anterior à data início.');
+  if (excedeSaldo) motivosBloqueio.push(`Você pediu ${dias} dia(s), mas o período tem apenas ${saldoRestante} dia(s) de saldo (máximo ${totalPeriodoFaltas} por período). Reduza o intervalo.`);
+  if (!excedeSaldo && excedeComAbono) motivosBloqueio.push(`Gozo (${dias}) + abono (${abono}) = ${dias + abono} dia(s), acima do saldo de ${saldoRestante} dia(s) do período (o abono consome o saldo — art. 143).`);
+  if (sobreposicao.length > 0) motivosBloqueio.push('Este funcionário já tem férias nesse período (sobreposição).');
+  if (fracionamento && !fracionamento.valido) motivosBloqueio.push(`Fracionamento inválido: ${fracionamento.erros.join(' ')}`);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -475,6 +506,14 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
         toast.error(`Abono máximo permitido: ${abonoMax} dias (art. 143 CLT)`);
         setSaving(false);
         return;
+      }
+      // Persiste as faltas do período (art. 130) no cadastro do funcionário, se mudou
+      const faltasAtuais = Number(func.faltas_por_periodo?.[periodoSelecionado.numero]) || 0;
+      if (faltas !== faltasAtuais) {
+        await client.entities.Funcionarios.update(func.id, {
+          faltas_por_periodo: { ...(func.faltas_por_periodo || {}), [periodoSelecionado.numero]: faltas },
+        });
+        queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
       }
       await client.entities.Ferias.create({
         funcionario_id: func.id,
@@ -572,9 +611,27 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
             <Input type="number" min="0" max={abonoMax} value={abono} onChange={e => setAbono(Number(e.target.value) || 0)} />
           </div>
 
+          {periodoSelecionado && (
+            <div>
+              <Label>Faltas injustificadas no período (art. 130)</Label>
+              <Input
+                type="number" min="0"
+                value={faltas}
+                onChange={e => setFaltas(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <p className={`text-xs mt-1 ${totalPeriodoFaltas < 30 ? 'text-amber-700' : 'text-muted-foreground'}`}>
+                Com <strong>{faltas}</strong> falta(s), o período dá direito a <strong>{totalPeriodoFaltas}</strong> dias
+                {totalPeriodoFaltas === 0
+                  ? ' — perde o direito a férias.'
+                  : totalPeriodoFaltas < 30 ? ' — reduzido (art. 130 CLT).' : '.'}
+              </p>
+            </div>
+          )}
+
           {excedeSaldo && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              O período selecionado tem apenas <span className="font-semibold">{saldoRestante} dias restantes</span> (máximo de 30 dias por período). Reduza o intervalo.
+              O período selecionado tem apenas <span className="font-semibold">{saldoRestante} dia(s) restantes</span>
+              {totalPeriodoFaltas < 30 && <> (reduzido por faltas — máximo {totalPeriodoFaltas} no período)</>}. Reduza o intervalo.
             </div>
           )}
 
@@ -612,6 +669,16 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
             </div>
           )}
 
+          {emendadas.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
+              Atenção: férias <strong>emendadas</strong> — sem ao menos 1 dia de trabalho entre os períodos:
+              {emendadas.slice(0, 3).map((r, i) => (
+                <span key={i}> {formatDate(r.data_inicio)} → {formatDate(r.data_fim)}{i < Math.min(emendadas.length, 3) - 1 ? ',' : ''}</span>
+              ))}. Recomenda-se manter 1 dia de trabalho entre períodos.
+            </div>
+          )}
+
           {conflitos.length > 0 && (
             <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 space-y-1">
               <p className="text-xs font-semibold text-orange-800 flex items-center gap-1">
@@ -638,11 +705,22 @@ function ProgramarModal({ open, onClose, funcionarios, todasFerias, limiteSetor,
             </p>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!podeSalvar}>
-              {saving ? 'Salvando...' : 'Programar'}
-            </Button>
+          <DialogFooter className="flex-col sm:flex-col items-stretch gap-2">
+            {!podeSalvar && motivosBloqueio.length > 0 && (
+              <div className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 space-y-0.5">
+                <p className="font-semibold flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Não é possível programar ainda:
+                </p>
+                {motivosBloqueio.map((m, i) => <p key={i}>• {m}</p>)}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+              <Button onClick={handleSave} disabled={!podeSalvar}>
+                {saving ? 'Salvando...' : 'Programar'}
+              </Button>
+            </div>
           </DialogFooter>
         </div>
       </DialogContent>

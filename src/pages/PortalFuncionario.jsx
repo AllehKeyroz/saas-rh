@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { useSearchParams } from 'react-router-dom';
 import { User, LogOut, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import InstallAppButton from '@/components/pwa/InstallAppButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getMesReferenciaAtual, getMesesOptions, formatDate, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { getMesReferenciaAtual, formatDate, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { useRHControl } from '@/lib/rhControl';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import { useToast } from '@/components/ui/use-toast';
@@ -337,29 +338,32 @@ export default function PortalFuncionario() {
                />
              )}
            </div>
-          {/* Seletor de mês inline para abas relevantes */}
-          {ABAS_COM_MES.includes(aba) && (
-            <div className="flex items-center gap-2">
-              <button onClick={() => navegarMes(-1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === 0}
-                className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-                <SelectTrigger className="w-28 h-10 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {mesesDisponiveis.map(mes => (
-                    <SelectItem key={mes} value={mes}>{mes}{mes === mesAtual ? ' ●' : ''}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button onClick={() => navegarMes(1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === mesesDisponiveis.length - 1}
-                className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          {/* Ações à direita: instalar app + seletor de mês */}
+          <div className="flex items-center gap-2">
+            <InstallAppButton />
+            {ABAS_COM_MES.includes(aba) && (
+              <>
+                <button onClick={() => navegarMes(-1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === 0}
+                  className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
+                  <SelectTrigger className="w-28 h-10 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mesesDisponiveis.map(mes => (
+                      <SelectItem key={mes} value={mes}>{mes}{mes === mesAtual ? ' ●' : ''}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button onClick={() => navegarMes(1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === mesesDisponiveis.length - 1}
+                  className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Page content */}

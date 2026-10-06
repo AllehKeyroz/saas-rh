@@ -1,0 +1,208 @@
+graph TD
+    classDef inicio fill:#F4D0D0,stroke:#C62828,stroke-width:3px,color:#293845
+    classDef acao fill:#FFF7D6,stroke:#FFD93D,stroke-width:2px,color:#293845
+    classDef decisao fill:#D4F5F2,stroke:#1AAE9F,stroke-width:2px,color:#293845
+    classDef funil fill:#E3F0FF,stroke:#74B9FF,stroke-width:2px,color:#293845
+    classDef consultoria fill:#ECEAFE,stroke:#730FC3,stroke-width:2px,color:#293845
+    classDef exclusao fill:#FFE0E0,stroke:#FF6B6B,stroke-width:2px,color:#293845
+    classDef loop fill:#FFFFFF,stroke:#2C88D9,stroke-width:2px,stroke-dasharray: 5 5,color:#2C88D9
+    classDef backend fill:#EDE7F6,stroke:#7E57C2,stroke-width:2px,color:#293845
+    classDef store fill:#F1F1F6,stroke:#6B7280,stroke-width:2px,color:#293845
+    classDef ui fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#293845
+    classDef integracao fill:#E1F5FE,stroke:#0288D1,stroke-width:2px,color:#293845
+
+    subgraph S1["1. ACESSO E AUTENTICACAO"]
+        ACC1([INICIO<br/>Acesso ao RHDTalia]):::inicio
+        ACC2[Login<br/>email + senha]:::acao
+        ACC3[Registro<br/>criacao de conta]:::acao
+        ACC4[Novo tenant<br/>cria empresa + admin]:::acao
+        ACC5[Convite<br/>funcionario ou RH]:::acao
+        ACC6[Firebase Auth<br/>autenticacao]:::backend
+    end
+
+    subgraph S2["2. ROTEAMENTO POR PAPEL"]
+        ACC7{Qual papel do usuario?}:::decisao
+        ROT1[AppLayoutRH<br/>Header + Sidebar<br/>area do RH]:::ui
+        ROT2[PortalFuncionario<br/>painel do empregado]:::ui
+        ROT3[404<br/>papel consulta]:::exclusao
+        ROT4[Header RH<br/>notificacoes + instalar app]:::ui
+    end
+
+    subgraph S3["3. CAMADA DE DADOS (FIREBASE)"]
+        DAD1[client proxy<br/>injeta tenant_id<br/>entidades Firestore]:::store
+        DAD2[Firestore<br/>38 colecoes · db rhdtalia]:::store
+        DAD3[Storage<br/>documentos e comprovantes]:::store
+        DAD4[Cloud Functions<br/>sendEmail · limite de vale]:::backend
+        DAD5[Multi-tenant<br/>tenant_id por empresa]:::store
+        DAD6[Auditoria<br/>LogAuditoria]:::store
+    end
+
+    subgraph S4["4. MODULOS DO RH (MENU)"]
+        M01[Dashboard RH<br/>KPIs e alertas]:::ui
+        M02[Relatorios]:::ui
+        M03[Fechamento Mensal<br/>folha congelada]:::ui
+        M04[Lancamentos<br/>ficha financeira]:::ui
+        M05[Logs de Erro]:::ui
+        M06[Funcionarios<br/>cadastro + 360]:::ui
+        M07[Calendario de Ferias]:::ui
+        M08[Escala de Folga]:::ui
+        M09[Espelho do Portal]:::ui
+        M10[Comissoes]:::ui
+        M11[Solicitacoes]:::ui
+        M12[Comunicacao]:::ui
+        M13[Centro de Controle<br/>alertas · permissoes · modulos]:::ui
+        M14[Assinaturas Digitais]:::ui
+        M15[Auditoria de Documentos]:::ui
+        M16[Modelos de Documentos]:::ui
+        M17[Auditoria]:::ui
+        M18[Usuarios<br/>papel · ativar · inativar]:::ui
+        M19[Configuracoes<br/>setores · funcoes · tipos]:::ui
+    end
+
+    subgraph S5["5. MODULOS DE DETALHE"]
+        FER1[Saldo real por periodo<br/>30 - gozados - programados - abono]:::acao
+        FER2[Fracionamento<br/>ate 3 partes · 14/5]:::acao
+        FER3[Abono pecuniario<br/>art. 143]:::acao
+        FER4[Faltas injustificadas<br/>art. 130]:::acao
+        FER5[Regra 48h<br/>feriado e folga/DSR]:::acao
+        FER6[Aviso digital<br/>com assinatura]:::acao
+        ESC1[Tipos de escala<br/>fixa · ciclo · personalizada]:::acao
+        ESC2[Rascunho e Consolidar<br/>publicar e travar]:::acao
+        ESC3[Feriados no calendario<br/>+ aviso de folga]:::acao
+        ESC4[Exportar escala<br/>planilha / PDF]:::acao
+        COM1[Gorjetas por setor<br/>rateio automatico]:::acao
+        COM2[Comissao individual<br/>manual por funcionario]:::acao
+        COM3[Ausencias no rateio<br/>ferias e afastamento]:::acao
+        COM4[Metas de comissao]:::acao
+        F360[Aba 360<br/>cargo/salario · afastamento<br/>documentos · historico]:::acao
+    end
+
+    subgraph S6["6. PORTAL DO FUNCIONARIO"]
+        P01[Visao Geral]:::ui
+        P02[Meus Dados]:::ui
+        P03[Meu Salario]:::ui
+        P04[Meus Vales]:::ui
+        P05[Extrato Mensal]:::ui
+        P06[Minha Vida Financeira]:::ui
+        P07[Minhas Comissoes]:::ui
+        P08[Minhas Metas]:::ui
+        P09[Meus Documentos]:::ui
+        P10[Minhas Ferias]:::ui
+        P11[Mensagens]:::ui
+        P12[Minhas Solicitacoes]:::ui
+        P13[Assinaturas]:::ui
+    end
+
+    subgraph S7["7. INTEGRACOES EXTERNAS"]
+        INT1[CRM LeadConnector<br/>tracking + formulario]:::integracao
+        INT2[WhatsApp / E-mail<br/>comunicacao]:::integracao
+        INT3[Assinatura ICP<br/>via CRM]:::integracao
+        INT4[PWA<br/>instalar no celular]:::integracao
+        INT5[Exportacoes<br/>PDF · XLSX · ZIP]:::integracao
+    end
+
+    ACC1 --> ACC2
+    ACC1 --> ACC3
+    ACC3 --> ACC4
+    ACC3 --> ACC5
+    ACC2 --> ACC6
+    ACC3 --> ACC6
+    ACC5 --> ACC6
+    ACC6 --> ACC7
+    ACC7 -->|"admin / user"| ROT1
+    ACC7 -->|"funcionario"| ROT2
+    ACC7 -->|"consulta"| ROT3
+    ROT1 --> ROT4
+
+    ROT1 --> M01
+    ROT1 --> M02
+    ROT1 --> M03
+    ROT1 --> M04
+    ROT1 --> M05
+    ROT1 --> M06
+    ROT1 --> M07
+    ROT1 --> M08
+    ROT1 --> M09
+    ROT1 --> M10
+    ROT1 --> M11
+    ROT1 --> M12
+    ROT1 --> M13
+    ROT1 --> M14
+    ROT1 --> M15
+    ROT1 --> M16
+    ROT1 --> M17
+    ROT1 --> M18
+    ROT1 --> M19
+
+    M06 --> F360
+    M07 --> FER1
+    M07 --> FER2
+    M07 --> FER3
+    M07 --> FER4
+    M07 --> FER5
+    M07 --> FER6
+    M08 --> ESC1
+    M08 --> ESC2
+    M08 --> ESC3
+    M08 --> ESC4
+    M10 --> COM1
+    M10 --> COM2
+    M10 --> COM3
+    M10 --> COM4
+
+    M01 --> DAD1
+    M03 --> DAD1
+    M04 --> DAD1
+    M06 --> DAD1
+    M07 --> DAD1
+    M08 --> DAD1
+    M10 --> DAD1
+    M11 --> DAD1
+    M12 --> DAD1
+    M13 --> DAD1
+    M14 --> DAD1
+    M15 --> DAD1
+    M16 --> DAD1
+    M17 --> DAD1
+    M18 --> DAD1
+    M19 --> DAD1
+
+    ROT2 --> P01
+    ROT2 --> P02
+    ROT2 --> P03
+    ROT2 --> P04
+    ROT2 --> P05
+    ROT2 --> P06
+    ROT2 --> P07
+    ROT2 --> P08
+    ROT2 --> P09
+    ROT2 --> P10
+    ROT2 --> P11
+    ROT2 --> P12
+    ROT2 --> P13
+
+    P03 --> DAD1
+    P04 --> DAD1
+    P05 --> DAD1
+    P06 --> DAD1
+    P07 --> DAD1
+    P08 --> DAD1
+    P09 --> DAD1
+    P10 --> DAD1
+    P11 --> DAD1
+    P12 --> DAD1
+    P13 --> DAD1
+
+    DAD1 --> DAD2
+    DAD1 --> DAD3
+    DAD1 --> DAD4
+    DAD2 --> DAD5
+    DAD1 --> DAD6
+
+    INT1 --> M06
+    INT2 --> M12
+    INT3 --> M14
+    INT4 --> ROT4
+    INT5 --> M02
+    INT5 --> M07
+    INT5 --> M08

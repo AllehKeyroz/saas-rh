@@ -35,7 +35,7 @@ function computeAlerts(funcionarios, todasFerias, limiteSetor) {
 
   for (const f of ativos) {
     const feriasFunc = (todasFerias || []).filter(x => x.funcionario_id === f.id);
-    const situacao = calcularSituacaoFerias(f.data_admissao, feriasFunc);
+    const situacao = calcularSituacaoFerias(f.data_admissao, feriasFunc, f.faltas_por_periodo);
     if (!situacao || situacao.todosConsumidos) continue;
 
     const pendente = situacao.periodoAquisitivo;
