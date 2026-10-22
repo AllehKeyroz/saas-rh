@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency, formatDate, getMesReferenciaAtual } from '@/lib/formatters';
-import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus, Plus, Trash2, MinusCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios, sobrepoeAfastamento, calcularDiasUniao } from '@/lib/comissoes';
+import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios, sobrepoeAfastamento, calcularDiasUniao, calcularDiasTotais, COMISSAO_STATUS, publicarComissao, formatPeriodo } from '@/lib/comissoes';
 import { registrarAuditoria } from '@/lib/audit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRHControl } from '@/lib/rhControl';
@@ -32,19 +33,44 @@ function motivoAusencia(aus) {
   return 'Afastamento no período';
 }
 
-export default function LancarComissao({ funcionarios, onSaved }) {
+// Faltou o período inteiro = inapto (excluído do rateio)
+function faltouTodoPeriodo(diasAusentes, diasTotaisPeriodo) {
+  return diasTotaisPeriodo > 0 && (parseInt(diasAusentes || 0, 10) >= diasTotaisPeriodo);
+}
+
+// Motivo legível da exclusão (afastamento/férias, faltas ou genérico)
+function motivoExclusao(aus, faltou) {
+  if (aus) return motivoAusencia(aus);
+  if (faltou) return 'Faltou todo o período';
+  return 'Excluído';
+}
+
+export default function LancarComissao({ funcionarios, onSaved, comissaoEmEdicao, onCancelarEdicao, creditosIniciais = [] }) {
   const { isAtiva } = useRHControl();
-  const [periodoInicio, setPeriodoInicio] = useState('');
-  const [periodoFim, setPeriodoFim] = useState('');
-  const [valorTotal, setValorTotal] = useState('');
-  const [observacao, setObservacao] = useState('');
-  const [calculado, setCalculado] = useState(false);
+  const inputsRascunho = comissaoEmEdicao?.rascunho?.inputs || null;
+  const [periodoInicio, setPeriodoInicio] = useState(inputsRascunho?.periodo_inicio || comissaoEmEdicao?.periodo_inicio || '');
+  const [periodoFim, setPeriodoFim] = useState(inputsRascunho?.periodo_fim || comissaoEmEdicao?.periodo_fim || '');
+  const [valorTotal, setValorTotal] = useState(
+    inputsRascunho
+      ? String(inputsRascunho.valor_total ?? '')
+      : (comissaoEmEdicao?.valor_total_periodo != null ? String(comissaoEmEdicao.valor_total_periodo) : '')
+  );
+  const [observacao, setObservacao] = useState(inputsRascunho?.observacao ?? comissaoEmEdicao?.observacao ?? '');
+  const [calculado, setCalculado] = useState(!!inputsRascunho);
   const [salvando, setSalvando] = useState(false);
-  const [retencao, setRetencao] = useState('0');
+  const [retencao, setRetencao] = useState(
+    inputsRascunho
+      ? String(inputsRascunho.percentual_retencao ?? 0)
+      : String(comissaoEmEdicao?.percentual_retencao ?? 0)
+  );
   // diasAusentes por funcionário: { [funcId]: número }
-  const [diasAusentesPorFunc, setDiasAusentesPorFunc] = useState({});
+  const [diasAusentesPorFunc, setDiasAusentesPorFunc] = useState(inputsRascunho?.dias_ausentes || {});
   // decisão de rateio por funcionário ausente no período (afastamento ou férias): { [funcId]: 'recebe' | 'nao_recebe' }
-  const [decisoesAusencia, setDecisoesAusencia] = useState({});
+  const [decisoesAusencia, setDecisoesAusencia] = useState(inputsRascunho?.decisoes || {});
+  // créditos de setor marcados para usar neste lançamento (ids)
+  const [creditosSelecionados, setCreditosSelecionados] = useState(inputsRascunho?.creditos_selecionados ?? creditosIniciais);
+  // débitos do período: [{ setor_id, setor_nome, valor, observacao }]
+  const [debitos, setDebitos] = useState(inputsRascunho?.debitos || []);
 
   const mesRef = getMesFromDatas(periodoInicio);
 
@@ -64,6 +90,12 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     queryFn: () => client.entities.Ferias.list(),
   });
 
+  // Créditos de setor disponíveis (gerados por setores que ficaram sem aptos)
+  const { data: creditosDisponiveis = [] } = useQuery({
+    queryKey: ['creditos_comissao_setor'],
+    queryFn: () => client.entities.CreditoComissaoSetor.filter({ status: 'disponivel' }),
+  });
+
   // Carrega retenção padrão da configuração
   const { data: configsRH = [] } = useQuery({
     queryKey: ['config_rh_retencao_lancar'],
@@ -71,11 +103,13 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   });
 
   useEffect(() => {
+    // Ao editar um rascunho, preserva o percentual salvo (não sobrescreve com o padrão)
+    if (comissaoEmEdicao) return;
     const cfg = configsRH.find(c => c.chave === 'comissao_retencao_padrao');
     if (cfg && cfg.valor != null) {
       setRetencao(String(cfg.valor));
     }
-  }, [configsRH]);
+  }, [configsRH, comissaoEmEdicao]);
 
   // Setores dinâmicos (obrigatórios)
   const setoresAtivos = setoresDB.filter(s => s.ativo !== false);
@@ -141,55 +175,41 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     return result;
   }, [porSetor]);
 
-  // Distribuição final
+  // Distribuição base por setor. IMPORTANTE: setor sem aptos NÃO redistribui o
+  // valor para os outros setores (race condition — as ausências dos outros setores
+  // podem ainda não ter sido lançadas). O valor vira crédito do próprio setor.
   const distribuicao = useMemo(() => {
     const result = {};
-    let totalComAptos = 0;
-    let totalSemAptos = 0;
 
     for (const [setorId, { aptos, excluidos }] of Object.entries(aptoPorSetor)) {
       let valorSetor, nome;
       if (setorId === '__outros') {
-        const totalDistribuido = Object.values(divisao).reduce((s, v) => s + (v?.valor || 0), 0);
-        valorSetor = Math.max(0, vDistribuir - totalDistribuido);
+        const totalBase = Object.values(divisao).reduce((s, v) => s + (v?.valor || 0), 0);
+        valorSetor = Math.max(0, vDistribuir - totalBase);
         nome = 'Outros (setor não mapeado)';
       } else {
         valorSetor = divisao[setorId]?.valor || 0;
         nome = divisao[setorId]?.nome || setorId;
       }
       const semAptos = aptos.length === 0;
-      if (setorId !== '__outros') {
-        if (semAptos) totalSemAptos += valorSetor;
-        else totalComAptos += valorSetor;
-      }
-      result[setorId] = { aptos, excluidos, valorSetor, valorInd: 0, semAptos, nome };
+      result[setorId] = {
+        aptos,
+        excluidos,
+        semAptos,
+        nome,
+        valorSetor: semAptos ? 0 : valorSetor,
+        valorCreditoGerado: semAptos ? valorSetor : 0,
+        valorInd: 0,
+      };
     }
 
-    // Redistribui valor de setores vazios para quem tem gente
-    for (const [setorId, data] of Object.entries(result)) {
-      if (setorId === '__outros') continue;
-      if (data.semAptos) {
-        data.valorSetor = 0;
-      } else if (totalComAptos > 0 && totalSemAptos > 0) {
-        data.valorSetor += totalSemAptos * (data.valorSetor / totalComAptos);
-      }
+    for (const data of Object.values(result)) {
       data.valorInd = data.aptos.length > 0 ? data.valorSetor / data.aptos.length : 0;
     }
 
-    // __outros: residual
-    if (result['__outros']) {
-      const totalDistribuido = Object.values(result)
-        .filter(v => v !== result['__outros'])
-        .reduce((s, v) => s + (v.valorSetor || 0), 0);
-      result['__outros'].valorSetor = Math.max(0, vDistribuir - totalDistribuido);
-      result['__outros'].valorInd = result['__outros'].aptos.length > 0
-        ? result['__outros'].valorSetor / result['__outros'].aptos.length : 0;
-    }
-
     return result;
-  }, [aptoPorSetor, divisao, valorTotal, vDistribuir]);
+  }, [aptoPorSetor, divisao, vDistribuir]);
 
-  const setoresSemAptosComFuncs = Object.entries(distribuicao).filter(([sid, v]) => v.semAptos && (porSetor[sid]?.length || 0) > 0 && sid !== '__outros');
   const outrosFuncs = aptoPorSetor['__outros']?.aptos || [];
 
   // Funcionários aptos com ausência no período da comissão (afastamento OU férias)
@@ -213,60 +233,171 @@ export default function LancarComissao({ funcionarios, onSaved }) {
     return mapa;
   }, [calculado, periodoInicio, periodoFim, distribuicao, afastamentos, ferias]);
 
-  // Distribuição efetiva: exclui quem "não recebe" o rateio por ausência (afastamento/férias)
-  const distribuicaoEfetiva = useMemo(() => {
-    if (Object.keys(ausenciasNoPeriodo).length === 0) return distribuicao;
+  const diasTotaisPeriodo = useMemo(
+    () => (periodoInicio && periodoFim ? calcularDiasTotais(periodoInicio, periodoFim) : 0),
+    [periodoInicio, periodoFim]
+  );
 
+  // Distribuição efetiva: exclui quem "não recebe" o rateio por ausência (afastamento/férias)
+  // e quem faltou o período inteiro (inapto automático). Setor que fica sem aptos não
+  // redistribui: o valor vira crédito do setor.
+  const distribuicaoEfetiva = useMemo(() => {
     const result = {};
-    let totalComAptos = 0;
-    let totalSemAptos = 0;
 
     for (const [setorId, data] of Object.entries(distribuicao)) {
-      // Ausente (afastamento/férias) só recebe se marcado explicitamente como "recebe".
-      // Sem decisão (padrão) = "não recebe" → sai da lista de aptos.
+      // Afastamento/férias: só recebe se marcado explicitamente como "recebe".
+      // Faltas = período inteiro: inapto (excluído automaticamente).
       const aptosEfetivos = data.aptos.filter(f => {
-        if (!ausenciasNoPeriodo[f.id]) return true;
-        return decisoesAusencia[f.id] === 'recebe';
+        const aus = ausenciasNoPeriodo[f.id];
+        if (aus) return decisoesAusencia[f.id] === 'recebe';
+        if (faltouTodoPeriodo(diasAusentesPorFunc[f.id], diasTotaisPeriodo)) return false;
+        return true;
       });
       const excluidos = [
         ...(data.excluidos || []),
         ...data.aptos.filter(f => ausenciasNoPeriodo[f.id] && decisoesAusencia[f.id] !== 'recebe'),
+        ...data.aptos.filter(f => !ausenciasNoPeriodo[f.id] && faltouTodoPeriodo(diasAusentesPorFunc[f.id], diasTotaisPeriodo)),
       ];
       const semAptos = aptosEfetivos.length === 0;
-      if (setorId !== '__outros') {
-        if (semAptos) totalSemAptos += data.valorSetor;
-        else totalComAptos += data.valorSetor;
-      }
-      result[setorId] = { ...data, aptos: aptosEfetivos, excluidos, semAptos };
-    }
-
-    // Redistribui valor de setores que ficaram sem aptos efetivos
-    for (const [setorId, data] of Object.entries(result)) {
-      if (setorId === '__outros') continue;
-      if (data.semAptos) {
-        data.valorSetor = 0;
-      } else if (totalComAptos > 0 && totalSemAptos > 0) {
-        data.valorSetor += totalSemAptos * (data.valorSetor / totalComAptos);
-      }
+      const valorCreditoGerado = semAptos ? (data.valorCreditoGerado || data.valorSetor) : 0;
+      result[setorId] = {
+        ...data,
+        aptos: aptosEfetivos,
+        excluidos,
+        semAptos,
+        valorSetor: semAptos ? 0 : data.valorSetor,
+        valorCreditoGerado,
+        valorInd: aptosEfetivos.length > 0
+          ? (semAptos ? 0 : data.valorSetor) / aptosEfetivos.length
+          : 0,
+      };
     }
 
     return result;
-  }, [distribuicao, ausenciasNoPeriodo, decisoesAusencia]);
+  }, [distribuicao, ausenciasNoPeriodo, decisoesAusencia, diasAusentesPorFunc, diasTotaisPeriodo]);
 
-  // Preview em tempo real usa a distribuição efetiva
+  // Créditos disponíveis agrupados por setor (somente os marcados)
+  const creditosPorSetor = useMemo(() => {
+    const mapa = {};
+    for (const c of creditosDisponiveis) {
+      if (!creditosSelecionados.includes(c.id) || !c.setor_id) continue;
+      if (!mapa[c.setor_id]) mapa[c.setor_id] = { valor: 0, ids: [] };
+      mapa[c.setor_id].valor += c.valor || 0;
+      mapa[c.setor_id].ids.push(c.id);
+    }
+    return mapa;
+  }, [creditosDisponiveis, creditosSelecionados]);
+
+  const totalCreditosSelecionados = Object.values(creditosPorSetor).reduce((s, g) => s + g.valor, 0);
+
+  // Aplica os créditos apenas nos setores que têm aptos efetivos
+  const distribuicaoComCreditos = useMemo(() => {
+    const out = {};
+    for (const [setorId, data] of Object.entries(distribuicaoEfetiva)) {
+      const temAptos = (data.aptos?.length || 0) > 0;
+      const credito = setorId !== '__outros' && temAptos ? (creditosPorSetor[setorId]?.valor || 0) : 0;
+      const valorSetor = (data.valorSetor || 0) + credito;
+      out[setorId] = {
+        ...data,
+        valorSetor,
+        valorCreditosUsados: credito,
+        valorInd: temAptos ? valorSetor / data.aptos.length : 0,
+      };
+    }
+    return out;
+  }, [distribuicaoEfetiva, creditosPorSetor]);
+
+  // Débitos do período agrupados por setor (soma)
+  const debitosPorSetor = useMemo(() => {
+    const mapa = {};
+    for (const d of debitos) {
+      if (!d.setor_id) continue;
+      const v = parseFloat(d.valor) || 0;
+      if (v <= 0) continue;
+      if (!mapa[d.setor_id]) mapa[d.setor_id] = 0;
+      mapa[d.setor_id] += v;
+    }
+    return mapa;
+  }, [debitos]);
+
+  const totalDebitos = useMemo(
+    () => debitos.reduce((s, d) => s + (parseFloat(d.valor) || 0), 0),
+    [debitos]
+  );
+
+  // Distribuição final: o débito é descontado igualmente apenas dos aptos presentes
+  // (sem faltas). Quem teve falta no período não paga o débito.
+  const distribuicaoFinal = useMemo(() => {
+    const out = {};
+    for (const [setorId, data] of Object.entries(distribuicaoComCreditos)) {
+      const debito = debitosPorSetor[setorId] || 0;
+      const presentes = (data.aptos || []).filter(f => !parseInt(diasAusentesPorFunc[f.id] || 0, 10)).length;
+      out[setorId] = {
+        ...data,
+        valorDebito: debito,
+        debitShare: presentes > 0 ? debito / presentes : 0,
+      };
+    }
+    return out;
+  }, [distribuicaoComCreditos, debitosPorSetor, diasAusentesPorFunc]);
+
+  // Créditos que serão gerados ao publicar (setores sem aptos efetivos)
+  const creditosGerados = useMemo(
+    () => Object.entries(distribuicaoEfetiva)
+      .filter(([setorId, data]) => setorId !== '__outros' && data.semAptos && (data.valorCreditoGerado || 0) > 0)
+      .map(([setorId, data]) => ({ setor_id: setorId, setor_nome: data.nome, valor: data.valorCreditoGerado })),
+    [distribuicaoEfetiva]
+  );
+
+  // Créditos efetivamente aplicados (somente setores com aptos) — consumidos ao publicar
+  const creditosAplicados = useMemo(() => {
+    const aplicados = [];
+    for (const [setorId, data] of Object.entries(distribuicaoEfetiva)) {
+      if (setorId === '__outros' || (data.aptos?.length || 0) === 0) continue;
+      const grupo = creditosPorSetor[setorId];
+      if (!grupo) continue;
+      for (const c of creditosDisponiveis) {
+        if (grupo.ids.includes(c.id)) {
+          aplicados.push({ id: c.id, setor_id: setorId, setor_nome: c.setor_nome, valor: c.valor });
+        }
+      }
+    }
+    return aplicados;
+  }, [distribuicaoEfetiva, creditosPorSetor, creditosDisponiveis]);
+
+  // Avisos congelados no rascunho para a conferência antes de publicar
+  const avisosRascunho = useMemo(() => ({
+    setores_sem_aptos: Object.entries(distribuicaoEfetiva)
+      .filter(([setorId, data]) => setorId !== '__outros' && data.semAptos && (data.valorCreditoGerado || 0) > 0)
+      .map(([, data]) => ({ setor: data.nome, valor: data.valorCreditoGerado })),
+    outros: outrosFuncs.map(f => ({ nome: f.nome, setor: f.setor || '' })),
+    ausentes: Object.values(ausenciasNoPeriodo).map(a => ({
+      nome: a.funcionario.nome,
+      dias: a.totalDias,
+      recebe: decisoesAusencia[a.funcionario.id] === 'recebe',
+    })),
+  }), [distribuicaoEfetiva, outrosFuncs, ausenciasNoPeriodo, decisoesAusencia]);
+
+  // Preview em tempo real usa a distribuição final (com créditos e débitos aplicados)
   const previewAptos = useMemo(() => {
     const mapa = {};
-    for (const [setorId, { aptos, valorSetor }] of Object.entries(distribuicaoEfetiva)) {
+    for (const [setorId, { aptos, valorSetor, debitShare }] of Object.entries(distribuicaoFinal)) {
       if (aptos.length === 0) continue;
       const resultados = calcularDistribuicaoFuncionarios(
         valorSetor, aptos, diasAusentesPorFunc, periodoInicio, periodoFim
       );
       for (const r of resultados) {
-        mapa[r.funcionarioId] = r;
+        const ehPresente = !parseInt(diasAusentesPorFunc[r.funcionarioId] || 0, 10);
+        const shareDebito = ehPresente ? (debitShare || 0) : 0;
+        mapa[r.funcionarioId] = {
+          ...r,
+          debitoShare: shareDebito,
+          valorFinal: Math.max(0, r.valorFinal - shareDebito),
+        };
       }
     }
     return mapa;
-  }, [distribuicaoEfetiva, diasAusentesPorFunc, periodoInicio, periodoFim]);
+  }, [distribuicaoFinal, diasAusentesPorFunc, periodoInicio, periodoFim]);
 
   const handleCalcular = () => {
     if (!periodoInicio || !periodoFim) { toast.error('Informe o período'); return; }
@@ -280,25 +411,9 @@ export default function LancarComissao({ funcionarios, onSaved }) {
   };
 
 
-  const handleConfirmar = async () => {
-    setSalvando(true);
-    try {
-      const v = parseFloat(valorTotal);
-      const comissaoData = {
-        periodo_inicio: periodoInicio,
-        periodo_fim: periodoFim,
-        mes_referencia: mesRef,
-        valor_total_periodo: v,
-        valor_empresa: valorRetido,
-        percentual_retencao: pctRetencao,
-        observacao,
-        status: 'confirmado',
-      };
-
-      const comissao = await client.entities.ComissoesGorjetas.create(comissaoData);
-
-      const registros = [];
-      for (const [setorId, { aptos, excluidos, valorSetor, valorInd, nome }] of Object.entries(distribuicaoEfetiva)) {
+  const construirRegistros = () => {
+    const registros = [];
+    for (const [setorId, { aptos, excluidos, valorSetor, debitShare }] of Object.entries(distribuicaoFinal)) {
         const nomeSetor = setorId === '__outros' ? 'Outros' : (divisao[setorId]?.nome || setorId);
         
         // Calcula distribuição usando a nova lógica de bônus para os presentes
@@ -307,13 +422,16 @@ export default function LancarComissao({ funcionarios, onSaved }) {
         );
         
         for (const r of resultados) {
+          const ehPresente = !parseInt(diasAusentesPorFunc[r.funcionarioId] || 0, 10);
+          const shareDebito = ehPresente ? (debitShare || 0) : 0;
           registros.push({
-            funcionario_id: r.funcionarioId, funcionario_nome: r.funcionarioNome, comissao_id: comissao.id,
+            funcionario_id: r.funcionarioId, funcionario_nome: r.funcionarioNome,
             setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
             mes_referencia: mesRef, valor_setor: valorSetor,
             valor_individual: r.valorFinal, // retrocompatibilidade
             valor_individual_cheio: r.valorBase,
-            valor_individual_final: r.valorFinal,
+            valor_individual_final: Math.max(0, r.valorFinal - shareDebito),
+            debito_comissao: shareDebito,
             perda_faltas_proprias: r.loss,
             bonus_faltas_terceiros: r.bonus,
             dias_ausentes_no_periodo: r.diasAusentes,
@@ -324,11 +442,12 @@ export default function LancarComissao({ funcionarios, onSaved }) {
           });
         }
 
-        // Registra excluídos por ausência no período (afastamento ou férias — não recebem rateio)
+        // Registra excluídos (afastamento/férias ou faltou o período inteiro)
         for (const f of excluidos) {
           const aus = ausenciasNoPeriodo[f.id];
+          const faltou = faltouTodoPeriodo(diasAusentesPorFunc[f.id], diasTotaisPeriodo);
           registros.push({
-            funcionario_id: f.id, funcionario_nome: f.nome, comissao_id: comissao.id,
+            funcionario_id: f.id, funcionario_nome: f.nome,
             setor: nomeSetor, periodo_inicio: periodoInicio, periodo_fim: periodoFim,
             mes_referencia: mesRef, valor_setor: valorSetor,
             valor_individual: 0,
@@ -336,38 +455,118 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             valor_individual_final: 0,
             perda_faltas_proprias: 0,
             bonus_faltas_terceiros: 0,
-            dias_ausentes_no_periodo: aus?.totalDias || 0,
+            dias_ausentes_no_periodo: aus?.totalDias || (faltou ? parseInt(diasAusentesPorFunc[f.id] || 0, 10) : 0),
             dias_trabalhados: 0,
             dias_totais: 0,
             proporcao: 0,
             apto: false,
-            motivo_exclusao: motivoAusencia(aus),
+            motivo_exclusao: motivoExclusao(aus, faltou),
           });
         }
-      }
+    }
+    return registros;
+  };
 
-      if (registros.length > 0) await client.entities.ComissaoPorFuncionario.bulkCreate(registros);
-
-      await registrarAuditoria({
-        acao: 'criar', modulo: 'comissao',
-        descricao: `Comissão lançada: ${periodoInicio} a ${periodoFim} — ${formatCurrency(v)}`,
-        dados_novos: { valor_total: v, periodo: `${periodoInicio} a ${periodoFim}` },
-      });
-
-      toast.success('Comissão lançada com sucesso!');
-      setPeriodoInicio(''); setPeriodoFim(''); setValorTotal(''); setObservacao(''); setCalculado(false); setDiasAusentesPorFunc({}); setDecisoesAusencia({});
-      onSaved();
-      } catch (e) {
-      toast.error(`Erro ao salvar: ${e.message}`);
-      } finally {
-      setSalvando(false);
-      }
+  const handleSalvar = async (status) => {
+    setSalvando(true);
+    try {
+      const v = parseFloat(valorTotal);
+      const registros = construirRegistros();
+      const payload = {
+        periodo_inicio: periodoInicio,
+        periodo_fim: periodoFim,
+        mes_referencia: mesRef,
+        valor_total_periodo: v,
+        valor_empresa: valorRetido,
+        percentual_retencao: pctRetencao,
+        total_debitos: totalDebitos,
+        debitos,
+        observacao,
+        status: COMISSAO_STATUS.PENDENTE,
+        rascunho: {
+          calculado_em: new Date().toISOString(),
+          inputs: {
+            periodo_inicio: periodoInicio,
+            periodo_fim: periodoFim,
+            valor_total: v,
+            percentual_retencao: pctRetencao,
+            observacao,
+            dias_ausentes: diasAusentesPorFunc,
+            decisoes: decisoesAusencia,
+            creditos_selecionados: creditosSelecionados,
+            debitos,
+            setores: setoresAtivos.map(s => ({ id: s.id, nome: s.nome_do_setor, percentual: s.percentual })),
+          },
+          registros,
+          creditos_gerados: creditosGerados,
+          creditos_usados: creditosAplicados,
+          debitos,
+          avisos: avisosRascunho,
+        },
       };
+
+      let comissao;
+      if (comissaoEmEdicao?.id) {
+        comissao = await client.entities.ComissoesGorjetas.update(comissaoEmEdicao.id, payload);
+      } else {
+        comissao = await client.entities.ComissoesGorjetas.create(payload);
+      }
+
+      // A partir daqui o rascunho já está salvo. Se a publicação falhar, o lançamento
+      // permanece pendente e o usuário é levado para a aba Pendentes (sem duplicar).
+      let publicado = false;
+      if (status === COMISSAO_STATUS.CONFIRMADO) {
+        try {
+          await publicarComissao(comissao);
+          publicado = true;
+        } catch (e) {
+          toast.error(`Rascunho salvo, mas não foi possível publicar: ${e?.message || e}. Publique na aba Pendentes.`);
+        }
+      } else {
+        await registrarAuditoria({
+          acao: comissaoEmEdicao?.id ? 'editar' : 'criar',
+          modulo: 'comissao',
+          descricao: `Comissão salva como pendente: ${periodoInicio} a ${periodoFim} — ${formatCurrency(v)}`,
+          dados_novos: { valor_total: v, periodo: `${periodoInicio} a ${periodoFim}`, status: COMISSAO_STATUS.PENDENTE },
+        });
+        toast.success('Comissão salva como pendente. Confira e publique na aba Pendentes.');
+      }
+
+      if (publicado) toast.success('Comissão publicada com sucesso!');
+
+      setPeriodoInicio(''); setPeriodoFim(''); setValorTotal(''); setObservacao(''); setCalculado(false); setDiasAusentesPorFunc({}); setDecisoesAusencia({}); setCreditosSelecionados([]); setDebitos([]);
+      onSaved?.(publicado ? COMISSAO_STATUS.CONFIRMADO : COMISSAO_STATUS.PENDENTE);
+    } catch (e) {
+      toast.error(`Erro ao salvar: ${e?.message || e}`);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const adicionarDebito = () => {
+    setDebitos(prev => [...prev, { setor_id: '', setor_nome: '', valor: '', observacao: '' }]);
+  };
+  const atualizarDebito = (index, patch) => {
+    setDebitos(prev => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+  };
+  const removerDebito = (index) => {
+    setDebitos(prev => prev.filter((_, i) => i !== index));
+  };
 
   if (loadingSetores) return <Skeleton className="h-48" />;
 
   return (
     <div className="space-y-5">
+      {comissaoEmEdicao && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
+          <div className="text-sm text-blue-900 flex-1">
+            <strong>Editando rascunho</strong> de {formatPeriodo(periodoInicio, periodoFim)} ({mesRef}).
+            Ao salvar, a comissão é reprocessada por inteiro — não há edição individual.
+          </div>
+          <Button variant="outline" size="sm" onClick={onCancelarEdicao}>Cancelar edição</Button>
+        </div>
+      )}
       <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
         <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
         <p className="text-sm text-amber-800">
@@ -427,7 +626,13 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                   Valor retido: <strong className="text-amber-700">{formatCurrency(valorRetido)}</strong>
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  A distribuir: <strong className="text-green-700">{formatCurrency((parseFloat(valorTotal) || 0) - valorRetido)}</strong>
+                  A distribuir: <strong className="text-green-700">{formatCurrency(vDistribuir + totalCreditosSelecionados - totalDebitos)}</strong>
+                  {totalCreditosSelecionados > 0 && (
+                    <span className="text-xs text-emerald-700"> (inclui {formatCurrency(totalCreditosSelecionados)} de crédito)</span>
+                  )}
+                  {totalDebitos > 0 && (
+                    <span className="text-xs text-red-700"> (menos {formatCurrency(totalDebitos)} de débitos)</span>
+                  )}
                 </p>
               </div>
             )}
@@ -472,10 +677,10 @@ export default function LancarComissao({ funcionarios, onSaved }) {
               </div>
             </div>
           )}
-          {setoresSemAptosComFuncs.map(([sid, { nome, valorSetor }]) => (
-            <div key={sid} className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl p-4">
+          {avisosRascunho.setores_sem_aptos.map((aviso) => (
+            <div key={aviso.setor} className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl p-4">
               <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-orange-800">Nenhum apto no setor <strong>{nome}</strong>. Valor <strong>{formatCurrency(valorSetor)}</strong> foi redistribuído entre os setores com funcionários.</p>
+              <p className="text-sm text-orange-800">Nenhum apto no setor <strong>{aviso.setor}</strong>. O valor de <strong>{formatCurrency(aviso.valor)}</strong> vira <strong>crédito do setor</strong> para um próximo lançamento.</p>
             </div>
           ))}
 
@@ -544,20 +749,89 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                     <p className="text-lg font-bold mt-0.5 text-slate-500">{formatCurrency(valorRetido)}</p>
                   </div>
                 )}
-                {setoresAtivos.length > 0 ? setoresAtivos.map(s => (
-                  <div key={s.id} className="rounded-xl p-3 bg-primary/5">
-                    <p className="text-xs font-medium text-muted-foreground">{s.nome_do_setor} ({s.percentual}%)</p>
-                    <p className="text-lg font-bold mt-0.5 text-primary">{formatCurrency(divisao[s.id]?.valor || 0)}</p>
+                {totalCreditosSelecionados > 0 && (
+                  <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-200">
+                    <p className="text-xs font-medium text-emerald-700">Créditos usados</p>
+                    <p className="text-lg font-bold mt-0.5 text-emerald-700">{formatCurrency(totalCreditosSelecionados)}</p>
                   </div>
-                )) : (
+                )}
+                {totalDebitos > 0 && (
+                  <div className="rounded-xl p-3 bg-red-50 border border-red-200">
+                    <p className="text-xs font-medium text-red-700">Débitos</p>
+                    <p className="text-lg font-bold mt-0.5 text-red-700">{formatCurrency(totalDebitos)}</p>
+                  </div>
+                )}
+                {setoresAtivos.length > 0 ? setoresAtivos.map(s => {
+                  const d = distribuicaoFinal[s.id];
+                  const valor = d?.valorSetor || 0;
+                  const creditoGerado = d?.valorCreditoGerado || 0;
+                  return (
+                    <div key={s.id} className="rounded-xl p-3 bg-primary/5">
+                      <p className="text-xs font-medium text-muted-foreground">{s.nome_do_setor} ({s.percentual}%)</p>
+                      <p className="text-lg font-bold mt-0.5 text-primary">{formatCurrency(valor)}</p>
+                      {creditoGerado > 0 && <p className="text-xs text-amber-700 mt-0.5">+ {formatCurrency(creditoGerado)} → crédito</p>}
+                      {d?.valorCreditosUsados > 0 && <p className="text-xs text-emerald-700 mt-0.5">inclui {formatCurrency(d.valorCreditosUsados)} de crédito</p>}
+                      {d?.valorDebito > 0 && <p className="text-xs text-red-700 mt-0.5">− {formatCurrency(d.valorDebito)} débito</p>}
+                    </div>
+                  );
+                }) : (
                   <div className="col-span-full text-sm text-muted-foreground text-center py-4">Configure os setores na aba "Setores".</div>
                 )}
               </div>
             </CardContent>
           </Card>
 
+          {/* Débitos do período */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <MinusCircle className="w-4 h-4 text-red-600" />
+                Débitos do período (opcional)
+              </CardTitle>
+              <Button size="sm" variant="outline" onClick={adicionarDebito}>
+                <Plus className="w-3.5 h-3.5 mr-1" />Adicionar débito
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Valor descontado do setor, dividido igualmente entre os aptos. Ex.: pratos quebrados, mesa não cobrada, extra de garçom.
+              </p>
+              {debitos.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-2">Nenhum débito.</p>
+              ) : (
+                debitos.map((d, i) => (
+                  <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_120px_1fr_auto] gap-2 items-end">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Setor</Label>
+                      <Select
+                        value={d.setor_id || ''}
+                        onValueChange={(v) => atualizarDebito(i, { setor_id: v, setor_nome: setoresAtivos.find(s => s.id === v)?.nome_do_setor || '' })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                        <SelectContent>
+                          {setoresAtivos.map(s => <SelectItem key={s.id} value={s.id}>{s.nome_do_setor}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Valor (R$)</Label>
+                      <Input type="number" min="0" step="0.01" placeholder="0,00" className="h-8 text-xs" value={d.valor} onChange={e => atualizarDebito(i, { valor: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Observação</Label>
+                      <Input placeholder="Ex.: pratos quebrados" className="h-8 text-xs" value={d.observacao} onChange={e => atualizarDebito(i, { observacao: e.target.value })} />
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => removerDebito(i)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
           {/* Por funcionário */}
-          {Object.entries(distribuicaoEfetiva).map(([sid, { aptos, excluidos, valorSetor, valorInd, nome }]) => {
+          {Object.entries(distribuicaoFinal).map(([sid, { aptos, excluidos, valorSetor, nome, valorCreditosUsados, valorCreditoGerado, valorDebito }]) => {
             if (aptos.length === 0 && excluidos.length === 0) return null;
             return (
               <Card key={sid}>
@@ -573,16 +847,19 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <div className="flex gap-4 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                     <span>Setor: <strong>{formatCurrency(valorSetor)}</strong></span>
                     {aptos.length > 0 && <span>Cota base: <strong className="text-green-600">{formatCurrency(valorSetor / aptos.length)}</strong></span>}
+                    {valorCreditosUsados > 0 && <span className="text-emerald-700">inclui <strong>{formatCurrency(valorCreditosUsados)}</strong> de crédito</span>}
+                    {valorCreditoGerado > 0 && <span className="text-amber-700"><strong>{formatCurrency(valorCreditoGerado)}</strong> → crédito do setor</span>}
+                    {valorDebito > 0 && <span className="text-red-700">débito <strong>{formatCurrency(valorDebito)}</strong> (dividido entre quem não teve falta)</span>}
                   </div>
                   {excluidos.length > 0 && (
                     <div className="bg-red-50 border border-red-100 rounded-lg p-2 space-y-1">
                       {excluidos.map(f => (
                         <div key={f.id} className="flex items-center justify-between text-xs">
                           <span className="text-red-800 font-medium">{f.nome}</span>
-                          <span className="text-red-600">Excluído — {motivoAusencia(ausenciasNoPeriodo[f.id])}</span>
+                          <span className="text-red-600">Excluído — {motivoExclusao(ausenciasNoPeriodo[f.id], faltouTodoPeriodo(diasAusentesPorFunc[f.id], diasTotaisPeriodo))}</span>
                         </div>
                       ))}
                     </div>
@@ -622,9 +899,15 @@ export default function LancarComissao({ funcionarios, onSaved }) {
                             )}
                           </div>
                         </div>
+                        {preview.debitoShare > 0 && (
+                          <div className="flex items-center gap-1 text-xs text-red-700">
+                            <MinusCircle className="w-3 h-3 shrink-0" />
+                            Débito descontado: − {formatCurrency(preview.debitoShare)}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <CalendarMinus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <Label className="text-xs text-muted-foreground whitespace-nowrap">Dias ausentes:</Label>
+                          <Label className="text-xs text-muted-foreground whitespace-nowrap" title="Se igualar ao total de dias do período, o funcionário é excluído do rateio (vira crédito do setor se ficar vazio)">Dias ausentes:</Label>
                           <Input
                             type="number" min="0" max={preview.diasTotais}
                             className="h-6 w-16 text-xs px-2"
@@ -650,22 +933,26 @@ export default function LancarComissao({ funcionarios, onSaved }) {
             );
           })}
 
-          <Button 
-            onClick={() => {
-              try {
-                handleConfirmar();
-              } catch (e) {
-                console.error('[LancarComissao] Erro ao confirmar:', e);
-                toast.error('Erro ao confirmar comissões. Tente novamente.');
-              }
-            }} 
-            disabled={salvando} 
-            className="w-full" 
-            size="lg"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {salvando ? 'Salvando...' : 'Confirmar e Gerar Comissões'}
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              variant="outline"
+              onClick={() => handleSalvar(COMISSAO_STATUS.CONFIRMADO)}
+              disabled={salvando}
+              size="lg"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              Publicar agora
+            </Button>
+            <Button
+              onClick={() => handleSalvar(COMISSAO_STATUS.PENDENTE)}
+              disabled={salvando}
+              className="flex-1"
+              size="lg"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {salvando ? 'Salvando...' : (comissaoEmEdicao ? 'Salvar alterações (pendente)' : 'Salvar como pendente')}
+            </Button>
+          </div>
         </>
       )}
     </div>

@@ -1,6 +1,8 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Pencil } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/formatters';
 
 function InfoLinha({ label, children }) {
@@ -25,12 +27,19 @@ function Secao({ titulo, children }) {
   );
 }
 
-export default function DadosPessoais360({ funcionario }) {
+export default function DadosPessoais360({ funcionario, onEditar }) {
   const dependentes = funcionario.dependentes || [];
   const historicoContratos = funcionario.historico_contratos || [];
 
   return (
     <div className="space-y-6">
+      {onEditar && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={onEditar}>
+            <Pencil className="w-4 h-4 mr-2" />Editar dados
+          </Button>
+        </div>
+      )}
       {/* Dados Cadastrais */}
       <Secao titulo="Dados Cadastrais">
         <InfoLinha label="Nome">{funcionario.nome}</InfoLinha>

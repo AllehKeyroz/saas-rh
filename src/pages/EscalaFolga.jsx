@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CalendarClock, ChevronLeft, ChevronRight, Search, Settings2, CalendarX2, Download, FileSpreadsheet, FileText, CheckCircle2, RotateCcw, Loader2 } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight, Search, Settings2, CalendarX2, Download, FileSpreadsheet, FileText, CheckCircle2, RotateCcw, Loader2, Pencil, X, Lock, Unlock, AlertTriangle } from 'lucide-react';
 import { getFeriadosCompletos } from '@/lib/feriados';
 import { parseDataLocal, getStatusFerias, FERIAS_STATUS, getHojeISO } from '@/lib/ferias';
-import { ehDiaFolga, rotuloEscala, getEscalaEfetiva, isConsolidada, isRascunho, ESCALA_STATUS, statusEscalasFuncionario, escalaCobrePeriodo } from '@/lib/escalaFolga';
+import { ehDiaFolga, rotuloEscala, getEscalaEfetiva, isConsolidada, isRascunho, ESCALA_STATUS, statusEscalasFuncionario, escalaCobrePeriodo, getFolgasDoMes } from '@/lib/escalaFolga';
 import { exportarFolgaCSV, exportarFolgaPDF } from '@/lib/exportarEscala';
 import { formatDate } from '@/lib/formatters';
 import { registrarAuditoria } from '@/lib/audit';
+import { getCurrentTenantId } from '@/firebase/auth';
 import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import ConfigurarEscalaDialog from '@/components/escala-folga/ConfigurarEscalaDialog';
@@ -40,6 +41,25 @@ function setorColorIndex(setor, setores) {
   return idx >= 0 ? idx % SETOR_COLORS.length : setores.length % SETOR_COLORS.length;
 }
 
+function toISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Lista todos os domingos (ISO) entre duas datas, inclusive.
+function listarDomingos(inicioISO, fimISO) {
+  const domingos = [];
+  const ini = parseDataLocal(inicioISO);
+  const fim = parseDataLocal(fimISO);
+  if (isNaN(ini.getTime()) || isNaN(fim.getTime())) return domingos;
+  const d = new Date(ini);
+  while (d.getDay() !== 0) d.setDate(d.getDate() + 1);
+  while (d <= fim) {
+    domingos.push(toISO(d));
+    d.setDate(d.getDate() + 7);
+  }
+  return domingos;
+}
+
 export default function EscalaFolga() {
   const hoje = new Date();
   const [mesIdx, setMesIdx] = useState(hoje.getMonth());
@@ -52,6 +72,11 @@ export default function EscalaFolga() {
   const [feriadosOpen, setFeriadosOpen] = useState(false);
   const [consolidando, setConsolidando] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [edits, setEdits] = useState({}); // { [funcId]: string[] (dias ISO do mês) }
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [reabrirOpen, setReabrirOpen] = useState(false);
+  const [reabrindo, setReabrindo] = useState(false);
   const queryClient = useQueryClient();
 
   const abrirConfig = (func) => {
@@ -135,6 +160,10 @@ export default function EscalaFolga() {
   const folgasPorDia = useMemo(() => {
     const m = new Map();
     for (const f of filtrados) {
+      if (modoEdicao) {
+        for (const iso of (edits[f.id] || [])) m.set(iso, (m.get(iso) || 0) + 1);
+        continue;
+      }
       const escalasFunc = escalasPorFunc.get(f.id) || [];
       for (let d = 1; d <= diasNoMes; d++) {
         const iso = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -143,7 +172,7 @@ export default function EscalaFolga() {
       }
     }
     return m;
-  }, [filtrados, escalasPorFunc, ano, mesIdx, diasNoMes]);
+  }, [filtrados, escalasPorFunc, ano, mesIdx, diasNoMes, modoEdicao, edits]);
 
   // Resumo executivo
   const resumo = useMemo(() => {
@@ -202,6 +231,55 @@ export default function EscalaFolga() {
   const consolidadasDoMes = useMemo(
     () => escalas.filter(e => e.ativo !== false && isConsolidada(e) && escalaCobrePeriodo(e, periodoMes.inicio, periodoMes.fim)),
     [escalas, periodoMes],
+  );
+
+  // Escalas consolidadas no mês que pertencem aos funcionários visíveis (bloqueiam a edição em massa)
+  const consolidadasParaEdicao = useMemo(
+    () => escalas.filter(e => e.ativo !== false && isConsolidada(e) && escalaCobrePeriodo(e, periodoMes.inicio, periodoMes.fim) && filtrados.some(f => f.id === e.funcionario_id)),
+    [escalas, periodoMes, filtrados],
+  );
+
+  // Janela de domingos (8 semanas de lookback + o mês) para a regra dos 3 domingos sem folga
+  const domingosJanela = useMemo(() => {
+    const d = new Date(periodoMes.inicio + 'T00:00:00');
+    d.setDate(d.getDate() - 56);
+    return listarDomingos(toISO(d), periodoMes.fim);
+  }, [periodoMes]);
+
+  // Máximo de domingos consecutivos sem folga, considerando escalas salvas + edição atual
+  const maxDomingosSemFolga = useMemo(() => {
+    const m = new Map();
+    for (const f of filtrados) {
+      const escalasFunc = escalasPorFunc.get(f.id) || [];
+      const editSet = new Set(edits[f.id] || []);
+      let max = 0;
+      for (const dom of domingosJanela) {
+        if (dom < periodoMes.inicio || dom > periodoMes.fim) continue; // âncora só dentro do mês
+        let count = 0;
+        const idx = domingosJanela.indexOf(dom);
+        for (let i = idx; i >= 0; i--) {
+          const d = domingosJanela[i];
+          const noMesEdicao = modoEdicao && d >= periodoMes.inicio && d <= periodoMes.fim;
+          if (noMesEdicao) {
+            if (editSet.has(d)) break; // folga marcada na edição
+            count++;
+            continue;
+          }
+          const esc = getEscalaEfetiva(escalasFunc, d);
+          if (!esc) break; // sem escala definida → não conta para trás
+          if (ehDiaFolga(esc, d)) break; // folga salva
+          count++;
+        }
+        if (count > max) max = count;
+      }
+      m.set(f.id, max);
+    }
+    return m;
+  }, [filtrados, domingosJanela, modoEdicao, periodoMes, edits, escalasPorFunc]);
+
+  const funcionariosComDomingosSemFolga = useMemo(
+    () => [...maxDomingosSemFolga.values()].filter(v => v > 3).length,
+    [maxDomingosSemFolga]
   );
 
   // Folgas que caem em feriado no mês em exibição (para a revisão pré-consolidação)
@@ -296,6 +374,143 @@ export default function EscalaFolga() {
 
   const isLoading = loadingFunc || loadingFerias || loadingEscalas;
 
+  // ── Edição em massa (lápis) ─────────────────────────────────────────────
+  const iniciarEdicao = () => {
+    const inicial = {};
+    for (const f of filtrados) {
+      inicial[f.id] = getFolgasDoMes(escalasPorFunc.get(f.id) || [], ano, mesIdx);
+    }
+    setEdits(inicial);
+    setModoEdicao(true);
+  };
+
+  const entrarModoEdicao = () => {
+    // Se há escala consolidada no mês, bloqueia a entrada e oferece reabrir ANTES de editar.
+    if (consolidadasParaEdicao.length > 0) {
+      setReabrirOpen(true);
+      return;
+    }
+    iniciarEdicao();
+  };
+
+  const reabrirEContinuar = async () => {
+    setReabrindo(true);
+    try {
+      const agora = new Date().toISOString();
+      for (const e of consolidadasParaEdicao) {
+        await client.entities.EscalaFolga.update(e.id, { status: ESCALA_STATUS.RASCUNHO, reaberto_em: agora });
+      }
+      await registrarAuditoria({
+        acao: 'editar',
+        modulo: 'funcionario',
+        descricao: `Escalas reabertas para edição em massa — ${MESES_COMPLETOS[mesIdx]}/${ano} (${consolidadasParaEdicao.length})`,
+      });
+      await queryClient.refetchQueries({ queryKey: ['escala_folga'] });
+      const freshData = queryClient.getQueryData(['escala_folga']);
+      const fresh = Array.isArray(freshData) ? freshData : [];
+      const inicial = {};
+      for (const f of filtrados) {
+        inicial[f.id] = getFolgasDoMes(fresh.filter(e => e.funcionario_id === f.id && e.ativo !== false), ano, mesIdx);
+      }
+      setEdits(inicial);
+      setModoEdicao(true);
+      setReabrirOpen(false);
+      toast.success('Escalas reabertas. Agora você pode editar e salvar/publicar.');
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao reabrir escalas');
+    } finally {
+      setReabrindo(false);
+    }
+  };
+
+  const sairModoEdicao = () => {
+    setModoEdicao(false);
+    setEdits({});
+  };
+
+  const toggleDia = (funcId, iso) => {
+    setEdits(prev => {
+      const atual = prev[funcId] || [];
+      const next = atual.includes(iso) ? atual.filter(x => x !== iso) : [...atual, iso];
+      return { ...prev, [funcId]: next };
+    });
+  };
+
+  const aplicarEscalaMes = async (func, inicioMes, fimMes, dias, status) => {
+    const escalasFunc = (escalasPorFunc.get(func.id) || []).filter(e => e.ativo !== false);
+    const sobrepostas = escalasFunc.filter(e => escalaCobrePeriodo(e, inicioMes, fimMes));
+
+    // SEGURANÇA: nunca alterar/remover escala consolidada.
+    const consolidada = sobrepostas.find(isConsolidada);
+    if (consolidada) {
+      throw new Error(`A escala de ${func.nome} está consolidada neste mês. Suas marcações foram preservadas — reabra a escala e salve novamente.`);
+    }
+
+    const cor = sobrepostas[0]?.cor || escalasFunc[0]?.cor || SETOR_COLORS[setorColorIndex(func.setor, setores)];
+
+    // Remove/fecha as escalas rascunho que sobrepõem o mês
+    for (const e of sobrepostas) {
+      if ((e.data_ancora || '') < inicioMes) {
+        // começa antes do mês → fecha no dia anterior (preserva o passado)
+        const d = new Date(inicioMes + 'T00:00:00');
+        d.setDate(d.getDate() - 1);
+        await client.entities.EscalaFolga.update(e.id, { data_fim: toISO(d) });
+      } else {
+        // começa dentro do mês → remove (é rascunho)
+        await client.entities.EscalaFolga.delete(e.id);
+      }
+    }
+
+    if (dias.length === 0) return; // sem folgas no mês = sem escala
+
+    await client.entities.EscalaFolga.create({
+      funcionario_id: func.id,
+      tenant_id: getCurrentTenantId(),
+      tipo: 'personalizada',
+      dias_folga: dias,
+      data_ancora: inicioMes,
+      data_fim: fimMes,
+      cor,
+      ativo: true,
+      status,
+    });
+  };
+
+  const salvarEdicao = async (status) => {
+    setSalvandoEdicao(true);
+    try {
+      const mm = String(mesIdx + 1).padStart(2, '0');
+      const inicioMes = `${ano}-${mm}-01`;
+      const fimMes = `${ano}-${mm}-${String(diasNoMes).padStart(2, '0')}`;
+      let salvos = 0;
+      for (const funcId of Object.keys(edits)) {
+        const f = ativos.find(x => x.id === funcId);
+        if (!f) continue;
+        const dias = (edits[funcId] || []).slice().sort();
+        const atuais = getFolgasDoMes(escalasPorFunc.get(funcId) || [], ano, mesIdx).slice().sort();
+        if (JSON.stringify(dias) === JSON.stringify(atuais)) continue;
+        await aplicarEscalaMes(f, inicioMes, fimMes, dias, status);
+        salvos++;
+      }
+      await registrarAuditoria({
+        acao: 'editar',
+        modulo: 'funcionario',
+        descricao: `Escala de folga editada em massa — ${MESES_COMPLETOS[mesIdx]}/${ano} (${salvos} funcionário(s), ${status === ESCALA_STATUS.CONSOLIDADA ? 'publicado' : 'rascunho'})`,
+      });
+      toast.success(
+        status === ESCALA_STATUS.CONSOLIDADA
+          ? `Escalas publicadas para ${salvos} funcionário(s).`
+          : `Escalas salvas como rascunho para ${salvos} funcionário(s).`
+      );
+      queryClient.invalidateQueries({ queryKey: ['escala_folga'] });
+      sairModoEdicao();
+    } catch (e) {
+      toast.error(e?.message || 'Erro ao salvar escalas');
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -343,6 +558,10 @@ export default function EscalaFolga() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button variant={modoEdicao ? 'default' : 'outline'} onClick={() => (modoEdicao ? sairModoEdicao() : entrarModoEdicao())}>
+            {modoEdicao ? <X className="w-4 h-4 mr-2" /> : <Pencil className="w-4 h-4 mr-2" />}
+            {modoEdicao ? 'Sair da edição' : 'Editar'}
+          </Button>
           <Button onClick={() => abrirConfig(null)}>
             <Settings2 className="w-4 h-4 mr-2" />Configurar Escala
           </Button>
@@ -409,6 +628,16 @@ export default function EscalaFolga() {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-400 ring-1 ring-red-500 inline-block" /> Feriado municipal/outro</span>
       </div>
 
+      {modoEdicao && (
+        <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <Pencil className="w-4 h-4 shrink-0" />
+          <span className="flex-1">
+            <strong>Modo de edição:</strong> clique nos dias para marcar/desmarcar a folga de cada funcionário.
+            Depois clique em <strong>Salvar rascunho</strong> ou <strong>Publicar</strong>.
+          </span>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 rounded-xl" />)}</div>
       ) : (
@@ -449,7 +678,10 @@ export default function EscalaFolga() {
                   const statusFunc = statusPorFunc.get(func.id);
                   const feriasFunc = todasFerias.filter(x => x.funcionario_id === func.id && x.cancelada !== true);
                   return (
-                    <tr key={func.id} onClick={() => abrirConfig(func)} title={`Clique para configurar a escala de ${func.nome}`} className="border-b last:border-0 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <tr key={func.id}
+                      onClick={modoEdicao ? undefined : () => abrirConfig(func)}
+                      title={modoEdicao ? undefined : `Clique para configurar a escala de ${func.nome}`}
+                      className={`border-b last:border-0 transition-colors ${modoEdicao ? '' : 'cursor-pointer hover:bg-muted/40'}`}>
                       <td className="sticky left-0 bg-card z-10 px-3 py-1 text-xs font-medium whitespace-nowrap">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${escalaAtual?.cor || SETOR_COLORS[setorColorIndex(func.setor, setores)]}`} />
@@ -460,12 +692,36 @@ export default function EscalaFolga() {
                       {Array.from({ length: diasNoMes }, (_, i) => i + 1).map(d => {
                         const diaISO = `${ano}-${String(mesIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                         const diaDate = parseDataLocal(diaISO);
+                        const feriado = feriadosDoMes.find(f => f.data === diaISO);
+                        const isDomingo = diaDate.getDay() === 0;
+                        const colTint = feriado ? 'bg-red-50' : isDomingo ? 'bg-muted/30' : '';
                         const registro = feriasFunc.find(r => {
                           if (!r.data_inicio || !r.data_fim) return false;
                           const ini = parseDataLocal(r.data_inicio);
                           const fim = parseDataLocal(r.data_fim);
                           return diaDate >= ini && diaDate <= fim;
                         });
+
+                        if (modoEdicao) {
+                          const selecionado = (edits[func.id] || []).includes(diaISO);
+                          const emFerias = !!registro;
+                          return (
+                            <td key={d} className={`border-l p-0 h-7 align-middle ${colTint}`}>
+                              <button
+                                type="button"
+                                disabled={emFerias}
+                                onClick={() => toggleDia(func.id, diaISO)}
+                                title={emFerias ? `Férias: ${formatDate(registro.data_inicio)} → ${formatDate(registro.data_fim)}` : (selecionado ? 'Clique para remover a folga' : 'Clique para marcar folga')}
+                                className={`w-full h-full min-h-[24px] rounded-sm transition-colors ${emFerias
+                                  ? (STATUS_CELL[getStatusFerias(registro)] || 'bg-slate-300') + ' cursor-not-allowed'
+                                  : selecionado
+                                    ? FOLGA_CELL
+                                    : 'bg-transparent hover:bg-slate-200'} ${diaISO === hojeISO ? 'ring-1 ring-primary/40' : ''}`}
+                              />
+                            </td>
+                          );
+                        }
+
                         const escala = getEscalaEfetiva(escalasFunc, diaISO);
                         const folga = escala ? ehDiaFolga(escala, diaISO) : false;
                         let classe = '';
@@ -479,19 +735,28 @@ export default function EscalaFolga() {
                         }
                         return (
                           <td key={d} title={titulo || undefined}
-                            className={`border-l p-0.5 h-6 ${classe ? classe + ' rounded-sm' : ''} ${diaISO === hojeISO ? 'bg-primary/5' : ''}`} />
+                            className={`border-l p-0.5 h-6 ${classe ? classe + ' rounded-sm' : colTint} ${diaISO === hojeISO ? 'bg-primary/5' : ''}`} />
                         );
                       })}
                       <td className="border-l px-2 py-1 align-middle">
                         <div className="flex items-center gap-1.5">
-                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${escalaAtual ? 'bg-blue-100 text-blue-700' : 'bg-muted text-muted-foreground'}`}>
-                            {escalaAtual ? rotuloEscala(escalaAtual) : 'Sem escala'}
+                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${(modoEdicao || escalaAtual) ? 'bg-blue-100 text-blue-700' : 'bg-muted text-muted-foreground'}`}>
+                            {modoEdicao ? `Personalizada (${(edits[func.id] || []).length} folgas)` : escalaAtual ? rotuloEscala(escalaAtual) : 'Sem escala'}
                           </span>
                           {statusFunc === ESCALA_STATUS.RASCUNHO && (
                             <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap bg-amber-100 text-amber-700">Rascunho</span>
                           )}
                           {statusFunc === ESCALA_STATUS.CONSOLIDADA && (
                             <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap bg-green-100 text-green-700">Consolidada</span>
+                          )}
+                          {(maxDomingosSemFolga.get(func.id) || 0) > 3 && (
+                            <span
+                              title={`Há ${maxDomingosSemFolga.get(func.id)} domingos sem folga (regra: 1 folga a cada 3 domingos)`}
+                              className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap bg-red-100 text-red-700"
+                            >
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              {maxDomingosSemFolga.get(func.id)} domingos
+                            </span>
                           )}
                           {statusFunc === ESCALA_STATUS.RASCUNHO && (
                             <button
@@ -554,6 +819,51 @@ export default function EscalaFolga() {
         </div>
       )}
 
+      {modoEdicao && (
+        <div className="sticky bottom-0 z-20 mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
+          <span className="text-sm text-muted-foreground flex-1">
+            Editando a escala de <strong>{MESES_COMPLETOS[mesIdx]}/{ano}</strong> — {Object.keys(edits).length} funcionário(s)
+          </span>
+          <Button variant="outline" onClick={sairModoEdicao} disabled={salvandoEdicao}>
+            <X className="w-4 h-4 mr-2" />Cancelar
+          </Button>
+          <Button variant="outline" onClick={() => salvarEdicao(ESCALA_STATUS.RASCUNHO)} disabled={salvandoEdicao}>
+            {salvandoEdicao && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Salvar rascunho
+          </Button>
+          <Button onClick={() => salvarEdicao(ESCALA_STATUS.CONSOLIDADA)} disabled={salvandoEdicao}>
+            <CheckCircle2 className="w-4 h-4 mr-2" />Publicar
+          </Button>
+        </div>
+      )}
+
+      {/* Reabrir escalas consolidadas antes de editar */}
+      <Dialog open={reabrirOpen} onOpenChange={(o) => { if (!o && !reabrindo) setReabrirOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5 text-amber-600" />
+              Reabrir escala para editar
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Há <strong>{consolidadasParaEdicao.length}</strong> escala(s) <strong>consolidada(s)</strong> em {MESES_COMPLETOS[mesIdx]}/{ano}.
+            </p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Para editar manualmente, elas precisam ser <strong>reabertas</strong> (voltam a rascunho). Isso não apaga os dias já marcados.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReabrirOpen(false)} disabled={reabrindo}>Cancelar</Button>
+            <Button onClick={reabrirEContinuar} disabled={reabrindo}>
+              {reabrindo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Unlock className="w-4 h-4 mr-2" />}
+              Reabrir e editar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfigurarEscalaDialog
         open={configOpen}
         onClose={() => setConfigOpen(false)}
@@ -596,6 +906,10 @@ export default function EscalaFolga() {
               <div className="flex items-center justify-between px-3 py-2">
                 <span className="text-muted-foreground">Folgas que caem em feriado</span>
                 <span className={`font-bold ${folgasEmFeriadoMes > 0 ? 'text-amber-700' : ''}`}>{folgasEmFeriadoMes}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-muted-foreground">Funcionários com mais de 3 domingos sem folga</span>
+                <span className={`font-bold ${funcionariosComDomingosSemFolga > 0 ? 'text-red-700' : ''}`}>{funcionariosComDomingosSemFolga}</span>
               </div>
             </div>
             {resumo.semEscala > 0 && (

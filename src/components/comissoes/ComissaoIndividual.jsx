@@ -71,7 +71,8 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
   const [observacao, setObservacao] = useState('');
   const [funcionarioId, setFuncionarioId] = useState('');
   const [valorInput, setValorInput] = useState('');
-  const [incluidos, setIncluidos] = useState([]); // [{ func, valor }]
+  const [incluidos, setIncluidos] = useState([]); // [{ func, valor, tipo: 'comissao'|'debito' }]
+  const [modoDebito, setModoDebito] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const mesRef = getMesFromDatas(periodoInicio);
@@ -88,7 +89,9 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
   }, [funcionarios, hoje]);
 
   const disponiveis = funcionariosAptos.filter(f => !incluidos.some(x => x.func.id === f.id));
-  const total = incluidos.reduce((s, x) => s + x.valor, 0);
+  const totalComissao = incluidos.filter(x => x.tipo !== 'debito').reduce((s, x) => s + x.valor, 0);
+  const totalDebitos = incluidos.filter(x => x.tipo === 'debito').reduce((s, x) => s + x.valor, 0);
+  const total = totalComissao - totalDebitos;
 
   const handleAdicionar = () => {
     if (!funcionarioId) { toast.error('Selecione o funcionário'); return; }
@@ -97,9 +100,10 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
     const func = funcionariosAptos.find(f => f.id === funcionarioId);
     if (!func) { toast.error('Funcionário não encontrado'); return; }
     if (incluidos.some(x => x.func.id === funcionarioId)) { toast.error('Este funcionário já foi adicionado'); return; }
-    setIncluidos(prev => [...prev, { func, valor }]);
+    setIncluidos(prev => [...prev, { func, valor, tipo: modoDebito ? 'debito' : 'comissao' }]);
     setFuncionarioId('');
     setValorInput('');
+    setModoDebito(false);
   };
 
   const handleRemover = (funcId) => {
@@ -123,27 +127,32 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
         status: 'confirmado',
       });
 
-      const registros = incluidos.map(({ func, valor }) => ({
-        funcionario_id: func.id,
-        funcionario_nome: func.nome || '',
-        comissao_id: comissaoCriada.id,
-        setor: func.setor || 'Sem setor',
-        periodo_inicio: periodoInicio,
-        periodo_fim: periodoFim,
-        mes_referencia: mesRef,
-        valor_setor: 0,
-        valor_individual: valor,
-        valor_individual_cheio: valor,
-        valor_individual_final: valor,
-        perda_faltas_proprias: 0,
-        bonus_faltas_terceiros: 0,
-        dias_ausentes_no_periodo: 0,
-        dias_trabalhados: 0,
-        dias_totais: 0,
-        proporcao: 1,
-        apto: true,
-        origem: 'individual',
-      }));
+      const registros = incluidos.map(({ func, valor, tipo }) => {
+        const ehDebito = tipo === 'debito';
+        const valorFinal = ehDebito ? -Math.abs(valor) : valor;
+        return {
+          funcionario_id: func.id,
+          funcionario_nome: func.nome || '',
+          comissao_id: comissaoCriada.id,
+          setor: func.setor || 'Sem setor',
+          periodo_inicio: periodoInicio,
+          periodo_fim: periodoFim,
+          mes_referencia: mesRef,
+          valor_setor: 0,
+          valor_individual: valorFinal,
+          valor_individual_cheio: valorFinal,
+          valor_individual_final: valorFinal,
+          perda_faltas_proprias: 0,
+          bonus_faltas_terceiros: 0,
+          dias_ausentes_no_periodo: 0,
+          dias_trabalhados: 0,
+          dias_totais: 0,
+          proporcao: 1,
+          apto: true,
+          origem: 'individual',
+          tipo_lancamento: ehDebito ? 'debito' : 'comissao',
+        };
+      });
 
       await client.entities.ComissaoPorFuncionario.bulkCreate(registros);
 
@@ -214,6 +223,20 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex rounded-lg border overflow-hidden w-full sm:w-fit">
+            <button
+              onClick={() => setModoDebito(false)}
+              className={`flex-1 sm:flex-none px-5 py-2 text-sm font-medium transition-colors ${!modoDebito ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+            >
+              Comissão (acrescentar)
+            </button>
+            <button
+              onClick={() => setModoDebito(true)}
+              className={`flex-1 sm:flex-none px-5 py-2 text-sm font-medium transition-colors ${modoDebito ? 'bg-red-600 text-white' : 'text-muted-foreground hover:bg-muted'}`}
+            >
+              Débito (descontar)
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <ComboboxFuncionario
@@ -224,7 +247,7 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Valor (R$)</Label>
+              <Label>{modoDebito ? 'Valor do débito (R$)' : 'Valor (R$)'}</Label>
               <div className="flex gap-2">
                 <Input
                   type="text"
@@ -244,18 +267,23 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
             <p className="text-sm text-muted-foreground text-center py-4">Nenhum funcionário adicionado.</p>
           ) : (
             <div className="space-y-1.5">
-              {incluidos.map(({ func, valor }) => (
-                <div key={func.id} className="flex items-center gap-3 rounded-lg px-3 py-2 bg-green-50 border border-green-100">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{func.nome}</p>
-                    {func.setor && <p className="text-xs text-muted-foreground truncate">{func.setor}</p>}
+              {incluidos.map(({ func, valor, tipo }) => {
+                const ehDebito = tipo === 'debito';
+                return (
+                  <div key={func.id} className={`flex items-center gap-3 rounded-lg px-3 py-2 border ${ehDebito ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{func.nome}</p>
+                      {func.setor && <p className="text-xs text-muted-foreground truncate">{func.setor}</p>}
+                    </div>
+                    <span className={`font-semibold shrink-0 ${ehDebito ? 'text-red-700' : 'text-green-700'}`}>
+                      {ehDebito ? '− ' : ''}{formatCurrency(valor)}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => handleRemover(func.id)} title="Remover">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <span className="font-semibold text-green-700 shrink-0">{formatCurrency(valor)}</span>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => handleRemover(func.id)} title="Remover">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -270,9 +298,21 @@ export default function ComissaoIndividual({ funcionarios, onSaved }) {
             <span className="text-sm text-muted-foreground">Funcionários</span>
             <span className="text-sm font-semibold">{incluidos.length}</span>
           </div>
+          {totalComissao > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Comissão</span>
+              <span className="text-sm font-semibold text-green-700">{formatCurrency(totalComissao)}</span>
+            </div>
+          )}
+          {totalDebitos > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Débitos</span>
+              <span className="text-sm font-semibold text-red-600">− {formatCurrency(totalDebitos)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Total</span>
-            <span className="text-lg font-bold text-green-600">{formatCurrency(total)}</span>
+            <span className={`text-lg font-bold ${total < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(total)}</span>
           </div>
           <Button onClick={handleConfirmar} disabled={salvando} className="w-full" size="lg">
             {salvando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}

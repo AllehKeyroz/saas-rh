@@ -443,6 +443,116 @@ Após revisão crítica, foram corrigidos:
 
 ---
 
+## Comissões — Rascunho e Publicação (RH) (20/10/2026)
+
+### 37. Comissões em rascunho e publicação com conferência → Concluído
+
+**O que foi feito:** o lançamento de comissão por setor agora tem o fluxo **pendente → publicar**:
+- Ao calcular a divisão, o RH escolhe **Salvar como pendente** (rascunho) ou **Publicar agora**.
+- Nova aba **Pendentes** (com contador), listando os lançamentos que aguardam conferência.
+- **Conferência antes de publicar**: resumo de total, retido, valor a distribuir, aptos, excluídos, totais por setor e avisos (setor sem aptos, funcionários em "Outros", ausências no período).
+- **Publicar uma ou várias juntas** — seleção por caixa e "Publicar selecionadas".
+- **Editar / reprocessar** — reabre o lançamento no formulário com os dados salvos; ao salvar, a comissão é **reprocessada por inteiro** (não existe edição de um funcionário isolado).
+- **Excluir** enquanto pendente.
+- Nada é publicado pela metade: enquanto pendente não existem lançamentos por funcionário, então fechamento, dashboard, ficha 360 e portal do funcionário **não enxergam** a comissão.
+
+**Proteção dos dados:** o campo `status` já existia (`confirmado`), então os registros antigos continuam válidos e visíveis. O rascunho guarda uma fotografia do cálculo em `rascunho`, removida no momento da publicação. Sem migração.
+
+**Impacto:** o RH confere a comissão com calma antes de publicar, publica semanas em lote e corrige erros sem publicar nada por engano.
+
+---
+
+## Comissões — Crédito de Setor (RH) (20/10/2026)
+
+### 38. Setor sem aptos vira crédito do setor → Concluído
+
+**O que foi feito:** quando um setor fica sem ninguém apto a receber (todos afastados/em férias ou sem funcionário), o valor dele **não é mais redistribuído** na hora para os outros setores — isso causava inconsistência (as ausências dos outros setores podiam ainda não ter sido lançadas). Agora:
+- O valor vira um **crédito do setor** (coleção `CreditoComissaoSetor`, status `disponível`).
+- Nova aba **Créditos** no módulo de comissões, para ver os créditos, **conferir a origem** (período/mês do lançamento que os gerou), filtrar disponíveis/usados e **escolher quais usar**.
+- No próximo lançamento, o RH vê os créditos disponíveis e **marca quais usar**; o valor é somado ao setor correspondente na divisão.
+- Os créditos só são **consumidos ao publicar** (status `usado`). Enquanto rascunho, podem ser editados/excluídos sem perder o crédito.
+- Tudo aparece na conferência (aba Pendentes): "crédito gerado" e "crédito usado".
+
+**Proteção dos dados:** mudança **aditiva** — comissões antigas continuam exatamente como foram publicadas. Nova coleção `CreditoComissaoSetor` com a devida regra em `firestore.rules`.
+
+**Impacto:** o RH decide quando usar o saldo de um setor que ficou vazio, sem distorcer a divisão do período.
+
+**Correção (inapto por faltas):** se o funcionário **faltar o período inteiro** (dias ausentes = total de dias da comissão), ele é tratado como **inapto** — sai do rateio automaticamente e, se o setor ficar vazio, o valor vira **crédito do setor** (não evapora mais).
+
+---
+
+## Comissões — Débito de Comissão (RH) (20/10/2026)
+
+### 39. Débito de comissão por setor e individual → Concluído
+
+**O que foi feito:** opção de **débito** nos dois lançamentos:
+- **Por setor** (aba Lançar): seção "Débitos do período" — escolhe o setor, informa valor e observação. O débito é **dividido igualmente entre quem não teve falta** no período (quem faltou não paga o débito), e o total aparece como "Débitos" no resumo.
+- **Individual**: botão **Comissão (acrescentar) / Débito (descontar)** — ao escolher "Débito", o valor é lançado como negativo para aquele funcionário.
+- Os débitos ficam registrados na comissão (`debitos` + `total_debitos`) e aparecem na conferência (aba Pendentes).
+
+**Proteção dos dados:** aditivo — lançamentos antigos não mudam. Débito reduz o valor individual do funcionário (no rateio por setor, o piso é 0 — nunca fica negativo).
+
+**Impacto:** o RH desconta prejuízos/erros (pratos quebrados, mesa não cobrada, extra de garçom) direto no lançamento, sem planilha paralela.
+
+---
+
+## Escala de Folga — Edição em massa (RH) (20/10/2026)
+
+### 40. Edição em massa do calendário de folgas → Concluído
+
+**O que foi feito:** na Escala de Folga, um botão **Editar** (lápis) liga o modo de edição em massa:
+- Clica direto nas células (funcionário × dia) para **marcar/desmarcar a folga** de cada um, manualmente.
+- A linha do rodapé ("Total de folgas no dia") atualiza em tempo real, para não concentrar folga demais num dia só.
+- A coluna "Escala" mostra "Personalizada (N folgas)" conforme você marca.
+- No fim, escolhe **Salvar rascunho** ou **Publicar** (consolida direto).
+- Dias em férias não podem ser alterados (mostram a férias).
+
+**Proteção dos dados:** escala **consolidada** nunca é sobrescrita — se o mês tem escala consolidada, o salvamento é bloqueado e pede para reabrir. Escalas rascunho que sobrepõem o mês são fechadas/ajustadas, preservando o passado.
+
+**Impacto:** o RH monta o quadro de folgas do mês inteiro manualmente, funcionário a funcionário, e publica de uma vez.
+
+---
+
+## Escala de Folga — Aviso de domingos sem folga (RH) (20/10/2026)
+
+### 41. Aviso de mais de 3 domingos sem folga → Concluído
+
+**O que foi feito:** regra trabalhista (1 folga a cada 3 domingos). O sistema conta os domingos consecutivos sem folga de cada funcionário, considerando as escalas salvas (consolidadas e rascunho) **e** os dias que estão sendo editados no modo de edição:
+- Aparece um selo vermelho **"⚠ N domingos"** na linha do funcionário quando passa de 3.
+- No modo de edição, o aviso **atualiza em tempo real** conforme você marca/desmarca.
+- A revisão de consolidação mostra "Funcionários com mais de 3 domingos sem folga".
+
+**Apenas aviso — não bloqueia.**
+
+---
+
+## Funcionário 360 — Edição de cadastro (RH) (20/10/2026)
+
+### 42. Editar qualquer informação direto no 360 → Concluído
+
+**O que foi feito:** o 360 do funcionário ganhou acesso de edição:
+- Botão **"Editar cadastro"** no cabeçalho e **"Editar dados"** na aba **Dados Pessoais**.
+- Abre o **mesmo formulário completo** da tela de Funcionários (dados pessoais, documentos, endereço, dados bancários, benefícios, dados contratuais, dependentes, foto, demitir/recontratar).
+- Ao salvar, o 360 atualiza na hora.
+- A aba **Cargo & Salário** já tinha edição própria e continua funcionando.
+
+**Impacto:** o RH resolve tudo dentro do 360, sem precisar sair para a lista de funcionários.
+
+---
+
+## Portal do Funcionário — Histórico limitado a 3 meses (20/10/2026)
+
+### 43. Histórico de comissões e salário limitado a 3 meses → Concluído
+
+**O que foi feito:** no portal do funcionário, o histórico de **comissões** e **salário** exibe no máximo os **últimos 3 meses** (mês atual + 2 anteriores):
+- Aba **Minhas Comissões**: só lista os 3 meses mais recentes (individual e resumo do setor).
+- Aba **Meu Salário**: histórico de salários limitado aos 3 meses mais recentes.
+- O **seletor de mês** dessas duas abas também fica limitado a 3 meses (vales e extrato seguem com o histórico completo).
+
+**Impacto:** o colaborador vê só o histórico recente, sem rolar meses muito antigos.
+
+---
+
 ## Próximos ajustes
 
 Este documento será atualizado conforme novos ajustes e melhorias forem concluídos.

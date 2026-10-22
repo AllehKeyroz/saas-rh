@@ -58,6 +58,7 @@ service cloud.firestore {
     match /ComissoesGorjetas/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ComissaoIndividual/{docId}          { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /ComissaoPorFuncionario/{docId}     { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
+    match /CreditoComissaoSetor/{docId}       { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /SetoresComissao/{docId}            { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /MetaComissao/{docId}               { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow update: if isRH(); allow delete: if isAdmin(); }
     match /HistoricoAlteracaoComissao/{docId} { allow read: if isAuthenticated(); allow create: if isRH() && tenantMatch(); allow delete: if isAdmin(); }

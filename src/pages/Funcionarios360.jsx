@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { client } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Calendar, DollarSign, HelpCircle, Umbrella } from 'lucide-react';
+import { ArrowLeft, Calendar, DollarSign, HelpCircle, Umbrella, Pencil } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { getTipoAfastamento, getHojeISO, isAfastamentoAtivo } from '@/lib/afastamento';
+import FuncionarioForm from '@/components/funcionarios/FuncionarioForm';
 
 import Dashboard360 from '@/components/funcionarios360/Dashboard360';
 import DadosPessoais360 from '@/components/funcionarios360/DadosPessoais360';
@@ -48,7 +49,9 @@ function getSituacaoFerias(ferias) {
 export default function Funcionarios360() {
   const { funcId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [abaSelecionada, setAbaSelecionada] = useState('dashboard');
+  const [formOpen, setFormOpen] = useState(false);
 
   const { data: funcionario, isLoading } = useQuery({
     queryKey: ['funcionario360', funcId],
@@ -167,6 +170,10 @@ export default function Funcionarios360() {
                       {funcionario.ativo !== false ? 'Ativo' : 'Inativo'}
                     </Badge>
                   )}
+                  <Button size="sm" variant="outline" onClick={() => setFormOpen(true)}>
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    Editar cadastro
+                  </Button>
                 </div>
               </div>
 
@@ -241,7 +248,7 @@ export default function Funcionarios360() {
         </TabsList>
 
         <TabsContent value="dados" className="mt-6">
-          <DadosPessoais360 funcionario={funcionario} />
+          <DadosPessoais360 funcionario={funcionario} onEditar={() => setFormOpen(true)} />
         </TabsContent>
 
         <TabsContent value="documentos" className="mt-6">
@@ -298,6 +305,19 @@ export default function Funcionarios360() {
         funcionarios={funcionario ? [funcionario] : []}
         selectedFunc={funcionario}
       />
+
+      {formOpen && (
+        <FuncionarioForm
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          funcionario={funcionario}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['funcionario360', funcId] });
+            queryClient.invalidateQueries({ queryKey: ['funcionarios'] });
+            setFormOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

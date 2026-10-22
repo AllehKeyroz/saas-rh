@@ -8,7 +8,7 @@ import { User, LogOut, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import InstallAppButton from '@/components/pwa/InstallAppButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getMesReferenciaAtual, formatDate, formatCurrency, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { getMesReferenciaAtual, formatDate, formatCurrency, parseDateLocal, getMesRef, ultimosMeses } from '@/lib/formatters';
 import { useRHControl } from '@/lib/rhControl';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import { useToast } from '@/components/ui/use-toast';
@@ -146,12 +146,18 @@ export default function PortalFuncionario() {
     return meses.length > 0 ? meses : [mesAtual];
   }, [funcionario, lancamentos]);
 
-  // Garante que mesSelecionado está dentro do range disponível
+  // Histórico limitado a 3 meses nas abas de comissões e salário
+  const mesesSelector = useMemo(() => {
+    if (aba === 'comissoes' || aba === 'meu-salario') return ultimosMeses(mesesDisponiveis, 3);
+    return mesesDisponiveis;
+  }, [aba, mesesDisponiveis]);
+
+  // Garante que mesSelecionado está dentro do range disponível (respeitando o limite de 3 meses)
   useEffect(() => {
-    if (mesesDisponiveis.length > 0 && !mesesDisponiveis.includes(mesSelecionado)) {
-      setMesSelecionado(mesesDisponiveis[mesesDisponiveis.length - 1] || mesAtual);
+    if (mesesSelector.length > 0 && !mesesSelector.includes(mesSelecionado)) {
+      setMesSelecionado(mesesSelector[mesesSelector.length - 1] || mesAtual);
     }
-  }, [mesesDisponiveis]);
+  }, [mesesSelector]);
 
   const { data: gastosPessoais = [] } = useQuery({
     queryKey: ['gastos_pessoais', funcionario?.id],
@@ -274,9 +280,9 @@ export default function PortalFuncionario() {
   }).filter(m => !(m.lidas_por || []).includes(funcionario?.id)).length;
 
   const navegarMes = (dir) => {
-    const idx = mesesDisponiveis.indexOf(mesSelecionado);
+    const idx = mesesSelector.indexOf(mesSelecionado);
     const novo = idx + dir;
-    if (novo >= 0 && novo < mesesDisponiveis.length) setMesSelecionado(mesesDisponiveis[novo]);
+    if (novo >= 0 && novo < mesesSelector.length) setMesSelecionado(mesesSelector[novo]);
   };
 
   // Abas que exibem seletor de mês
@@ -343,7 +349,7 @@ export default function PortalFuncionario() {
             <InstallAppButton />
             {ABAS_COM_MES.includes(aba) && (
               <>
-                <button onClick={() => navegarMes(-1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === 0}
+                <button onClick={() => navegarMes(-1)} disabled={mesesSelector.indexOf(mesSelecionado) === 0}
                   className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -352,12 +358,12 @@ export default function PortalFuncionario() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {mesesDisponiveis.map(mes => (
+                    {mesesSelector.map(mes => (
                       <SelectItem key={mes} value={mes}>{mes}{mes === mesAtual ? ' ●' : ''}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <button onClick={() => navegarMes(1)} disabled={mesesDisponiveis.indexOf(mesSelecionado) === mesesDisponiveis.length - 1}
+                <button onClick={() => navegarMes(1)} disabled={mesesSelector.indexOf(mesSelecionado) === mesesSelector.length - 1}
                   className="w-10 h-10 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-muted transition-colors shrink-0">
                   <ChevronRight className="w-4 h-4" />
                 </button>

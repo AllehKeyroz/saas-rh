@@ -6,7 +6,7 @@
 npm install
 npm run dev          # localhost:5173
 npm run build        # dist/
-npm run lint         # eslint . --quiet (scoped: src/components/ src/pages/ src/Layout.jsx)
+npm run lint         # eslint . --quiet (scoped: src/components + src/pages; src/lib and components/ui ignored)
 npm run lint:fix     # auto-fix
 npm run typecheck    # tsc on jsconfig.json (checkJs, limited include)
 npm run preview      # serve dist/
@@ -24,7 +24,7 @@ Project notes an agent should read for context: `MATRIZ_ACESSO.md` (access matri
 
 **Multi-tenant** by `tenant_id`. Proxy in `src/api/client.js` (`import { client } from '@/api/client'`) auto-injects `tenant_id` on list/filter/create/bulkCreate. Collections that skip tenant scoping: `users`, `convites`, `tenants`, `ApplicationError`, `LogNotificacao`.
 
-Personal finance collections (`GastosPessoais`, `DividasPessoais`, `AssinaturasPessoais`, `MetasObjetivos`, `MetaFinanceira`) are keyed/filtered by `funcionario_id` (not `tenant_id`). Firestore rules allow `read, write` for **any authenticated user** with no tenant/ownership check (`firestore.rules:91-95`) — the `funcionario_id` filter is enforced only client-side. `SolicitacoesFuncionario` create is also open to any authenticated user.
+Personal finance collections (`GastosPessoais`, `DividasPessoais`, `AssinaturasPessoais`, `MetasObjetivos`, `MetaFinanceira`) are keyed/filtered by `funcionario_id` (not `tenant_id`). Firestore rules allow `read, write` for **any authenticated user** with no tenant/ownership check (`firestore.rules:92-96`) — the `funcionario_id` filter is enforced only client-side. `SolicitacoesFuncionario` create is also open to any authenticated user.
 
 **Firebase**: Auth + Firestore + Storage. Named database `rhdtalia` in prod, `(default)` on localhost (auto-detect in `src/firebase/config.js:21`). Emulators auto-connect on localhost. Cloud Functions (`sendEmail`, `calcularLimiteValeMensal`) are **not deployed** — calls hit `us-central1-<projectId>.cloudfunctions.net/<name>` and silently fail.
 
@@ -42,7 +42,7 @@ const item = await client.entities.Funcionarios.get(id)
 client.entities.FichaFinanceira.create({ valor: 1000, ... })
 ```
 
-40 collections auto-registered in `src/firebase/db.js` via `ENTITY_NAMES`. Custom `tipo_lancamento` categories from `client.entities.TipoLancamento.list()`.
+41 collections auto-registered in `src/firebase/db.js` via `ENTITY_NAMES`. Custom `tipo_lancamento` categories from `client.entities.TipoLancamento.list()`.
 
 **Adding a new collection requires two edits**: add to `ENTITY_NAMES` in `src/firebase/db.js` **and** a `match /Colecao/{docId}` line in `firestore.rules`. Without the rule, Firestore denies by default in prod ("permissões insuficientes") — the rule is not inferred from the entity.
 
@@ -103,6 +103,8 @@ All RH routes in `src/App.jsx:76-99`. PortalFuncionario tabs controlled by `useR
 - **Escala de folga** (`src/lib/escalaFolga.js`): each record has a `status` — `rascunho` or `consolidada` (`ESCALA_STATUS`). Records **without** `status` are treated as `rascunho` (backward compatible). A `consolidada` record must **never** be overwritten/deleted — guards live in `salvarEscalaFuncionario` and `handleLimpar` in `src/components/escala-folga/ConfigurarEscalaDialog.jsx`. Consolidate/reopen only write the `status` field (+ `consolidado_em`/`reaberto_em`).
 - **Férias — faltas (art. 130 CLT)**: stored as `faltas_por_periodo` (a `{ periodoAquisitivo: dias }` map) on the `Funcionarios` doc. `diasFeriasPorFaltas()` reduces entitlement (≤5→30, 6–14→24, 15–23→18, 24–32→12, 33+→0). `calcularSaldoFerias(func, ferias)` reads it automatically; `calcularSituacaoFerias(admissao, ferias, faltasPorPeriodo)` takes it as a 3rd param.
 - **Férias — regras centralizadas em `src/lib/ferias.js`** (fonte única): `validarFracionamento` (14/5), `getSobreposicaoFuncionario` (bloqueia), `getFeriasEmendadas` (aviso de 1 dia entre períodos), `verificarRegra48h` (feriado) e `verificarRegra48hFolga` (folga/DSR, em `escalaFolga.js`).
+- **Comissões — pendente → publicar**: um lançamento nasce com `status: 'pendente'` e o cálculo completo em `rascunho` (registros por funcionário **sem** `comissao_id`). Enquanto pendente **não há linhas em `ComissaoPorFuncionario`** — nada vaza para fechamento/dashboard/portal. `publicarComissao()` (`src/lib/comissoes.js`) cria as linhas e marca `confirmado`. `delete` de `ComissoesGorjetas` é só admin.
+- **Comissões — crédito de setor**: setor sem aptos **não redistribui** o valor (evita race condition); ele vira um doc em `CreditoComissaoSetor` (`status: 'disponivel'`) e é aplicado manualmente num lançamento futuro, marcado como `usado` ao publicar.
 
 ## Env vars (all `VITE_` prefix)
 
@@ -112,11 +114,11 @@ Required: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_P
 
 ## Lint / Typecheck scope
 
-**ESLint** (`eslint.config.js`): targets `src/components/**/*.{js,jsx}`, `src/pages/**/*.{js,jsx}`, `src/Layout.jsx`. Ignores `src/lib/**` and `src/components/ui/**`. Rules: `prop-types: off`, `react-in-jsx-scope: off`, `unused-imports/no-unused-imports: error`. Custom `no-unknown-property` ignore: `cmdk-input-wrapper`, `toast-close`.
+**ESLint** (`eslint.config.js`): targets `src/components/**/*.{js,mjs,cjs,jsx}`, `src/pages/**/*.{js,mjs,cjs,jsx}` (plus a non-existent `src/Layout.jsx`). Ignores `src/lib/**` and `src/components/ui/**`. Relevant rules: `unused-imports/no-unused-imports: error`, `react/prop-types: off`, `react/react-in-jsx-scope: off`. `npm run lint` is `--quiet` → it prints **only errors**, not warnings.
 
-**Typecheck** (`jsconfig.json`): `checkJs: true`, includes same paths as lint + `"src/components/**/*.js"`. Excludes `node_modules`, `dist`, `src/vite-plugins`, `src/components/ui`, `src/api`, `src/lib`.
+**Typecheck** (`jsconfig.json`): `include` = `src/components/**/*.js`, `src/pages/**/*.jsx`, `src/Layout.jsx`. **Gotcha:** `src/components` contains only `.jsx` (zero `.js`) and `src/Layout.jsx` doesn't exist — so `npm run typecheck` effectively checks **only `src/pages/**/*.jsx`**. Components are **not** typechecked; use `npm run lint` + `npm run build` for them.
 
-**Expect pre-existing errors.** The editor/LSP floods with errors from the untyped `client.entities` proxy (`Property 'Funcionarios' does not exist on type '{}'`) and from shadcn components (`Property 'children' does not exist...`). These are **not** caused by your edit — don't try to fix them. After changing files, run `npm run lint` and confirm **only your touched files** are clean (lint is `--quiet`, so it prints only errors).
+**Expect pre-existing errors.** The editor/LSP floods with errors from the untyped `client.entities` proxy (`Property 'Funcionarios' does not exist on type '{}'`) and from shadcn components (`Property 'children' does not exist...`). These are **not** caused by your edit — don't try to fix them. After changing files, run `npm run lint` and confirm **only your touched files** are clean.
 
 ## Emulators
 

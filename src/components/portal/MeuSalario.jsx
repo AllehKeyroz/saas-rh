@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, TrendingUp, Info, AlertTriangle } from 'lucide-react';
-import { formatCurrency, getMesReferenciaAtual, LIMITE_PERCENTUAL, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { formatCurrency, getMesReferenciaAtual, LIMITE_PERCENTUAL, parseDateLocal, getMesRef, ultimosMeses } from '@/lib/formatters';
 import { calcularComissaoMensal } from '@/lib/comissoes';
 import ResumoSalarioCard from '@/components/vidafinanceira/ResumoSalarioCard';
 import LimiteProgressBar from '@/components/ui/LimiteProgressBar';
@@ -67,8 +67,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
    }
 
    // Gera range de meses baseado na data de admissão + dados existentes
-   const mesesOpts = useMemo(() => {
-     const meses = [];
+   const mesesOpts = useMemo(() => {     const meses = [];
      let minAno = Infinity, minMesNum = Infinity;
 
      // Ponto de partida: data de admissão
@@ -122,8 +121,11 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
        mes++;
        if (mes > 12) { mes = 1; ano++; }
      }
-     return meses.length > 0 ? meses : [mesAtual];
-   }, [funcionario, lancamentosFuncionario, mesAtual]);
+      return meses.length > 0 ? meses : [mesAtual];
+    }, [funcionario, lancamentosFuncionario, mesAtual]);
+
+   // Histórico do portal: no máximo 3 meses retroativos
+   const mesesHistorico = useMemo(() => ultimosMeses(mesesOpts, 3), [mesesOpts]);
 
    if (!perm.ver_salario) {
      return (
@@ -262,7 +264,7 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {mesesOpts.slice(-3).map(mes => {
+            {mesesHistorico.map(mes => {
               const d = calcMes(mes);
               return (
                 <div key={mes} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${mes === mesSelecionado ? 'bg-primary/5 border border-primary/20' : 'bg-muted/40'}`}>

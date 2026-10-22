@@ -6,7 +6,7 @@ const APP_VERSION = __APP_VERSION__ // eslint-disable-line no-undef
  * Registra uma entrada no log de auditoria.
  * @param {object} params
  * @param {'criar'|'editar'|'excluir'} params.acao
- * @param {'funcionario'|'lancamento'} params.modulo
+ * @param {'funcionario'|'lancamento'|'comissao'|'assinatura'|'modelo'|'finalidade'|'backup'|'consignado'|'documento'} params.modulo
  * @param {string} params.descricao - Texto legível do que mudou
  * @param {string} [params.entidade_id]
  * @param {object} [params.dados_anteriores]

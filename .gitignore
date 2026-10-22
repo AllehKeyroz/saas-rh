@@ -44,3 +44,6 @@ firebase-export-*/
 
 # Service account
 service-account.json
+
+# Tool artifacts
+.commandcode/

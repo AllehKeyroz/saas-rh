@@ -151,6 +151,7 @@ const ENTITY_NAMES = [
   'Consignado', 'HistoricoSalario', 'Afastamento',
   'EscalaFolga',
   'ComissaoIndividual',
+  'CreditoComissaoSetor',
 ]
 
 ENTITY_NAMES.forEach(registerEntity)

@@ -109,3 +109,19 @@ export function getMesesOptions(mesesFuturos = 0) {
   }
   return meses;
 }
+
+// Retorna no máximo `qtd` meses ("MM/YYYY") mais recentes, contando o mês atual.
+// Usado para limitar históricos no portal (ex.: últimos 3 meses retroativos).
+export function ultimosMeses(meses = [], qtd = 3) {
+  const toNum = (m) => {
+    const [mm, yyyy] = String(m).split('/');
+    const mNum = parseInt(mm, 10);
+    const y = parseInt(yyyy, 10);
+    if (!Number.isFinite(mNum) || !Number.isFinite(y)) return -Infinity;
+    return y * 100 + mNum;
+  };
+  const agora = new Date();
+  const limiteDate = new Date(agora.getFullYear(), agora.getMonth() - (qtd - 1), 1);
+  const limite = limiteDate.getFullYear() * 100 + (limiteDate.getMonth() + 1);
+  return [...meses].filter(m => toNum(m) >= limite).sort((a, b) => toNum(a) - toNum(b));
+}

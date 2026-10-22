@@ -9,21 +9,27 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle } from 'lucide-react';
 import LancarComissao from '@/components/comissoes/LancarComissao';
+import PendentesComissoes from '@/components/comissoes/PendentesComissoes';
+import CreditosSetor from '@/components/comissoes/CreditosSetor';
 import ComissaoIndividual from '@/components/comissoes/ComissaoIndividual';
 import RelatorioComissoes from '@/components/comissoes/RelatorioComissoes';
 import HistoricoComissoes from '@/components/comissoes/HistoricoComissoes';
 import ConfigurarSetoresComissao from '@/components/comissoes/ConfigurarSetoresComissao';
 import ConfigurarMetasComissao from '@/components/comissoes/ConfigurarMetasComissao';
+import { isComissaoPendente } from '@/lib/comissoes';
 import { useRHControl } from '@/lib/rhControl';
 import FuncionalidadeBloqueada from '@/components/FuncionalidadeBloqueada';
 
-const VALID_TABS_COMISSOES = ['lancar', 'relatorio', 'historico', 'metas', 'setores'];
+const VALID_TABS_COMISSOES = ['lancar', 'pendentes', 'creditos', 'relatorio', 'historico', 'metas', 'setores'];
 
 export default function Comissoes() {
   const urlParams = new URLSearchParams(window.location.search);
   const tabFromUrl = urlParams.get('tab');
   const [tab, setTab] = useState(VALID_TABS_COMISSOES.includes(tabFromUrl) ? tabFromUrl : 'lancar');
   const [modoLancamento, setModoLancamento] = useState('setor'); // 'setor' | 'individual'
+  const [rascunhoEmEdicao, setRascunhoEmEdicao] = useState(null);
+  const [creditosPreselecionados, setCreditosPreselecionados] = useState([]);
+  const [creditosSeed, setCreditosSeed] = useState(0);
   const [mesRef, setMesRef] = usePersistedFilter('rh_filtro_mes_comissoes', getMesReferenciaAtual());
   const queryClient = useQueryClient();
   const { isAtiva, isLoading: loadingRH } = useRHControl();
@@ -53,22 +59,41 @@ export default function Comissoes() {
     queryFn: () => client.entities.SetoresComissao.list(),
   });
 
+  const { data: creditosSetor = [] } = useQuery({
+    queryKey: ['creditos_comissao_setor_all'],
+    queryFn: () => client.entities.CreditoComissaoSetor.list('-created_date', 200),
+  });
+
   const isLoading = lf || lc || lcf || loadingRH;
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['comissoes_gorjetas'] });
     queryClient.invalidateQueries({ queryKey: ['comissoes_funcionarios'] });
     queryClient.invalidateQueries({ queryKey: ['comissoes_individual'] });
+    queryClient.invalidateQueries({ queryKey: ['creditos_comissao_setor'] });
+    queryClient.invalidateQueries({ queryKey: ['creditos_comissao_setor_all'] });
   };
 
-  const onSaved = async () => {
+  const onSaved = async (status) => {
     await queryClient.refetchQueries({ queryKey: ['comissoes_gorjetas'] });
     await queryClient.refetchQueries({ queryKey: ['comissoes_funcionarios'] });
     await queryClient.refetchQueries({ queryKey: ['comissoes_individual'] });
-    setTab('historico');
+    await queryClient.refetchQueries({ queryKey: ['creditos_comissao_setor'] });
+    await queryClient.refetchQueries({ queryKey: ['creditos_comissao_setor_all'] });
+    setRascunhoEmEdicao(null);
+    setTab(status === 'pendente' ? 'pendentes' : 'historico');
+  };
+
+  const usarCreditosNoLancamento = (ids) => {
+    setRascunhoEmEdicao(null);
+    setModoLancamento('setor');
+    setCreditosPreselecionados(ids || []);
+    setCreditosSeed(s => s + 1);
+    setTab('lancar');
   };
 
   const comissoesMesAtual = comissoes.filter(c => c.mes_referencia === getMesReferenciaAtual() && c.status === 'confirmado');
+  const pendentes = comissoes.filter(isComissaoPendente);
   const tabsComSeletor = ['relatorio', 'historico', 'metas'];
 
   if (isLoading) return (
@@ -107,7 +132,7 @@ export default function Comissoes() {
           Comissão para o Setor
         </button>
         <button
-          onClick={() => setModoLancamento('individual')}
+          onClick={() => { setModoLancamento('individual'); setRascunhoEmEdicao(null); }}
           className={`flex-1 sm:flex-none px-5 py-2.5 text-sm font-medium transition-colors ${modoLancamento === 'individual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
         >
           Comissão Individual
@@ -128,6 +153,16 @@ export default function Comissoes() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="lancar">Lançar</TabsTrigger>
+            <TabsTrigger value="pendentes">
+              Pendentes
+              {pendentes.length > 0 && <Badge className="ml-1.5 bg-amber-500/20 text-amber-700 text-xs px-1.5">{pendentes.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="creditos">
+              Créditos
+              {creditosSetor.filter(c => c.status !== 'usado').length > 0 && (
+                <Badge className="ml-1.5 bg-emerald-500/20 text-emerald-700 text-xs px-1.5">{creditosSetor.filter(c => c.status !== 'usado').length}</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="relatorio">
               Relatório
               {comissoesMesAtual.length > 0 && <Badge className="ml-1.5 bg-primary/20 text-primary text-xs px-1.5">{comissoesMesAtual.length}</Badge>}
@@ -152,8 +187,30 @@ export default function Comissoes() {
           {modoLancamento === 'individual' ? (
             <ComissaoIndividual funcionarios={funcionarios} onSaved={onSaved} />
           ) : (
-            <LancarComissao funcionarios={funcionarios} onSaved={onSaved} />
+            <LancarComissao
+              key={rascunhoEmEdicao?.id || `novo-${creditosSeed}`}
+              funcionarios={funcionarios}
+              onSaved={onSaved}
+              comissaoEmEdicao={rascunhoEmEdicao}
+              creditosIniciais={creditosPreselecionados}
+              onCancelarEdicao={() => { setRascunhoEmEdicao(null); setCreditosPreselecionados([]); }}
+            />
           )}
+        </TabsContent>
+
+        <TabsContent value="pendentes" className="mt-6">
+          <PendentesComissoes
+            pendentes={pendentes}
+            onRefresh={refresh}
+            onEditar={(c) => { setRascunhoEmEdicao(c); setModoLancamento('setor'); setMesRef(c.mes_referencia || mesRef); setTab('lancar'); }}
+          />
+        </TabsContent>
+
+        <TabsContent value="creditos" className="mt-6">
+          <CreditosSetor
+            creditos={creditosSetor}
+            onUsarNoLancamento={usarCreditosNoLancamento}
+          />
         </TabsContent>
 
         <TabsContent value="relatorio" className="mt-6">
@@ -165,7 +222,7 @@ export default function Comissoes() {
 
         <TabsContent value="historico" className="mt-6">
           <HistoricoComissoes
-            comissoes={comissoes.filter(c => c.mes_referencia === mesRef)}
+            comissoes={comissoes.filter(c => c.mes_referencia === mesRef && c.status !== 'pendente')}
             comissoesFuncionarios={comissoesFuncionarios}
             funcionarios={funcionarios}
             setoresComissao={setoresComissao}

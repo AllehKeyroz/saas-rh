@@ -4,7 +4,7 @@ import { client } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, ultimosMeses } from '@/lib/formatters';
 import { formatPeriodo, calcularProgressoMetaComissao, getAlertaMetaComissao } from '@/lib/comissoes';
 import { Award, Target, TrendingUp, Star, Zap, CalendarDays, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -64,7 +64,7 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSe
     if (!porMes[m]) porMes[m] = [];
     porMes[m].push(c);
   });
-  const meses = Object.keys(porMes).sort((a, b) => b.localeCompare(a));
+  const meses = ultimosMeses(Object.keys(porMes), 3).reverse();
 
   // ─── VISÃO DO SETOR ───
   const setorPorMes = {};
@@ -73,7 +73,7 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSe
     if (!setorPorMes[m]) setorPorMes[m] = [];
     setorPorMes[m].push(c);
   });
-  const mesesSetor = Object.keys(setorPorMes).sort((a, b) => b.localeCompare(a));
+  const mesesSetor = ultimosMeses(Object.keys(setorPorMes), 3).reverse();
 
   function getMetaMes(mes) {
     const metaInd = metas.find(m => m.mes_referencia === mes && m.funcionario_id === funcionarioId);
@@ -87,15 +87,15 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSe
     return null;
   }
 
-  if (minhasComissoes.length === 0 && comissoesSetor.length === 0) return (
-    <div className="text-center py-6 text-muted-foreground text-sm">Nenhuma comissão registrada.</div>
+  if (meses.length === 0 && mesesSetor.length === 0) return (
+    <div className="text-center py-6 text-muted-foreground text-sm">Nenhuma comissão nos últimos 3 meses.</div>
   );
 
   return (
     <div className="space-y-6">
 
       {/* ─── RESUMO DO SETOR ─── */}
-      {exibirResumoSetor && funcionarioSetor && comissoesSetor.length > 0 && (
+      {exibirResumoSetor && funcionarioSetor && comissoesSetor.length > 0 && mesesSetor.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <Users className="w-4 h-4" />
@@ -204,7 +204,7 @@ export default function MinhasComissoes({ funcionarioId, funcionarioSetor, mesSe
       )}
 
       {/* ─── MINHAS COMISSÕES ─── */}
-      {minhasComissoes.length > 0 && (
+      {minhasComissoes.length > 0 && meses.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <Award className="w-4 h-4" />

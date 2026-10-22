@@ -1,4 +1,7 @@
 // Utilitários compartilhados do módulo de comissões
+import { client } from '@/api/client';
+import { registrarAuditoria } from '@/lib/audit';
+import { formatCurrency } from '@/lib/formatters';
 
 // Mapeia nome do setor de um funcionário para o ID de um SetoresComissao dinâmico
 export function mapearSetorDinamico(setorFuncionario, setoresDinamicos) {
@@ -173,4 +176,110 @@ export function calcularDistribuicaoFuncionarios(
   }
 
   return resultados;
+}
+
+// ── Status da comissão: rascunho (pendente) → publicado (confirmado) ─────────
+// Registros antigos, gravados antes deste fluxo, não têm o campo e são tratados
+// como confirmados — mantém o comportamento anterior.
+export const COMISSAO_STATUS = {
+  PENDENTE: 'pendente',
+  CONFIRMADO: 'confirmado',
+};
+
+// Crédito de setor: valor que um setor sem aptos deixou de distribuir.
+// Fica disponível e é aplicado em um lançamento futuro, quando o RH quiser.
+export const CREDITO_STATUS = {
+  DISPONIVEL: 'disponivel',
+  USADO: 'usado',
+};
+
+export function isComissaoPendente(comissao) {
+  return comissao?.status === COMISSAO_STATUS.PENDENTE;
+}
+
+export function isComissaoConfirmada(comissao) {
+  return !comissao?.status || comissao.status === COMISSAO_STATUS.CONFIRMADO;
+}
+
+// Publica um rascunho: gera as linhas por funcionário (ComissaoPorFuncionario)
+// e marca a comissão como confirmada. Enquanto pendente não existe linha por
+// funcionário, então nenhum consumidor (fechamento, portal, dashboard) a enxerga.
+// Idempotente: limpa linhas órfãs de uma tentativa anterior antes de recriar.
+export async function publicarComissao(comissao) {
+  if (!comissao?.id) throw new Error('Comissão inválida.');
+  if (!isComissaoPendente(comissao)) {
+    throw new Error('Somente comissões pendentes podem ser publicadas.');
+  }
+
+  const registros = (comissao.rascunho?.registros || []).map((r) => ({
+    ...r,
+    comissao_id: comissao.id,
+  }));
+
+  if (registros.length > 0) {
+    // Se uma tentativa anterior já criou as linhas (falhou só no update final),
+    // não recria nem apaga — apenas confirma. Evita duplicar sem exigir admin
+    // (a regra do Firestore só deixa admin apagar).
+    const existentes = await client.entities.ComissaoPorFuncionario.filter({ comissao_id: comissao.id });
+    if (existentes.length === 0) {
+      await client.entities.ComissaoPorFuncionario.bulkCreate(registros);
+    }
+  }
+
+  // Créditos gerados: setores que ficaram sem aptos não distribuem; o valor
+  // fica disponível para um lançamento futuro (evita a race condition de
+  // redistribuir para setores cujas ausências ainda não foram lançadas).
+  const creditosGerados = comissao.rascunho?.creditos_gerados || [];
+  if (creditosGerados.length > 0) {
+    const jaGerados = await client.entities.CreditoComissaoSetor.filter({ origem_comissao_id: comissao.id });
+    if (jaGerados.length === 0) {
+      await client.entities.CreditoComissaoSetor.bulkCreate(creditosGerados.map((c) => ({
+        setor_id: c.setor_id || null,
+        setor_nome: c.setor_nome,
+        valor: c.valor,
+        status: CREDITO_STATUS.DISPONIVEL,
+        origem_comissao_id: comissao.id,
+        origem_periodo_inicio: comissao.periodo_inicio,
+        origem_periodo_fim: comissao.periodo_fim,
+        origem_mes_referencia: comissao.mes_referencia,
+      })));
+    }
+  }
+
+  // Créditos usados neste lançamento: consome somente se ainda estiver disponível.
+  const creditosUsados = comissao.rascunho?.creditos_usados || [];
+  let consumidos = 0;
+  for (const c of creditosUsados) {
+    if (!c.id) continue;
+    const atual = await client.entities.CreditoComissaoSetor.get(c.id);
+    if (atual && atual.status === CREDITO_STATUS.DISPONIVEL) {
+      await client.entities.CreditoComissaoSetor.update(c.id, {
+        status: CREDITO_STATUS.USADO,
+        usado_em: new Date().toISOString(),
+        comissao_id_uso: comissao.id,
+      });
+      consumidos += 1;
+    }
+  }
+
+  await client.entities.ComissoesGorjetas.update(comissao.id, {
+    status: COMISSAO_STATUS.CONFIRMADO,
+    publicado_em: new Date().toISOString(),
+    rascunho: null,
+  });
+
+  await registrarAuditoria({
+    acao: 'editar',
+    modulo: 'comissao',
+    entidade_id: comissao.id,
+    descricao: `Comissão publicada: ${comissao.periodo_inicio} a ${comissao.periodo_fim} — ${formatCurrency(comissao.valor_total_periodo || 0)}`,
+    dados_novos: {
+      status: COMISSAO_STATUS.CONFIRMADO,
+      registros: registros.length,
+      creditos_gerados: creditosGerados.length,
+      creditos_usados: consumidos,
+    },
+  });
+
+  return { registros: registros.length, creditosGerados: creditosGerados.length, creditosUsados: consumidos };
 }
