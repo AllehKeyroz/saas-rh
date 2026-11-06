@@ -1,32 +1,36 @@
 import React from 'react';
 import { client } from '@/api/client';
-import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard, User, LogOut, Menu, X, MessageSquare, ClipboardList, PenLine,
-  DollarSign, Wallet, FileText, BarChart2, Award, Target, FolderOpen, Palmtree,
+  Wallet, BarChart2, FolderOpen, Palmtree,
 } from 'lucide-react';
 import { useRHControl } from '@/lib/rhControl';
+import { SECOES_PORTAL, secaoVisivel } from '@/lib/portalSecoes';
 import VersionFooter from '@/components/layout/VersionFooter';
 
-const ALL_NAV_ITEMS = [
-  { id: 'visao-geral',        label: 'Visão Geral',          icon: LayoutDashboard, always: true },
-  { id: 'meus-dados',         label: 'Meus Dados',           icon: User, always: true },
-  { id: 'meu-salario',        label: 'Meu Salário',          icon: DollarSign, always: true },
-  { id: 'meus-vales',         label: 'Meus Vales',           icon: Wallet, always: true },
-  { id: 'extrato',            label: 'Extrato Mensal',        icon: FileText, always: true },
-  { id: 'meus-documentos',    label: 'Meus Documentos',      icon: FolderOpen, always: true },
-  { id: 'minhas-ferias',      label: 'Minhas Férias',        icon: Palmtree, always: true },
-  { id: 'vida-financeira',    label: 'Minha Vida Financeira', icon: BarChart2, always: true },
-  { id: 'comissoes',          label: 'Minhas Comissões',      icon: Award, always: true },
-  { id: 'metas',              label: 'Minhas Metas',          icon: Target, always: true },
-  { id: 'mensagens',          label: 'Mensagens',             icon: MessageSquare, chave: 'modulo_mensagens' },
-  { id: 'solicitacoes',       label: 'Minhas Solicitações',   icon: ClipboardList, chave: 'modulo_solicitacoes' },
-  { id: 'assinaturas',        label: 'Assinaturas Digitais',  icon: PenLine, always: true },
-];
+const ICONES = {
+  'visao-geral': LayoutDashboard,
+  'meus-dados': User,
+  'financeiro': Wallet,
+  'meus-documentos': FolderOpen,
+  'minhas-ferias': Palmtree,
+  'vida-financeira': BarChart2,
+  'mensagens': MessageSquare,
+  'solicitacoes': ClipboardList,
+  'assinaturas': PenLine,
+};
+
+const ALL_NAV_ITEMS = SECOES_PORTAL.map(secao => ({
+  ...secao,
+  icon: ICONES[secao.id] || LayoutDashboard,
+}));
 
 export default function PortalSidebar({ aba, setAba, funcionario, mobileOpen, setMobileOpen, mensagensNaoLidas = 0, solicitacoesRespondidas = 0, avisosNaoLidos = 0 }) {
   const { isAtiva } = useRHControl();
-  const NAV_ITEMS = ALL_NAV_ITEMS.filter(item => item.always || isAtiva(item.chave));
+  // Seções ocultadas pelo RH (Permissões do Portal) + módulos desligados no Centro de Controle
+  const NAV_ITEMS = ALL_NAV_ITEMS.filter(item =>
+    secaoVisivel(funcionario, item.id) && (!item.chave || isAtiva(item.chave))
+  );
 
   function NavItem({ item }) {
     const Icon = item.icon;

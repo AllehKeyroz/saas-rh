@@ -11,16 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getMesReferenciaAtual, formatDate, formatCurrency, parseDateLocal, getMesRef, ultimosMeses } from '@/lib/formatters';
 import { useRHControl } from '@/lib/rhControl';
 import { calcularComissaoMensal } from '@/lib/comissoes';
+import { SECAO_FINANCEIRO, SUBABAS_FINANCEIRO, resolverAba, secaoVisivel } from '@/lib/portalSecoes';
 import { useToast } from '@/components/ui/use-toast';
 
 import PortalSidebar from '@/components/portal/PortalSidebar';
 import VisaoGeral from '@/components/portal/VisaoGeral';
 import MeusDados from '@/components/portal/MeusDados';
-import MeuSalario from '@/components/portal/MeuSalario';
-import MeusVales from '@/components/portal/MeusVales';
-import ExtratoMensal from '@/components/portal/ExtratoMensal';
-import MinhasComissoes from '@/components/portal/MinhasComissoes';
-import PortalMetas from '@/components/portal/PortalMetas';
+import MeuFinanceiro from '@/components/portal/MeuFinanceiro';
 import PortalVidaFinanceira from '@/components/portal/PortalVidaFinanceira';
 import MensagensPortal from '@/components/portal/MensagensPortal';
 import MinhasSolicitacoes from '@/components/portal/MinhasSolicitacoes';
@@ -39,12 +36,8 @@ const TIPOS_LIMITE_BASE = ['vale', 'vale_parcelado', 'adiantamento', 'convenio',
 const ABA_LABELS = {
   'visao-geral': 'Visão Geral',
   'meus-dados': 'Meus Dados',
-  'meu-salario': 'Meu Salário',
-  'meus-vales': 'Meus Vales',
-  'extrato': 'Extrato Mensal',
+  'financeiro': 'Meu Financeiro',
   'vida-financeira': 'Minha Vida Financeira',
-  'comissoes': 'Minhas Comissões',
-  'metas': 'Minhas Metas',
   'meus-documentos': 'Meus Documentos',
   'minhas-ferias': 'Minhas Férias',
   'mensagens': 'Mensagens',
@@ -55,7 +48,12 @@ const ABA_LABELS = {
 export default function PortalFuncionario() {
   const [meUser, setMeUser] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [aba, setAba] = useState(searchParams.get('tab') || 'visao-geral');
+  // ?tab=meu-salario | meus-vales | comissoes | extrato continuam válidos (links antigos)
+  const tabInicial = resolverAba(searchParams.get('tab') || 'visao-geral');
+  const subParam = searchParams.get('sub');
+  const subInicial = SUBABAS_FINANCEIRO.some(s => s.id === subParam) ? subParam : tabInicial.subAba;
+  const [aba, setAbaState] = useState(tabInicial.aba);
+  const [finAba, setFinAba] = useState(subInicial);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [comprovante, setComprovante] = useState(null);
   const mesAtual = getMesReferenciaAtual();
@@ -64,6 +62,17 @@ export default function PortalFuncionario() {
   const { toast } = useToast();
   const [mensagensNaoLidas, setMensagensNaoLidas] = React.useState(0);
   const [solicitacoesRespondidas, setSolicitacoesRespondidas] = React.useState(0);
+
+  // Navegação: aceita ids novos e os antigos (meu-salario, meus-vales, extrato, comissoes)
+  const setAba = (destino) => {
+    const alvo = resolverAba(destino);
+    // Clicar em "Meu Financeiro" não deve jogar o usuário de volta para "Salário"
+    if (alvo.aba === SECAO_FINANCEIRO && destino !== SECAO_FINANCEIRO) {
+      setFinAba(alvo.subAba);
+    }
+    setAbaState(alvo.aba);
+    setMobileOpen(false);
+  };
 
   useEffect(() => {
     client.auth.me().then(setMeUser);
@@ -74,11 +83,16 @@ export default function PortalFuncionario() {
     const params = new URLSearchParams(searchParams);
     if (aba === 'visao-geral') {
       params.delete('tab');
+      params.delete('sub');
+    } else if (aba === SECAO_FINANCEIRO) {
+      params.set('tab', SECAO_FINANCEIRO);
+      params.set('sub', finAba);
     } else {
       params.set('tab', aba);
+      params.delete('sub');
     }
     setSearchParams(params, { replace: true });
-  }, [aba]);
+  }, [aba, finAba]);
 
   const { data: funcionarios = [], isLoading: loadingFunc } = useQuery({
     queryKey: ['funcionarios'],
@@ -95,6 +109,11 @@ export default function PortalFuncionario() {
   const funcionario = funcionarios.find(
     f => f.user_email_portal === meUser?.email || f.email === meUser?.email
   );
+
+  // Seção oculta pelo RH → volta para a Visão Geral (também cobre link direto ?tab=...)
+  useEffect(() => {
+    if (funcionario && !secaoVisivel(funcionario, aba)) setAbaState('visao-geral');
+  }, [funcionario, aba]);
 
   // Gera range de meses baseado na data de admissão e dados existentes
   const mesesDisponiveis = useMemo(() => {
@@ -146,11 +165,11 @@ export default function PortalFuncionario() {
     return meses.length > 0 ? meses : [mesAtual];
   }, [funcionario, lancamentos]);
 
-  // Histórico limitado a 3 meses nas abas de comissões e salário
+  // Histórico limitado a 3 meses nas sub-abas de salário e comissões
   const mesesSelector = useMemo(() => {
-    if (aba === 'comissoes' || aba === 'meu-salario') return ultimosMeses(mesesDisponiveis, 3);
-    return mesesDisponiveis;
-  }, [aba, mesesDisponiveis]);
+    const limitar = aba === SECAO_FINANCEIRO && (finAba === 'salario' || finAba === 'comissoes');
+    return limitar ? ultimosMeses(mesesDisponiveis, 3) : mesesDisponiveis;
+  }, [aba, finAba, mesesDisponiveis]);
 
   // Garante que mesSelecionado está dentro do range disponível (respeitando o limite de 3 meses)
   useEffect(() => {
@@ -286,7 +305,7 @@ export default function PortalFuncionario() {
   };
 
   // Abas que exibem seletor de mês
-  const ABAS_COM_MES = ['meus-vales', 'extrato', 'meu-salario', 'comissoes'];
+  const ABAS_COM_MES = [SECAO_FINANCEIRO];
 
   if (isLoading) {
     return (
@@ -393,35 +412,26 @@ export default function PortalFuncionario() {
           {aba === 'meus-dados' && (
             <MeusDados funcionario={funcionario} />
           )}
-          {aba === 'meu-salario' && (
-            <MeuSalario
+          {aba === SECAO_FINANCEIRO && (
+            <MeuFinanceiro
               funcionario={funcionario}
+              subAba={finAba}
+              onSubAbaChange={setFinAba}
+              mesSelecionado={mesSelecionado}
               lancamentosFuncionario={lancamentosFunc}
               comissoesFuncionarios={comissoesFuncionarios}
               fechamentosFuncionario={fechamentos.filter(f => f.funcionario_id === funcionario?.id)}
-              mesSelecionado={mesSelecionado}
               tiposPersonalizados={tiposPersonalizados}
-            />
-          )}
-          {aba === 'meus-vales' && (
-            <MeusVales
-              funcionario={funcionario}
               lancamentosLimiteMes={lancamentosLimiteMes}
               totalValesMes={totalValesMes}
               totalValesLimite={totalValesLimite}
-              mesSelecionado={mesSelecionado}
-              onVerComprovante={setComprovante}
-            />
-          )}
-          {aba === 'extrato' && (
-            <ExtratoMensal
-              funcionario={funcionario}
               lancamentosMes={lancamentosMes}
-              mesSelecionado={mesSelecionado}
-              onVerComprovante={setComprovante}
               receitasExtras={receitasExtrasMes}
-              tiposPersonalizados={tiposPersonalizados}
               comissaoMes={comissaoMes}
+              salarioBase={funcionario?.salario_base}
+              ajudaCusto={funcionario?.ajuda_custo || 0}
+              setMesSelecionado={setMesSelecionado}
+              onVerComprovante={setComprovante}
             />
           )}
           {aba === 'vida-financeira' && (
@@ -433,24 +443,6 @@ export default function PortalFuncionario() {
               mesSelecionado={mesSelecionado}
               setMesSelecionado={setMesSelecionado}
               tiposPersonalizados={tiposPersonalizados}
-            />
-          )}
-          {aba === 'comissoes' && (
-            <MinhasComissoes
-              funcionarioId={funcionario?.id}
-              funcionarioSetor={funcionario?.setor}
-              mesSelecionado={mesSelecionado}
-            />
-          )}
-          {aba === 'metas' && (
-            <PortalMetas
-              funcionarioId={funcionario?.id}
-              funcionarioSetor={funcionario?.setor}
-              salarioBase={funcionario?.salario_base}
-              ajudaCusto={funcionario?.ajuda_custo || 0}
-              comissoesFuncionarios={comissoesFuncionarios}
-              mesSelecionado={mesSelecionado}
-              setMesSelecionado={setMesSelecionado}
             />
           )}
           {aba === 'meus-documentos' && (

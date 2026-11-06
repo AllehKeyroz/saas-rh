@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency, formatDate, getMesReferenciaAtual } from '@/lib/formatters';
-import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus, Plus, Trash2, MinusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Users, Calculator, Save, AlertCircle, CalendarMinus, Plus, Trash2, MinusCircle, Coins } from 'lucide-react';
 import { toast } from 'sonner';
 import { mapearSetorDinamico, calcularDivisaoDinamica, calcularDistribuicaoFuncionarios, sobrepoeAfastamento, calcularDiasUniao, calcularDiasTotais, COMISSAO_STATUS, publicarComissao, formatPeriodo } from '@/lib/comissoes';
 import { registrarAuditoria } from '@/lib/audit';
@@ -289,6 +290,22 @@ export default function LancarComissao({ funcionarios, onSaved, comissaoEmEdicao
   }, [creditosDisponiveis, creditosSelecionados]);
 
   const totalCreditosSelecionados = Object.values(creditosPorSetor).reduce((s, g) => s + g.valor, 0);
+
+  // Créditos que podem entrar NESTE lançamento: só os de setores presentes na
+  // divisão atual e que tenham aptos (senão o valor viraria crédito de novo).
+  const creditosAplicaveis = useMemo(() => (
+    creditosDisponiveis.filter(c => {
+      const d = distribuicaoEfetiva[c.setor_id];
+      return d && (d.aptos?.length || 0) > 0;
+    })
+  ), [creditosDisponiveis, distribuicaoEfetiva]);
+
+  // Escolha explícita do RH: nada entra no lançamento sem marcação
+  const alternarCredito = (id, incluir) => {
+    setCreditosSelecionados(prev => (
+      incluir ? [...new Set([...prev, id])] : prev.filter(x => x !== id)
+    ));
+  };
 
   // Aplica os créditos apenas nos setores que têm aptos efetivos
   const distribuicaoComCreditos = useMemo(() => {
@@ -780,6 +797,47 @@ export default function LancarComissao({ funcionarios, onSaved, comissaoEmEdicao
               </div>
             </CardContent>
           </Card>
+
+          {/* Créditos de setor — inclusão só com marcação explícita */}
+          {creditosAplicaveis.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-emerald-600" />
+                  Créditos de setor disponíveis (opcional)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Sobras de lançamentos anteriores em que o setor ficou sem ninguém apto.
+                  Marque o que deve entrar neste lançamento — nada é incluído automaticamente.
+                </p>
+                {creditosAplicaveis.map(c => (
+                  <label
+                    key={c.id}
+                    className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={creditosSelecionados.includes(c.id)}
+                      onCheckedChange={v => alternarCredito(c.id, !!v)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{c.setor_nome || 'Setor'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        origem {formatPeriodo(c.origem_periodo_inicio, c.origem_periodo_fim)} · ref {c.origem_mes_referencia || '—'}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-emerald-700">{formatCurrency(c.valor || 0)}</span>
+                  </label>
+                ))}
+                {totalCreditosSelecionados > 0 && (
+                  <p className="text-xs font-medium text-emerald-700">
+                    Incluindo {formatCurrency(totalCreditosSelecionados)} de crédito neste lançamento.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Débitos do período */}
           <Card>
