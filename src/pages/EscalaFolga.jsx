@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CalendarClock, ChevronLeft, ChevronRight, Search, Settings2, CalendarX2, Download, FileSpreadsheet, FileText, CheckCircle2, RotateCcw, Loader2, Pencil, X, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight, Search, Settings2, CalendarX2, Download, FileSpreadsheet, FileText, CheckCircle2, RotateCcw, Loader2, Pencil, X, Lock, Unlock, AlertTriangle, LayoutGrid, CalendarDays } from 'lucide-react';
 import { getFeriadosCompletos } from '@/lib/feriados';
 import { parseDataLocal, getStatusFerias, FERIAS_STATUS, getHojeISO } from '@/lib/ferias';
 import { ehDiaFolga, rotuloEscala, getEscalaEfetiva, isConsolidada, isRascunho, ESCALA_STATUS, statusEscalasFuncionario, escalaCobrePeriodo, getFolgasDoMes } from '@/lib/escalaFolga';
@@ -17,6 +17,7 @@ import { getCurrentTenantId } from '@/firebase/auth';
 import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import ConfigurarEscalaDialog from '@/components/escala-folga/ConfigurarEscalaDialog';
+import CalendarioFolga from '@/components/escala-folga/CalendarioFolga';
 import FeriadosDialog from '@/components/feriados/FeriadosDialog';
 
 const MESES_COMPLETOS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -77,6 +78,7 @@ export default function EscalaFolga() {
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [reabrirOpen, setReabrirOpen] = useState(false);
   const [reabrindo, setReabrindo] = useState(false);
+  const [visao, setVisao] = useState('tabela'); // 'tabela' | 'calendario'
   const queryClient = useQueryClient();
 
   const abrirConfig = (func) => {
@@ -615,6 +617,26 @@ export default function EscalaFolga() {
             <SelectItem value="sem_escala">Sem escala</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Alternância de visão — tabela (original) ou calendário */}
+        <div className="ml-auto flex items-center rounded-lg border p-0.5 bg-muted/40">
+          <button
+            type="button"
+            onClick={() => setVisao('tabela')}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${visao === 'tabela' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            title="Visão em tabela (funcionário x dias)"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />Tabela
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisao('calendario')}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${visao === 'calendario' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            title="Visão em calendário (quem folga em cada dia)"
+          >
+            <CalendarDays className="w-3.5 h-3.5" />Calendário
+          </button>
+        </div>
       </div>
 
       {/* Legenda */}
@@ -640,6 +662,16 @@ export default function EscalaFolga() {
 
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 rounded-xl" />)}</div>
+      ) : visao === 'calendario' ? (
+        <CalendarioFolga
+          ano={ano}
+          mesIdx={mesIdx}
+          funcionarios={filtrados}
+          escalasPorFunc={escalasPorFunc}
+          ferias={todasFerias}
+          feriados={feriadosDoMes}
+          hojeISO={hojeISO}
+        />
       ) : (
         <div className="flex flex-col rounded-xl border overflow-hidden h-[calc(100vh-360px)] min-h-[220px]">
           <div className="flex-1 overflow-auto">

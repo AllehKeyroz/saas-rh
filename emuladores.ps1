@@ -1,9 +1,19 @@
 param([switch]$Seed)
 
-$javaHome = "C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot"
+# Detecta o JDK automaticamente (a versao muda a cada update do Adoptium)
+$javaHome = $env:JAVA_HOME
+if (-not $javaHome -or -not (Test-Path "$javaHome\bin\java.exe")) {
+  $candidatos = @(
+    (Get-ChildItem "C:\Program Files\Eclipse Adoptium" -Directory -Filter "jdk-21*" -ErrorAction SilentlyContinue | Sort-Object Name -Descending),
+    (Get-ChildItem "C:\Program Files\Eclipse Adoptium" -Directory -Filter "jdk*" -ErrorAction SilentlyContinue | Sort-Object Name -Descending),
+    (Get-ChildItem "C:\Program Files\Java" -Directory -Filter "jdk*" -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+  ) | Select-Object -First 1
+  if ($candidatos) { $javaHome = $candidatos.FullName }
+}
 
-if (-not (Test-Path $javaHome)) {
-  Write-Host "Java 21 nao encontrado em $javaHome" -ForegroundColor Red
+if (-not $javaHome -or -not (Test-Path "$javaHome\bin\java.exe")) {
+  Write-Host "Java nao encontrado. Instale o JDK 21:" -ForegroundColor Red
+  Write-Host "  winget install EclipseAdoptium.Temurin.21.JDK" -ForegroundColor Yellow
   exit 1
 }
 
