@@ -76,7 +76,7 @@ Role comes from `user.role` in the Firestore `users` doc, resolved in `src/lib/u
 | `consulta` | `PageNotFound` everywhere | `isConsulta` |
 | `inativo` | **bug**: falls through to the RH layout (writes are rejected by Firestore) | no check |
 
-RH routes are the `/` block in `src/App.jsx`; `/login`, `/register` are outside auth. Portal sections are defined once in `src/lib/portalSecoes.js` — the sidebar, the RH mirror (`EspelhoPortal`), the `?tab=` routing and the per-employee permission dialog all read from that list. Salário/Vales/Comissões/Extrato/Metas are **one** section (`financeiro`, sub-abas); legacy links (`?tab=meu-salario`, `meus-vales`, `extrato`, `comissoes`, `metas`) are resolved by `resolverAba()`. The RH hides a section by adding its id to `permissoes_portal.secoes_ocultas` (hide, never delete); default is visible.
+RH routes are the `/` block in `src/App.jsx`; `/login`, `/register` are outside auth. Portal sections are defined once in `src/lib/portalSecoes.js` — the sidebar, the RH mirror (`EspelhoPortal`), the `?tab=` routing and the per-employee permission dialog all read from that list. Salário/Vales/Comissões/Extrato/Metas are **one** section (`financeiro`, sub-abas); legacy links (`?tab=meu-salario`, `meus-vales`, `extrato`, `comissoes`, `metas`) are resolved by `resolverAba()`. Sections are **hidden by default**: the RH whitelists them per employee in `permissoes_portal.secoes_visiveis` (only "Visão Geral" is always visible), so a fresh employee sees nothing until the permission dialog is filled.
 
 ## Conventions
 

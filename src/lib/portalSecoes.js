@@ -46,21 +46,21 @@ export function resolverAba(id) {
   return { aba: id, subAba: 'salario' };
 }
 
-/** Seções ocultas pelo RH para este funcionário (array de ids). */
-export function secoesOcultas(funcionario) {
-  const ocultas = funcionario?.permissoes_portal?.secoes_ocultas;
-  return Array.isArray(ocultas) ? ocultas : [];
+/** Seções liberadas pelo RH para este funcionário (array de ids). */
+export function secoesVisiveisDe(funcionario) {
+  const visiveis = funcionario?.permissoes_portal?.secoes_visiveis;
+  return Array.isArray(visiveis) ? visiveis : [];
 }
 
 /**
  * O funcionário pode ver a seção?
- * Padrão = visível: só esconde o que o RH marcou explicitamente em
- * "Permissões do Portal". Assim nenhum colaborador perde acesso ao
- * portal por falta de configuração.
+ * Padrão = OCULTA: só aparece o que o RH liberou explicitamente em
+ * "Permissões do Portal" (evita expor informação antes da aprovação).
+ * "Visão Geral" é a única sempre visível.
  */
 export function secaoVisivel(funcionario, id) {
   const secao = SECOES_PORTAL.find(s => s.id === id);
   if (!secao) return true;
   if (secao.sempre) return true;
-  return !secoesOcultas(funcionario).includes(id);
+  return secoesVisiveisDe(funcionario).includes(id);
 }

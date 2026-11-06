@@ -21,10 +21,10 @@ const PERMISSOES = [
 
 export default function PermissoesPortalDialog({ open, onClose, funcionario, onSaved }) {
   const [perm, setPerm] = useState(funcionario?.permissoes_portal || {});
-  // Seções OCULTAS (não removidas): desmarcar aqui apenas esconde o menu do funcionário
-  const [ocultas, setOcultas] = useState(
-    Array.isArray(funcionario?.permissoes_portal?.secoes_ocultas)
-      ? funcionario.permissoes_portal.secoes_ocultas
+  // Seções LIBERADAS para o funcionário. Padrão: nenhuma (só a Visão Geral).
+  const [visiveis, setVisiveis] = useState(
+    Array.isArray(funcionario?.permissoes_portal?.secoes_visiveis)
+      ? funcionario.permissoes_portal.secoes_visiveis
       : []
   );
   const [emailPortal, setEmailPortal] = useState(funcionario?.user_email_portal || funcionario?.email || '');
@@ -32,14 +32,15 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
   const { toast } = useToast();
 
   const toggle = (key) => setPerm(prev => ({ ...prev, [key]: !prev[key] }));
-  const toggleSecao = (id) => setOcultas(prev =>
+  const toggleSecao = (id) => setVisiveis(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   );
+  const secoesMarcaveis = SECOES_PORTAL.filter(s => !s.sempre);
 
   const handleSave = async () => {
     setSaving(true);
     await client.entities.Funcionarios.update(funcionario.id, {
-      permissoes_portal: { ...perm, secoes_ocultas: ocultas },
+      permissoes_portal: { ...perm, secoes_visiveis: visiveis },
       user_email_portal: emailPortal.toLowerCase().trim() || null,
     });
     toast({ title: 'Permissões salvas com sucesso!' });
@@ -88,10 +89,29 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-1">Seções do menu</p>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <p className="text-sm font-medium">Seções do menu</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setVisiveis(secoesMarcaveis.map(s => s.id))}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Marcar todas
+                </button>
+                <span className="text-muted-foreground/40">|</span>
+                <button
+                  type="button"
+                  onClick={() => setVisiveis([])}
+                  className="text-xs text-muted-foreground hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Desmarque o que este funcionário não deve ver. Nada é apagado — a seção apenas fica oculta
-              e pode ser reativada depois. "Visão Geral" é sempre exibida.
+              Marque o que este funcionário pode ver. Por padrão <strong>nada aparece</strong> além da
+              Visão Geral — a seção só é liberada depois que o RH marcar aqui.
             </p>
             <div className="space-y-3">
               {SECOES_PORTAL.map(({ id, label, sempre }) => (
@@ -100,7 +120,7 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
                     {label}
                   </Label>
                   <Switch
-                    checked={sempre || !ocultas.includes(id)}
+                    checked={sempre || visiveis.includes(id)}
                     disabled={sempre}
                     onCheckedChange={() => !sempre && toggleSecao(id)}
                   />
