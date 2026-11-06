@@ -180,6 +180,11 @@ async function main() {
       permissoes_portal: {
         ver_funcao: true, ver_setor: true, ver_data_admissao: true, ver_salario: true,
         ver_limite_vales: true, ver_extrato_vales: true, ver_extrato_completo: true,
+        // Seções liberadas para o portal (padrão do sistema = nada visível)
+        secoes_visiveis: [
+          'meus-dados', 'financeiro', 'meus-documentos', 'minhas-ferias',
+          'vida-financeira', 'mensagens', 'solicitacoes', 'assinaturas',
+        ],
       },
     },
     { id: 'func-joao', nome: 'João Lima', setor: 'Salão', funcao: 'Garçom', email: 'joao@demo.com', salario_base: 2000, ajuda_custo: 150, data_admissao: data(1, 6) },
