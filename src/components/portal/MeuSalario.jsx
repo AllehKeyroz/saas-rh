@@ -254,12 +254,12 @@ export default function MeuSalario({ funcionario, lancamentosFuncionario, comiss
         </Card>
       )}
 
-      {/* Histórico completo */}
+      {/* Histórico — limitado aos 3 últimos meses (regra do cliente: banco só guarda 3 meses) */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
-            Histórico de Salários
+            Histórico de Salários <span className="text-xs font-normal text-muted-foreground">(últimos 3 meses)</span>
           </CardTitle>
         </CardHeader>
         <CardContent>

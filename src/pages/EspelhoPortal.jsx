@@ -1,14 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { client } from '@/api/client';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { usePersistedFilter } from '@/lib/usePersistedFilter';
-import { getMesReferenciaAtual, getMesesOptions, formatCurrency, formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
+import { getMesReferenciaAtual, formatCurrency, formatDate, parseDateLocal, getMesRef } from '@/lib/formatters';
 import { ChevronLeft, ChevronRight, Eye, User, FileText, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useRHControl } from '@/lib/rhControl';
@@ -17,31 +16,27 @@ import { cn } from '@/lib/utils';
 
 import VisaoGeral from '@/components/portal/VisaoGeral';
 import MeusDados from '@/components/portal/MeusDados';
-import MeuSalario from '@/components/portal/MeuSalario';
-import MeusVales from '@/components/portal/MeusVales';
-import ExtratoMensal from '@/components/portal/ExtratoMensal';
-import MinhasComissoes from '@/components/portal/MinhasComissoes';
+import MeuFinanceiro from '@/components/portal/MeuFinanceiro';
 import MensagensPortal from '@/components/portal/MensagensPortal';
 import AssinaturasPortal from '@/components/portal/AssinaturasPortal';
+import { SECAO_FINANCEIRO, secaoVisivel, resolverAba } from '@/lib/portalSecoes';
 
 const TIPOS_LIMITE = ['vale', 'vale_parcelado'];
 
 const ABAS = [
   { id: 'visao-geral', label: 'Visão Geral' },
   { id: 'meus-dados', label: 'Meus Dados' },
-  { id: 'meu-salario', label: 'Salário' },
-  { id: 'meus-vales', label: 'Vales' },
-  { id: 'extrato', label: 'Extrato Mensal' },
-  { id: 'comissoes', label: 'Comissões' },
+  { id: SECAO_FINANCEIRO, label: 'Meu Financeiro' },
   { id: 'mensagens', label: 'Mensagens' },
   { id: 'assinaturas', label: 'Assinaturas' },
 ];
 
-const ABAS_COM_MES = ['meus-vales', 'extrato', 'meu-salario', 'comissoes'];
+const ABAS_COM_MES = [SECAO_FINANCEIRO];
 
 export default function EspelhoPortal() {
   const [funcionarioId, setFuncionarioId] = useState('');
   const [aba, setAba] = useState('visao-geral');
+  const [finAba, setFinAba] = useState('salario');
   const [mesSelecionado, setMesSelecionado] = usePersistedFilter('rh_filtro_mes_espelho', getMesReferenciaAtual());
   const [comprovante, setComprovante] = useState(null);
   const { isAtiva } = useRHControl();
@@ -77,6 +72,16 @@ export default function EspelhoPortal() {
 
   const funcionario = funcionarios.find(f => f.id === funcionarioId);
   const funcionariosAtivos = funcionarios.filter(f => f.ativo !== false).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+  // O espelho mostra apenas as seções que o funcionário realmente vê
+  const abasVisiveis = ABAS.filter(a => secaoVisivel(funcionario, a.id));
+
+  // Atalhos da Visão Geral usam ids antigos (meu-salario, meus-vales...) → resolvem para "Meu Financeiro"
+  const irPara = (destino) => {
+    const alvo = resolverAba(destino);
+    setAba(alvo.aba);
+    if (alvo.aba === SECAO_FINANCEIRO) setFinAba(alvo.subAba);
+  };
 
   // Gera range de meses baseado na data de admissão e dados existentes
   const mesesDisponiveis = useMemo(() => {
@@ -231,7 +236,7 @@ export default function EspelhoPortal() {
                 </div>
               </div>
             )}
-            {ABAS.map(a => (
+            {abasVisiveis.map(a => (
               <button
                 key={a.id}
                 onClick={() => setAba(a.id)}
@@ -248,7 +253,7 @@ export default function EspelhoPortal() {
 
           {/* Mobile: tabs horizontais */}
           <div className="md:hidden w-full border-b bg-card overflow-x-auto sticky top-0 z-10 flex">
-            {ABAS.map(a => (
+            {abasVisiveis.map(a => (
               <button
                 key={a.id}
                 onClick={() => setAba(a.id)}
@@ -311,46 +316,30 @@ export default function EspelhoPortal() {
                   totalValesMes={totalValesMes}
                   totalValesLimite={totalValesLimite}
                   mesSelecionado={mesSelecionado}
-                  setAba={setAba}
+                  setAba={irPara}
                 />
               )}
               {aba === 'meus-dados' && <MeusDados funcionario={funcionario} />}
-              {aba === 'meu-salario' && (
-                <MeuSalario
+              {aba === SECAO_FINANCEIRO && (
+                <MeuFinanceiro
                   funcionario={funcionario}
+                  subAba={finAba}
+                  onSubAbaChange={setFinAba}
+                  mesSelecionado={mesSelecionado}
                   lancamentosFuncionario={lancamentosFunc}
                   comissoesFuncionarios={comissoesFuncionarios}
-                  mesSelecionado={mesSelecionado}
                   tiposPersonalizados={tiposPersonalizados}
-                />
-              )}
-              {aba === 'meus-vales' && (
-                <MeusVales
-                  funcionario={funcionario}
                   lancamentosLimiteMes={lancamentosLimiteMes}
                   totalValesMes={totalValesMes}
                   totalValesLimite={totalValesLimite}
-                  mesSelecionado={mesSelecionado}
-                  onVerComprovante={setComprovante}
-                />
-              )}
-              {aba === 'extrato' && (
-                <ExtratoMensal
-                  funcionario={funcionario}
                   lancamentosMes={lancamentosMes}
-                  mesSelecionado={mesSelecionado}
-                  onVerComprovante={setComprovante}
                   receitasExtras={[]}
-                  tiposPersonalizados={tiposPersonalizados}
                   comissaoMes={comissaoMes}
-                />
-              )}
-              {aba === 'comissoes' && (
-                <MinhasComissoes
-                  funcionarioId={funcionario?.id}
-                  funcionarioSetor={funcionario?.setor}
-                  mesSelecionado={mesSelecionado}
-                  exibirResumoSetor={true}
+                  salarioBase={funcionario?.salario_base}
+                  ajudaCusto={funcionario?.ajuda_custo || 0}
+                  setMesSelecionado={setMesSelecionado}
+                  exibirResumoSetor
+                  onVerComprovante={setComprovante}
                 />
               )}
               {aba === 'mensagens' && (

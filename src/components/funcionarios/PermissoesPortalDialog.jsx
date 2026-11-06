@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { SECOES_PORTAL } from '@/lib/portalSecoes';
 
 const PERMISSOES = [
   { key: 'ver_funcao', label: 'Ver função/cargo' },
@@ -20,16 +21,25 @@ const PERMISSOES = [
 
 export default function PermissoesPortalDialog({ open, onClose, funcionario, onSaved }) {
   const [perm, setPerm] = useState(funcionario?.permissoes_portal || {});
+  // Seções OCULTAS (não removidas): desmarcar aqui apenas esconde o menu do funcionário
+  const [ocultas, setOcultas] = useState(
+    Array.isArray(funcionario?.permissoes_portal?.secoes_ocultas)
+      ? funcionario.permissoes_portal.secoes_ocultas
+      : []
+  );
   const [emailPortal, setEmailPortal] = useState(funcionario?.user_email_portal || funcionario?.email || '');
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   const toggle = (key) => setPerm(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleSecao = (id) => setOcultas(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  );
 
   const handleSave = async () => {
     setSaving(true);
     await client.entities.Funcionarios.update(funcionario.id, {
-      permissoes_portal: perm,
+      permissoes_portal: { ...perm, secoes_ocultas: ocultas },
       user_email_portal: emailPortal.toLowerCase().trim() || null,
     });
     toast({ title: 'Permissões salvas com sucesso!' });
@@ -40,7 +50,7 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-primary" />
@@ -72,6 +82,28 @@ export default function PermissoesPortalDialog({ open, onClose, funcionario, onS
                 <div key={key} className="flex items-center justify-between">
                   <Label className="text-sm font-normal cursor-pointer">{label}</Label>
                   <Switch checked={!!perm[key]} onCheckedChange={() => toggle(key)} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-1">Seções do menu</p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Desmarque o que este funcionário não deve ver. Nada é apagado — a seção apenas fica oculta
+              e pode ser reativada depois. "Visão Geral" é sempre exibida.
+            </p>
+            <div className="space-y-3">
+              {SECOES_PORTAL.map(({ id, label, sempre }) => (
+                <div key={id} className="flex items-center justify-between">
+                  <Label className={`text-sm font-normal ${sempre ? 'text-muted-foreground' : 'cursor-pointer'}`}>
+                    {label}
+                  </Label>
+                  <Switch
+                    checked={sempre || !ocultas.includes(id)}
+                    disabled={sempre}
+                    onCheckedChange={() => !sempre && toggleSecao(id)}
+                  />
                 </div>
               ))}
             </div>
